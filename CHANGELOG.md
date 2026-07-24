@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.0.20]
+
+### Added
+
+- **Face and plate recognition now works on cameras that detect by themselves.** Cameras like Reolink report that they saw a person, but not where in the picture, so the recognition had to search the whole scene and rarely found anything. Pick a second detection plugin as object assist under Object in the camera's plugins, it finds the person or car first and the recognition gets a proper close-up.
+
 ## [2.0.19]
 
 ### Fixed

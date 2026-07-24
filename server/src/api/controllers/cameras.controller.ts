@@ -570,6 +570,7 @@ export class CamerasController {
       const sensors = cameraController.sensorController.getAllSensors({ activatedOnly: false }).map((sensor) => ({
         type: sensor.type,
         pluginId: sensor.pluginId,
+        requiresFrames: sensor.data.requiresFrames,
       }));
 
       return reply.code(200).send({ sensors });

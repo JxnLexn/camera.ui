@@ -536,6 +536,7 @@ export default {
       sensors: 'Sensoren',
       sensor_type_motion: 'Bewegung',
       sensor_type_object: 'Objekt',
+      sensor_type_objectAssist: 'Objekt-Assistenz',
       sensor_type_audio: 'Geräusch',
       sensor_type_face: 'Gesicht',
       sensor_type_licensePlate: 'Kennzeichen',
@@ -577,6 +578,9 @@ export default {
       no_plugins_enabled: 'Keine Plugins aktiviert',
       no_plugins_found: 'Keine Plugins gefunden',
       object_detection: 'Objekterkennung',
+      object_assist: 'Objekt-Assistenz',
+      object_assist_hint:
+        'Diese Kamera meldet Objekte ohne Position. Ein Assistenz-Plugin findet sie im Bild, damit Gesichts- und Kennzeichenerkennung passende Ausschnitte bekommen.',
       object_state: 'Objektzustand',
       plugin: 'Plugin',
       ptz_autotrack: 'Autotrack',

@@ -201,6 +201,50 @@
               />
             </template>
           </template>
+
+          <template v-if="showObjectAssist">
+            <Divider class="m-0 py-3" />
+
+            <span class="cui-label">{{ $t('components.camera_options.object_assist') }}</span>
+
+            <Message severity="secondary" variant="simple" size="small" class="cui-input-hint">
+              {{ $t('components.camera_options.object_assist_hint') }}
+            </Message>
+
+            <CuiChipGroup v-model="selectedObjectAssistPlugin" :disabled="isExtensionsLoading" class="min-h-[30px]">
+              <CuiChip
+                v-for="extension in objectAssistPlugins"
+                :key="extension.pluginName"
+                size="small"
+                filter
+                :disabled="!isPluginEnabled(extension.pluginName) || configPatchLoading"
+                :value="extension.pluginName"
+              >
+                {{ extension.displayName }}
+              </CuiChip>
+            </CuiChipGroup>
+
+            <template v-if="objectAssistSensorId">
+              <Divider class="m-0 py-3" />
+
+              <span class="cui-label">{{ $t('components.camera_options.sensor_settings') }}</span>
+
+              <div v-if="!objectAssistSensorConfig?.schema?.length" class="w-full flex items-center justify-center my-5">
+                <ProgressSpinner v-if="objectAssistSensorConfigLoading" class="w-[30px] h-[30px] m-0" stroke-width="5" />
+                <span v-else class="text-sm text-muted text-center">{{ $t('components.camera_options.no_config') }}</span>
+              </div>
+
+              <CuiSchema
+                v-else
+                :key="`object-assist-${objectAssistSensorId}`"
+                :schema-form="{ schema: objectAssistSensorConfig.schema, config: objectAssistSensorConfig.config }"
+                :loading="configPatchLoading"
+                @on-form-submit="(configData: PluginConfig) => onObjectAssistFormSubmit(configData)"
+                @on-submit="(state) => onObjectAssistSubmit(state)"
+                @on-action="(state) => onObjectAssistAction(state)"
+              />
+            </template>
+          </template>
         </template>
       </div>
 
@@ -486,7 +530,7 @@ import type { CameraOptionsTabEmits, CameraOptionsTabProps } from '../../types.j
 
 type ExtensionTypes = 'hub' | 'detection' | 'core' | 'accessories' | 'cameraController' | 'more';
 
-const DETECTION_SENSOR_TYPES = getDetectionSensorTypes();
+const DETECTION_SENSOR_TYPES = getDetectionSensorTypes().filter((type: SensorType) => type !== SensorType.ObjectAssist);
 const CORE_SENSOR_TYPES = getCoreSensorTypes();
 const ACCESSORIES_SENSOR_TYPES = getAccessorySensorTypes();
 
@@ -520,6 +564,7 @@ const selectedPlugin = ref('');
 const selectedHubPlugin = ref<string>();
 const selectedDetectionType = ref<SensorType>();
 const selectedDetectionPlugin = ref<string>();
+const selectedObjectAssistPlugin = ref<string>();
 const selectedCoreType = ref<SensorType>();
 const selectedCorePlugin = ref<string>();
 const selectedAccessoryType = ref<SensorType>();
@@ -675,7 +720,9 @@ const detectionPluginsForType = computed<PluginExtension[]>(() => {
 });
 
 const detectionSensorsForType = computed<ReactiveSensor[]>(() => {
-  return allSensors.value.filter((s) => s.type === selectedDetectionType.value).sort((a, b) => a.displayName.value.localeCompare(b.displayName.value));
+  return allSensors.value
+    .filter((s) => s.type === selectedDetectionType.value && s.id !== objectAssistSensor.value?.id)
+    .sort((a, b) => a.displayName.value.localeCompare(b.displayName.value));
 });
 
 const selectedDetectionSensorPluginName = computed(() => {
@@ -683,6 +730,34 @@ const selectedDetectionSensorPluginName = computed(() => {
   const sensor = detectionSensorsForType.value.find((s) => s.id === selectedDetectionSensorId.value);
   if (!sensor?.pluginId) return '';
   return getPluginNameFromId(sensor.pluginId) || '';
+});
+
+const objectAssistAssignmentName = computed(() => {
+  const assignment = getDetectionAssignment(SensorType.ObjectAssist);
+  return assignment && isPluginEnabled(assignment.name) ? assignment.name : undefined;
+});
+
+const objectSensorIsExternal = computed(() => {
+  const assignment = getDetectionAssignment(SensorType.Object);
+  if (!assignment) return false;
+  const sensor = (registeredSensors.value ?? []).find((s) => s.type === SensorType.Object && getPluginNameFromId(s.pluginId || '') === assignment.name);
+  return sensor?.requiresFrames === false;
+});
+
+const objectAssistPlugins = computed<PluginExtension[]>(() => {
+  const objectPluginName = getDetectionAssignment(SensorType.Object)?.name;
+  const frameBased = new Set(
+    (registeredSensors.value ?? [])
+      .filter((s) => s.type === SensorType.Object && s.requiresFrames === true)
+      .map((s) => getPluginNameFromId(s.pluginId || ''))
+      .filter((name) => name !== undefined),
+  );
+  const ex = cameraExtensions.value?.filter((p) => p.pluginName !== objectPluginName && frameBased.has(p.pluginName)) || [];
+  return sortExtensions(ex);
+});
+
+const showObjectAssist = computed(() => {
+  return selectedDetectionType.value === SensorType.Object && objectSensorIsExternal.value && objectAssistPlugins.value.length > 0;
 });
 
 const selectedDetectionSensorPluginId = computed(() => {
@@ -745,6 +820,19 @@ const detectionExtensionConfigLoading = detectionExtensionStorage.isLoading;
 const detectionSensorStorage = useSensorStorage(cameraDevice, selectedDetectionSensorId, selectedDetectionSensorPluginId);
 const detectionSensorConfig = detectionSensorStorage.config;
 const detectionSensorConfigLoading = detectionSensorStorage.isLoading;
+
+const objectAssistSensor = computed<ReactiveSensor | undefined>(() => {
+  const pluginName = selectedObjectAssistPlugin.value;
+  if (!pluginName || pluginName === getDetectionAssignment(SensorType.Object)?.name) return undefined;
+  return allSensors.value.find((s) => s.type === SensorType.Object && getPluginNameFromId(s.pluginId || '') === pluginName);
+});
+
+const objectAssistSensorId = computed(() => objectAssistSensor.value?.id ?? '');
+const objectAssistSensorPluginId = computed(() => objectAssistSensor.value?.pluginId ?? '');
+
+const objectAssistSensorStorage = useSensorStorage(cameraDevice, objectAssistSensorId, objectAssistSensorPluginId);
+const objectAssistSensorConfig = objectAssistSensorStorage.config;
+const objectAssistSensorConfigLoading = objectAssistSensorStorage.isLoading;
 
 const selectedCorePluginName = computed(() => selectedCorePlugin.value ?? '');
 const coreExtensionStorage = useCameraStorage(cameraDevice, selectedCorePluginName);
@@ -1112,6 +1200,39 @@ async function onDetectionFormSubmit(configData: Record<string, any>): Promise<v
   }
 }
 
+async function onObjectAssistAction(state: { key: string }): Promise<void> {
+  if (!objectAssistSensorId.value) return;
+  try {
+    await objectAssistSensorStorage.setValue(state.key, undefined);
+    toast.add({ severity: 'success', detail: t('components.toast.config_updated'), life: 3000 });
+  } catch (error) {
+    toast.add({ severity: 'error', detail: error, life: 3000 });
+  }
+}
+
+async function onObjectAssistSubmit(state: { key: string; payload: any }): Promise<void> {
+  if (!objectAssistSensorId.value) return;
+  try {
+    const response = await objectAssistSensorStorage.submitValue(state.key, state.payload);
+    if (response?.toast) {
+      const type = pluginMessageResponseTypeToToastType(response.toast.type);
+      toast.add({ severity: type, detail: response.toast.message, life: 3000 });
+    }
+  } catch (error) {
+    toast.add({ severity: 'error', detail: error, life: 3000 });
+  }
+}
+
+async function onObjectAssistFormSubmit(configData: Record<string, any>): Promise<void> {
+  if (!objectAssistSensorId.value) return;
+  try {
+    await objectAssistSensorStorage.setConfig(configData);
+    toast.add({ severity: 'success', detail: t('components.toast.config_updated'), life: 3000 });
+  } catch (error) {
+    toast.add({ severity: 'error', detail: error, life: 3000 });
+  }
+}
+
 async function onControlAction(state: { key: string }): Promise<void> {
   if (!selectedCoreSensorPluginId.value || !selectedCoreSensorId.value) return;
   try {
@@ -1428,6 +1549,18 @@ watch(selectedDetectionPlugin, async (newValue, oldValue) => {
         selectedDetectionSensorId.value = detectionSensorsForType.value[0].id;
       }
     });
+  }
+});
+
+watch(objectAssistAssignmentName, (name) => (selectedObjectAssistPlugin.value = name), { immediate: true });
+
+watch(selectedObjectAssistPlugin, async (newValue, oldValue) => {
+  if (newValue === oldValue || newValue === objectAssistAssignmentName.value) return;
+
+  if (!newValue && oldValue) {
+    await disableExtension({ cameraname: camera.value.name, pluginname: oldValue, type: SensorType.ObjectAssist });
+  } else if (newValue) {
+    await enableExtension({ cameraname: camera.value.name, pluginname: newValue, type: SensorType.ObjectAssist });
   }
 });
 

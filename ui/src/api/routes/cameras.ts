@@ -21,6 +21,7 @@ import type { AckResponse } from '..';
 export interface RegisteredCameraSensor {
   type: SensorType;
   pluginId?: string;
+  requiresFrames?: boolean;
 }
 
 export async function createCameraFn({ cameraData }: { cameraData: CreateCameraInput }): Promise<DBCamera> {

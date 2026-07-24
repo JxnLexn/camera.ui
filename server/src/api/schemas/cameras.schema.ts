@@ -261,6 +261,7 @@ export const assignmentsSchema = zod
   .object({
     motion: pluginInfo.optional(),
     object: pluginInfo.optional(),
+    objectAssist: pluginInfo.optional(),
     audio: pluginInfo.optional(),
     face: pluginInfo.optional(),
     licensePlate: pluginInfo.optional(),

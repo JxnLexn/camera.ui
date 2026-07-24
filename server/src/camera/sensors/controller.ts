@@ -239,9 +239,12 @@ export class SensorController {
   }
 
   public onAssignmentChanged(pluginId: string, sensorType: SensorType, enabled: boolean): void {
-    const affected = Array.from(this.sensors.values()).filter((s) => s.pluginId === pluginId && s.type === sensorType);
+    const targetType = sensorType === SensorType.ObjectAssist ? SensorType.Object : sensorType;
+    const affected = Array.from(this.sensors.values()).filter((s) => s.pluginId === pluginId && s.type === targetType);
 
     for (const sensor of affected) {
+      if (!enabled && this.isSensorTypeActivated(pluginId, sensor.type)) continue;
+
       this.cameraController.logger.log(
         `Sensor ${enabled ? 'activated' : 'deactivated'}: "${sensor.displayName || sensor.name}" (${sensor.type}) by plugin "${pluginId}"`,
       );
@@ -257,7 +260,7 @@ export class SensorController {
 
     this.safePublish(this.namespaces.sensorSubject, {
       type: 'sensor:assignment:changed',
-      data: { cameraId: this.cameraController.id, pluginId, sensorType, assigned: enabled },
+      data: { cameraId: this.cameraController.id, pluginId, sensorType: targetType, assigned: this.isSensorTypeActivated(pluginId, targetType) },
     });
   }
 
@@ -442,11 +445,17 @@ export class SensorController {
     return {
       pluginId: data.pluginId,
       sensorId: data.id,
-      sensorType: data.type,
+      sensorType: this.coordinatorSensorType(data),
       capabilities: [...data.capabilities],
       requiresFrames: data.requiresFrames ?? false,
       modelSpec: data.modelSpec,
     };
+  }
+
+  private coordinatorSensorType(data: StoredSensorData): SensorType {
+    if (data.type !== SensorType.Object || !data.pluginId) return data.type;
+    if (this.isAssignedTo(data.pluginId, SensorType.Object)) return SensorType.Object;
+    return this.isAssignedTo(data.pluginId, SensorType.ObjectAssist) ? SensorType.ObjectAssist : data.type;
   }
 
   private async pushSensorAdded(data: StoredSensorData): Promise<void> {
@@ -479,7 +488,12 @@ export class SensorController {
 
   private isSensorTypeActivated(pluginId: string | undefined, sensorType: SensorType): boolean {
     if (!pluginId) return false;
-    const assignment = this.cameraController.camera.assignments[sensorType as keyof PluginAssignments];
+    if (this.isAssignedTo(pluginId, sensorType)) return true;
+    return sensorType === SensorType.Object && this.isAssignedTo(pluginId, SensorType.ObjectAssist);
+  }
+
+  private isAssignedTo(pluginId: string, sensorType: SensorType): boolean {
+    const assignment = this.cameraController.camera.assignments[SENSOR_TYPE_CONFIG[sensorType].assignmentKey as keyof PluginAssignments];
     if (Array.isArray(assignment)) return assignment.some((p) => p.id === pluginId);
     return assignment?.id === pluginId;
   }

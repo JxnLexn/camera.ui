@@ -50,6 +50,7 @@ import type { CameraDeviceInterface } from '../../rpc/interfaces/device.js';
 import type { SensorWriteMessage } from '../../rpc/interfaces/sensor.js';
 import type { LineCrossingEvent } from './detection-pipeline.js';
 import type { NormalizedDetectionZone, ProcessedDetectionData } from './event-manager.js';
+import type { RegisteredPlugin } from './plugin-registry.js';
 import type { FrameSourceConfig } from './sources/frame-source.js';
 import type { CoordinatorSourceUrl } from './types.js';
 
@@ -325,14 +326,15 @@ export class DetectionCoordinator {
 
       this.processingExternalSecondary = true;
       try {
-        // processExternal only adapts the shape, external boxes get no real tracking
         const rawExternal = (filtered.detections as Detection[] | undefined) ?? [];
-        const objectDetections = this.pipeline.processExternal(rawExternal);
 
         const peeked = this.frameSource.peekLatestFrame();
         if (peeked) {
           try {
             const results: DetectionResults = { timestamp: Date.now() };
+            const objects = await this.runObjectAssist(peeked.frame, rawExternal);
+            // processExternal only adapts the shape, external boxes get no real tracking
+            const objectDetections = this.pipeline.processExternal(objects.detections);
             await this.runSecondariesAndThumbnails(peeked.frame, objectDetections, results);
             this.ingestResultsForAllSecondaries(results);
             const snapshot = this.buildSnapshot();
@@ -350,24 +352,39 @@ export class DetectionCoordinator {
         if (!fetched) return;
         try {
           const results: DetectionResults = { timestamp: Date.now() };
-          const sceneJpeg = await this.secondaries.detectFullFrame(fetched.frame, results);
-          try {
-            // face/plate crops feed the segment attributes, without them the
-            // NVR drops unknown faces (no thumbnail, no faces page entry)
-            results.thumbnails = await this.secondaries.generateThumbnails(fetched.frame, this.frameScaler, false, objectDetections, results);
-          } catch (error) {
-            this.logger.error('Thumbnail generation error:', error);
-          }
-          this.ingestResultsForAllSecondaries(results);
-          const snapshot = this.buildSnapshot();
-          if (results.thumbnails && results.thumbnails.length > 0) {
-            snapshot.thumbnails = results.thumbnails;
-          }
-          if (sceneJpeg) snapshot.eventThumbnail = sceneJpeg;
-          const wantsEventThumb = this.eventManager.needsThumbnail() || this.snapshotWillStartEvent(snapshot);
-          this.eventManager.processResults(snapshot);
-          if (wantsEventThumb) {
-            this.thumbnailer.upgradeEventThumbnailAsync();
+          const objects = await this.runObjectAssist(fetched.frame, rawExternal);
+
+          if (objects.assisted) {
+            // real boxes: crop the object like the frame pipeline, so face and
+            // plate secondaries run on the subject instead of the whole scene
+            const objectDetections = this.pipeline.processExternal(objects.detections);
+            await this.runSecondariesAndThumbnails(fetched.frame, objectDetections, results);
+            this.ingestResultsForAllSecondaries(results);
+            const snapshot = this.buildSnapshot();
+            if (results.thumbnails && results.thumbnails.length > 0) {
+              snapshot.thumbnails = results.thumbnails;
+            }
+            this.eventManager.processResults(snapshot);
+          } else {
+            const objectDetections = this.pipeline.processExternal(objects.detections);
+            const sceneJpeg = await this.secondaries.detectFullFrame(fetched.frame, results);
+            try {
+              // face/plate crops feed the segment attributes
+              results.thumbnails = await this.secondaries.generateThumbnails(fetched.frame, this.frameScaler, false, objectDetections, results);
+            } catch (error) {
+              this.logger.error('Thumbnail generation error:', error);
+            }
+            this.ingestResultsForAllSecondaries(results);
+            const snapshot = this.buildSnapshot();
+            if (results.thumbnails && results.thumbnails.length > 0) {
+              snapshot.thumbnails = results.thumbnails;
+            }
+            if (sceneJpeg) snapshot.eventThumbnail = sceneJpeg;
+            const wantsEventThumb = this.eventManager.needsThumbnail() || this.snapshotWillStartEvent(snapshot);
+            this.eventManager.processResults(snapshot);
+            if (wantsEventThumb) {
+              this.thumbnailer.upgradeEventThumbnailAsync();
+            }
           }
         } finally {
           await fetched[Symbol.asyncDispose]();
@@ -1181,11 +1198,37 @@ export class DetectionCoordinator {
   private async scaleForObject(rawFrame: Frame): Promise<VideoFrameData | undefined> {
     const objectPlugin = this.plugins.get(SensorType.Object);
     if (!objectPlugin?.requiresFrames) return undefined;
+    return this.scaleFrameForPlugin(rawFrame, objectPlugin);
+  }
 
-    const inputSpec = objectPlugin.modelSpec?.input;
+  private async scaleFrameForPlugin(rawFrame: Frame, plugin: RegisteredPlugin): Promise<VideoFrameData | undefined> {
+    const inputSpec = plugin.modelSpec?.input;
     if (!isVideoInputSpec(inputSpec)) return undefined;
 
     const scaled = await this.frameScaler.scaleToSpec(rawFrame, inputSpec);
     return scaled ? this.frameScaler.toVideoFrameData(scaled) : undefined;
+  }
+
+  private async runObjectAssist(frame: Frame, reported: Detection[]): Promise<{ detections: Detection[]; assisted: boolean }> {
+    const assist = this.plugins.get(SensorType.ObjectAssist);
+    const objectPlugin = this.plugins.get(SensorType.Object);
+    if (!assist || objectPlugin?.requiresFrames || assist.pluginId === objectPlugin?.pluginId) {
+      return { detections: reported, assisted: false };
+    }
+
+    const scaled = await this.scaleFrameForPlugin(frame, assist);
+    if (!scaled) return { detections: reported, assisted: false };
+
+    try {
+      const result = await PromiseTimeout(assist.proxy.detectObjects(scaled), DETECT_TIMEOUT_MS, undefined, `Object assist timed out after ${DETECT_TIMEOUT_MS}ms`);
+      const reportedLabels = new Set(reported.map((d) => d.label.toLowerCase()));
+      const found = (result?.detections ?? []).filter((d) => reportedLabels.size === 0 || reportedLabels.has(d.label.toLowerCase()));
+      if (found.length === 0) return { detections: reported, assisted: false };
+      return { detections: found, assisted: true };
+    } catch (error) {
+      if (isNoRespondersError(error)) return { detections: reported, assisted: false };
+      this.logger.debug('Object assist failed:', error);
+      return { detections: reported, assisted: false };
+    }
   }
 }
