@@ -878,16 +878,13 @@ const morePopoverOpen = ref(false);
 let isUserChangingResolution = false;
 let classifierWatchers: WatchHandle[] = [];
 let isUnmounting = false;
+let releaseNvrContainer: (() => void) | null = null;
 
 const cameraName = computed(() => (typeof cameraInfo.value === 'string' ? cameraInfo.value : cameraInfo.value.name));
 const camera = computed<DBCamera | undefined>(() => (typeof cameraInfo.value === 'string' ? cameraObj.value : cameraInfo.value));
 
-// In multi-camera mode (CamView), NvrPlaybackMapKey provides per-camera controllers.
-// In single-camera mode (Camera.vue), NvrPlaybackKey provides the controller directly.
 const nvr = computed<NvrPlayback | undefined>(() => {
   if (props.nvrController) return props.nvrController as NvrPlayback;
-  // Isolated cards (shortcuts, PiP) must NOT inherit the parent's NVR controller —
-  // they would bind their container to the parent, stealing its canvas.
   if (props.isolatedStream) return undefined;
   if (nvrMap) {
     const cam = camera.value;
@@ -896,6 +893,7 @@ const nvr = computed<NvrPlayback | undefined>(() => {
   }
   return nvrDirect;
 });
+
 const nvrMode = computed(() => nvr.value?.mode.value ?? 'idle');
 const nvrCurrentTimestamp = computed(() => nvr.value?.currentTimestamp.value ?? 0);
 const nvrPlaybackVisible = computed(() => nvrMode.value !== 'idle');
@@ -1873,15 +1871,11 @@ watch(
 
 watch(muted, (val) => cameraStream.setMuted(val), { immediate: true });
 
-// Bind the controller's container ref to the shared stream container (reactive — handles controller changes)
 watch(
   [nvr, () => cameraStream.containerElement.value],
-  ([controller, el], [oldController]) => {
-    // Clear old controller's container when switching controllers (e.g. swap in PiP)
-    if (oldController && oldController !== controller && oldController.containerRef.value === el) {
-      oldController.containerRef.value = null;
-    }
-    if (controller && el) controller.containerRef.value = el;
+  ([controller, el]) => {
+    releaseNvrContainer?.();
+    releaseNvrContainer = controller && el ? controller.claimContainer(el) : null;
   },
   { immediate: true, flush: 'post' },
 );
@@ -2105,6 +2099,8 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   isUnmounting = true;
+  releaseNvrContainer?.();
+  releaseNvrContainer = null;
   document.removeEventListener('mousemove', onResizeMove);
   document.removeEventListener('mouseup', onResizeEnd);
   document.removeEventListener('touchmove', onResizeTouchMove);
