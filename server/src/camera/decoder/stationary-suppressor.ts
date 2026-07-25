@@ -5,7 +5,8 @@ import type { BoundingBox, Detection, TrackedDetection } from '@camera.ui/sdk';
 
 // parked bike ~0.0006, standing person ~0.003-0.03
 export const STATIONARY_SPEED_THRESHOLD = 0.002;
-export const ANCHOR_SIGHTINGS = 10;
+export const ANCHOR_SIGHTINGS = 6;
+export const ANCHOR_SETTLE_MS = 8000;
 export const WAKE_IOU = 0.6;
 export const DEPART_IOU = 0.15;
 export const WAKE_SIGHTINGS = 3;
@@ -22,6 +23,7 @@ interface StationaryAnchor {
   dormant: boolean;
   wakeMisses: number;
   settleSightings: number;
+  settleSinceMs: number;
 }
 
 interface CandidateAnchor {
@@ -29,20 +31,27 @@ interface CandidateAnchor {
   label: string;
   sightings: number;
   ghost: boolean;
+  stillSinceMs: number;
 }
 
 export class StationarySuppressor {
   private readonly anchors = new Map<number, StationaryAnchor>();
   private readonly candidates: CandidateAnchor[] = [];
+  private readonly labelsSeen = new Set<string>();
   private suppressionLogged = false;
 
-  constructor(private readonly logger: Logger) {}
+  constructor(
+    private readonly logger: Logger,
+    private readonly now: () => number = Date.now,
+  ) {}
 
   public evaluate(detections: TrackedDetection[]): boolean {
+    const now = this.now();
     let hasActiveTrack = false;
     for (const t of detections) {
       if (t.trackLost) continue;
-      if (this.evaluateTrack(t)) hasActiveTrack = true;
+      this.labelsSeen.add(t.label);
+      if (this.evaluateTrack(t, now)) hasActiveTrack = true;
     }
     return hasActiveTrack;
   }
@@ -75,25 +84,33 @@ export class StationarySuppressor {
     const survivors = new Set(retainTracks([...this.anchors.keys()]));
 
     for (const [id, anchor] of [...this.anchors.entries()]) {
+      anchor.sealed = true;
+
       if (survivors.has(id)) {
         anchor.ghost = false;
-        anchor.sealed = true;
+      } else if (!this.labelsSeen.has(anchor.label)) {
+        // a motion-only event says nothing about a parked object: the detector
+        // never reported that label, so absence is not evidence it left
+        continue;
       } else if (anchor.ghost) {
         this.anchors.delete(id);
       } else {
         anchor.ghost = true;
-        anchor.sealed = true;
       }
     }
 
     for (let i = this.candidates.length - 1; i >= 0; i--) {
       const candidate = this.candidates[i];
+      if (!this.labelsSeen.has(candidate.label)) continue;
+
       if (candidate.ghost) {
         this.candidates.splice(i, 1);
       } else {
         candidate.ghost = true;
       }
     }
+
+    this.labelsSeen.clear();
 
     while (this.anchors.size > MAX_ANCHORS) {
       const oldest = this.anchors.keys().next().value;
@@ -110,6 +127,7 @@ export class StationarySuppressor {
   public clear(): void {
     this.anchors.clear();
     this.candidates.length = 0;
+    this.labelsSeen.clear();
   }
 
   public dropForCameraMove(): void {
@@ -118,19 +136,21 @@ export class StationarySuppressor {
     }
     this.anchors.clear();
     this.candidates.length = 0;
+    this.labelsSeen.clear();
   }
 
   public resetEventState(): void {
     this.suppressionLogged = false;
   }
 
-  private evaluateTrack(t: TrackedDetection): boolean {
+  private evaluateTrack(t: TrackedDetection, now: number): boolean {
     // no trackId = external smart-camera write, nothing to judge stationarity by
     if (t.trackId === undefined) return true;
 
     const anchor = this.anchors.get(t.trackId);
     if (anchor) {
-      return anchor.dormant ? this.evaluateDormant(t, anchor) : this.evaluateAnchored(t, anchor);
+      anchor.ghost = false;
+      return anchor.dormant ? this.evaluateDormant(t, anchor, now) : this.evaluateAnchored(t, anchor);
     }
 
     const candidate = this.matchCandidate(t);
@@ -145,12 +165,21 @@ export class StationarySuppressor {
         candidate.box = t.box;
         candidate.ghost = false;
         candidate.sightings += 1;
-        if (candidate.sightings >= ANCHOR_SIGHTINGS) {
+        if (candidate.sightings >= ANCHOR_SIGHTINGS && now - candidate.stillSinceMs >= ANCHOR_SETTLE_MS) {
           this.candidates.splice(this.candidates.indexOf(candidate), 1);
-          this.anchors.set(t.trackId, { box: t.box, label: t.label, sealed: false, ghost: false, dormant: false, wakeMisses: 0, settleSightings: 0 });
+          this.anchors.set(t.trackId, {
+            box: t.box,
+            label: t.label,
+            sealed: false,
+            ghost: false,
+            dormant: false,
+            wakeMisses: 0,
+            settleSightings: 0,
+            settleSinceMs: 0,
+          });
         }
       } else if (this.candidates.length < MAX_CANDIDATES) {
-        this.candidates.push({ box: t.box, label: t.label, sightings: 1, ghost: false });
+        this.candidates.push({ box: t.box, label: t.label, sightings: 1, ghost: false, stillSinceMs: now });
       }
     } else if (candidate) {
       // erode instead of reset: a single noisy speed frame must not wipe the
@@ -204,7 +233,7 @@ export class StationarySuppressor {
     return false;
   }
 
-  private evaluateDormant(t: TrackedDetection, anchor: StationaryAnchor): boolean {
+  private evaluateDormant(t: TrackedDetection, anchor: StationaryAnchor, now: number): boolean {
     const stationary = (t.trackSpeed ?? 0) < STATIONARY_SPEED_THRESHOLD;
 
     if (stationary && boxIou(anchor.box, t.box) >= WAKE_IOU) {
@@ -215,8 +244,9 @@ export class StationarySuppressor {
     }
 
     if (stationary) {
+      if (anchor.settleSightings === 0) anchor.settleSinceMs = now;
       anchor.settleSightings += 1;
-      if (anchor.settleSightings >= ANCHOR_SIGHTINGS) {
+      if (anchor.settleSightings >= ANCHOR_SIGHTINGS && now - anchor.settleSinceMs >= ANCHOR_SETTLE_MS) {
         anchor.box = t.box;
         anchor.dormant = false;
         anchor.settleSightings = 0;
