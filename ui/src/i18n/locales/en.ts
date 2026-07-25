@@ -577,7 +577,6 @@ export default {
       no_plugins_found: 'No plugins found',
       object_detection: 'Object detection',
       object_assist: 'Object assist',
-      object_assist_hint: 'This camera reports objects without a position. An assist plugin finds them in the image so face and plate detection get proper crops.',
       object_state: 'Object state',
       plugin: 'Plugin',
       ptz_autotrack: 'Autotrack',

@@ -207,10 +207,6 @@
 
             <span class="cui-label">{{ $t('components.camera_options.object_assist') }}</span>
 
-            <Message severity="secondary" variant="simple" size="small" class="cui-input-hint">
-              {{ $t('components.camera_options.object_assist_hint') }}
-            </Message>
-
             <CuiChipGroup v-model="selectedObjectAssistPlugin" :disabled="isExtensionsLoading" class="min-h-[30px]">
               <CuiChip
                 v-for="extension in objectAssistPlugins"

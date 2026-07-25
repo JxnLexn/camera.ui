@@ -579,8 +579,6 @@ export default {
       no_plugins_found: 'Keine Plugins gefunden',
       object_detection: 'Objekterkennung',
       object_assist: 'Objekt-Assistenz',
-      object_assist_hint:
-        'Diese Kamera meldet Objekte ohne Position. Ein Assistenz-Plugin findet sie im Bild, damit Gesichts- und Kennzeichenerkennung passende Ausschnitte bekommen.',
       object_state: 'Objektzustand',
       plugin: 'Plugin',
       ptz_autotrack: 'Autotrack',
