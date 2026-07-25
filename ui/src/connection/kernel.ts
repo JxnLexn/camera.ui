@@ -255,8 +255,10 @@ export function createConnection(options: ConnectionOptions): Connection {
       signal: signalHandle,
       ensureAll: ensureTransportsAlive,
       probe: () => backgroundProbe.run(),
+      isReachable: () => [socketio, nats].some((t) => t.health().up),
       onEscalate: (round) => diag('degraded-recovery', `round #${round}`),
       onOffline: (reason) => diag('degraded-recovery', reason, undefined, 'warn'),
+      onHold: (reason) => diag('degraded-recovery', reason),
     }),
   );
 
@@ -286,6 +288,7 @@ export function createConnection(options: ConnectionOptions): Connection {
       attachNetworkChange({
         kernel,
         source: options.adapters.networkChangeSource,
+        debounceMs: 2_000,
         onChange: (k) => {
           diag('network-change', 'connection type changed');
           wakeTokens();
