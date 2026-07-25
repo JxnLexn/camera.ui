@@ -614,8 +614,25 @@ export class DetectionCoordinator {
     };
   }
 
+  private applyAudioConfidence(properties: Record<string, unknown>): Record<string, unknown> {
+    const minConfidence = this.config.detectionSettings.audio.confidence ?? 0;
+    if (minConfidence <= 0) return properties;
+
+    const detections = properties.detections as Detection[] | undefined;
+    if (!Array.isArray(detections) || detections.length === 0) return properties;
+
+    const filtered = detections.filter((d) => (d.confidence ?? 0) >= minConfidence);
+    if (filtered.length === detections.length) return properties;
+
+    return { ...properties, detections: filtered, detected: filtered.length > 0 };
+  }
+
   // PTZ-suppression gating happens upstream, callers decide what gets in here
   private ingestDetectionResult(sensorType: SensorType, sensorId: string, properties: Record<string, unknown>, pluginId?: string): void {
+    if (sensorType === SensorType.Audio) {
+      properties = this.applyAudioConfidence(properties);
+    }
+
     this.updateBufferForType(sensorType, properties, pluginId);
 
     const detected = properties.detected === true;

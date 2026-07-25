@@ -452,6 +452,39 @@
 
           <Field
             v-slot="{ errors }"
+            :model-value="cameraForm.detectionSettings.audio.confidence"
+            name="detectionSettings.audio.confidence"
+            as="div"
+            class="flex flex-col field-gap"
+          >
+            <label for="detectionSettings.audio.confidence" class="cui-label">{{ $t('components.form.label.audio_confidence') }}</label>
+            <InputGroup>
+              <InputNumber
+                :model-value="cameraForm.detectionSettings.audio.confidence"
+                :invalid="errors.length > 0"
+                :loading="isLoading"
+                show-buttons
+                :step="0.05"
+                :min="0"
+                :max="1"
+                mode="decimal"
+                :use-grouping="false"
+                @value-change="(e) => (cameraForm.detectionSettings.audio.confidence = e ?? undefined)"
+                @input="(e) => (cameraForm.detectionSettings.audio.confidence = (e.value as any) ?? undefined)"
+              />
+            </InputGroup>
+
+            <Transition name="fade">
+              <ErrorMessage name="detectionSettings.audio.confidence" class="cui-input-error" />
+            </Transition>
+
+            <Message v-if="!errors.length" severity="secondary" variant="simple" size="small" class="cui-input-hint">{{
+              $t('components.form.hint.audio_confidence')
+            }}</Message>
+          </Field>
+
+          <Field
+            v-slot="{ errors }"
             :model-value="cameraForm.detectionSettings.audio.minDecibels"
             name="detectionSettings.audio.minDecibels"
             as="div"

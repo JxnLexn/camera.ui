@@ -88,6 +88,7 @@ async function onSave() {
       audio: {
         minDecibels: -40,
         timeout: 30,
+        confidence: 0.7,
       },
       face: {
         confidence: 0.5,

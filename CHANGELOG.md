@@ -8,6 +8,8 @@ All notable changes to this project will be documented in this file.
 
 - **Face and plate recognition now works on cameras that detect by themselves.** Cameras like Reolink report that they saw a person, but not where in the picture, so the recognition had to search the whole scene and rarely found anything. Pick a second detection plugin as object assist under Object in the camera's plugins, it finds the person or car first and the recognition gets a proper close-up.
 
+- **Audio detection has a confidence threshold.** Sounds the detector is unsure about no longer count, so false gunshot and glass break alarms get rarer. It sits above the volume threshold under Audio in the camera's detection settings and starts at 0.7.
+
 ### Fixed
 
 - **A parked object no longer starts producing events again after a while.** It went quiet, then hours later the same picture came back as a new event, over and over. It also settles faster now, usually after the first event. A car that only stops briefly still counts as an event.

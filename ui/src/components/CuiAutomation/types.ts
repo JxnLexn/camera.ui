@@ -479,6 +479,15 @@ export const CAMERA_CONTROL_PROPERTY_DEFINITIONS: CameraControlPropertyDefinitio
     max: 0,
     defaultValue: '-40',
   },
+  {
+    key: 'detectionSettings.audio.confidence',
+    labelKey: 'components.automation_nodes.camera_prop_audio_confidence',
+    inputType: 'number',
+    min: 0,
+    max: 1,
+    step: 0.05,
+    defaultValue: '0.7',
+  },
   { key: 'detectionSettings.object.suppressStatic', labelKey: 'components.automation_nodes.camera_prop_suppress_static', inputType: 'boolean', defaultValue: 'true' },
   {
     key: 'detectionSettings.face.confidence',

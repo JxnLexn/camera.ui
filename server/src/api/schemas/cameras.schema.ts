@@ -93,6 +93,7 @@ export const detectionSettingsSchema = zod.object({
   audio: zod.object({
     minDecibels: zod.number().min(-100, 'Minimum -100 dBFS').max(0, 'Maximum 0 dBFS'),
     timeout: zod.number().min(10, 'Minimum 10 seconds'),
+    confidence: zod.number().min(0, 'Minimum 0').max(1, 'Maximum 1').default(0.7),
   }),
   face: zod
     .object({
@@ -417,6 +418,7 @@ export const createCameraBaseSchema = zod
       audio: {
         minDecibels: -40,
         timeout: 30,
+        confidence: 0.7,
       },
       face: {
         confidence: 0.5,
