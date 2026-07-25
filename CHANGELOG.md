@@ -12,6 +12,8 @@ All notable changes to this project will be documented in this file.
 
 ### Fixed
 
+- **Capture snapshot works during playback.** The button did nothing while a recording was playing and only worked on the live picture. The file is named after the moment on screen, not the time you clicked.
+
 - **A parked object no longer starts producing events again after a while.** It went quiet, then hours later the same picture came back as a new event, over and over. It also settles faster now, usually after the first event. A car that only stops briefly still counts as an event.
 
 ## [2.0.19]

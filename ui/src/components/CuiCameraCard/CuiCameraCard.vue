@@ -1664,10 +1664,19 @@ function resumeStream() {
 }
 
 async function captureScreenshot() {
+  const prefix = cameraName.value.replace(/ /g, '_').toLowerCase();
+  if (nvrPlaybackVisible.value) {
+    const blob = await nvr.value?.captureSnapshot();
+    if (!blob) return;
+    const shownAt = nvr.value?.currentTimestamp.value;
+    const stamp = shownAt ? new Date(shownAt / 1000) : new Date();
+    await download({ blob, filename: `${prefix}_${stamp.toISOString()}.png`, mimeType: 'image/png' });
+    return;
+  }
+
   const dataURL = cameraStream.captureScreenshot();
   if (!dataURL) return;
-  const filename = `${cameraName.value.replace(/ /g, '_').toLowerCase()}_${new Date().toISOString()}.png`;
-  await download({ dataUrl: dataURL, filename, mimeType: 'image/png' });
+  await download({ dataUrl: dataURL, filename: `${prefix}_${new Date().toISOString()}.png`, mimeType: 'image/png' });
 }
 
 function clearCanvas() {
