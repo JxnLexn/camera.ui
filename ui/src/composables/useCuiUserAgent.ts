@@ -1,3 +1,5 @@
+import { isCapacitor } from '@/connection/runtime.js';
+
 export function useCuiUserAgent() {
   const isMobile = computed(() => {
     if (typeof window === 'undefined') {
@@ -168,6 +170,10 @@ export function useCuiUserAgent() {
   });
 
   const isPipSupported = computed(() => {
+    if (isCapacitor && isAndroid.value) {
+      return true;
+    }
+
     const check = 'pictureInPictureEnabled' in document;
 
     if (isIos.value && isPWA.value) {

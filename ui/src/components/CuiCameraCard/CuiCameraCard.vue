@@ -27,6 +27,7 @@
           :class="{
             'detection-detected': showDetectionIndicator,
             'edit-mode': shortcutsEditMode,
+            'native-pip': nativePipMode,
             'overflow-visible': isZoomingIn,
             'overflow-hidden': !isZoomingIn,
             'resizable-mode': resizable,
@@ -109,6 +110,7 @@
             ref="arBoxRef"
             v-model:pan="panValue"
             v-model:zoom="zoomValue"
+            data-native-pip-keep
             :disabled="resizable || (expandableCard && !isExpanded) || !isHoveredZoom || timelineState || showPtz || inStandby || gridSearchActive || isDisabled"
             :pan-enabled="zoomValue > 1"
             :enable-control-button="false"
@@ -715,9 +717,11 @@ import VueZoomable from 'vue-zoomable';
 
 import { CamerasQuery } from '@/api/routes/cameras.js';
 import { startIntercomService, stopIntercomService } from '@/common/intercomService.js';
+import { enterNativePip, nativePipActive, registerAutoPipCandidate, unregisterAutoPipCandidate } from '@/common/pipService.js';
 import { randomLetter } from '@/common/utils.js';
 import ShareForm from '@/components/CuiDialog/templates/ShareForm/ShareForm.vue';
 import { GridSearchKey } from '@/components/CuiGridSearch/types.js';
+import { isCapacitor } from '@/connection/runtime.js';
 import { CAMERA_CARD_DEFAULTS } from './types.js';
 
 import type CuiBBoxPlayground from '@/components/CuiBBoxPlayground/CuiBBoxPlayground.vue';
@@ -750,7 +754,7 @@ const router = useRouter();
 const drawer = useCuiCameraDrawer();
 const dialog = useCuiDialog();
 const { mdBreakpoint } = useSharedCuiBreakpoint();
-const { isPipSupported } = useSharedCuiUserAgent();
+const { isPipSupported, isAndroid } = useSharedCuiUserAgent();
 const { height: windowHeight } = useSharedWindowSize();
 const { t } = useI18n();
 const { pressed: isMousePressed } = useMousePressed();
@@ -822,6 +826,7 @@ const streamMenuRef = useTemplateRef<InstanceType<typeof CuiMenu>>('streamMenuRe
 const detectionCanvasRef = useTemplateRef<InstanceType<typeof CuiBBoxPlayground>>('detectionCanvasRef');
 const ptzRef = useTemplateRef<InstanceType<typeof CuiPTZControl>>('ptzRef');
 const playerContainerRef = useTemplateRef('playerContainerRef');
+const nativePipMode = ref(false);
 const arBoxRef = useTemplateRef<HTMLElement>('arBoxRef');
 const speedPopoverRef = useTemplateRef<InstanceType<typeof Popover>>('speedPopoverRef');
 const morePopoverRef = useTemplateRef<InstanceType<typeof Popover>>('morePopoverRef');
@@ -1766,7 +1771,14 @@ async function toggleStreamingMode(state?: VideoStreamingMode) {
   streamingMode.value = mode;
 }
 
-function togglePictureInPicture() {
+async function togglePictureInPicture() {
+  if (isCapacitor && isAndroid.value) {
+    const video = cameraStream.videoElement.value;
+    nativePipMode.value = true;
+    const entered = await enterNativePip(video?.videoWidth || 16, video?.videoHeight || 9);
+    if (!entered) nativePipMode.value = false;
+    return;
+  }
   cameraStream.togglePip();
 }
 
@@ -1868,6 +1880,26 @@ watch(
   },
   { immediate: true },
 );
+
+watch(nativePipActive, (active) => {
+  if (!nativePipMode.value || active) return;
+  nativePipMode.value = false;
+  if (cameraStream.paused.value) cameraStream.play();
+});
+
+watchEffect(() => {
+  if (!isCapacitor || !isAndroid.value) return;
+  const video = cameraStream.videoElement.value;
+  if (video && !cameraStream.paused.value && !inStandby.value && !isDisabled.value) {
+    registerAutoPipCandidate(randomId, {
+      width: video.videoWidth || 16,
+      height: video.videoHeight || 9,
+      activate: (active) => (nativePipMode.value = active),
+    });
+  } else {
+    unregisterAutoPipCandidate(randomId);
+  }
+});
 
 watch(muted, (val) => cameraStream.setMuted(val), { immediate: true });
 
@@ -2099,6 +2131,7 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   isUnmounting = true;
+  unregisterAutoPipCandidate(randomId);
   releaseNvrContainer?.();
   releaseNvrContainer = null;
   document.removeEventListener('mousemove', onResizeMove);
@@ -2214,6 +2247,40 @@ defineExpose({
 }
 
 #video-container[data-cui-fullscreen='fit'] .ar-box {
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  max-height: none;
+  aspect-ratio: auto;
+}
+
+html.cui-native-pip body > * {
+  visibility: hidden !important;
+}
+
+html.cui-native-pip #video-container.native-pip,
+html.cui-native-pip #video-container.native-pip * {
+  visibility: visible !important;
+}
+
+html.cui-native-pip #video-container.native-pip > :not([data-native-pip-keep]),
+html.cui-native-pip #video-container.native-pip > :not([data-native-pip-keep]) * {
+  visibility: hidden !important;
+}
+
+html.cui-native-pip #video-container.native-pip {
+  position: fixed !important;
+  inset: 0 !important;
+  z-index: 2000 !important;
+  width: 100vw !important;
+  height: 100dvh !important;
+  max-width: none !important;
+  max-height: none !important;
+  aspect-ratio: auto !important;
+  transition: none !important;
+}
+
+html.cui-native-pip #video-container.native-pip .ar-box {
   width: 100%;
   height: 100%;
   max-width: none;
