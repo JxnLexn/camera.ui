@@ -28,6 +28,10 @@ export function usePushRegistration() {
       const deviceId = await getPushDeviceId();
       if (!deviceId) return;
 
+      const { FirebaseMessaging } = await import('@capacitor-firebase/messaging');
+      const perm = await FirebaseMessaging.requestPermissions();
+      if (perm.receive !== 'granted') log.warn('push permission not granted:', perm.receive);
+
       const platform = await detectPlatform();
       const deviceName = await detectDeviceName();
 
