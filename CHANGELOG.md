@@ -10,6 +10,8 @@ All notable changes to this project will be documented in this file.
 
 - **Audio detection has a confidence threshold.** Sounds the detector is unsure about no longer count, so false gunshot and glass break alarms get rarer. It sits above the volume threshold under Audio in the camera's detection settings and starts at 0.7.
 
+- **Automations can turn notifications on and off.** A new "Notifications On/Off" action mutes or unmutes push for everyone or a single user, so any automation can pause the pings when you don't want them and turn them back on later. Critical alerts still come through, and muted notifications still show up in the in-app history.
+
 ### Fixed
 
 - **The close button on a recording closes it on the first click.** Pressing X moved the dialog away instead, sometimes three times in a row before it gave in. Dragging a dialog by its header still works.

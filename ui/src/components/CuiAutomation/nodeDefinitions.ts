@@ -1,4 +1,5 @@
 import SensorIcon from '~icons/mdi/access-point';
+import NotificationControlIcon from '~icons/mdi/bell-cog-outline';
 import NotificationIcon from '~icons/mdi/bell-outline';
 import CameraIcon from '~icons/mdi/camera';
 import CameraControlIcon from '~icons/mdi/camera-control';
@@ -167,6 +168,15 @@ export const NODE_DEFINITIONS: NodeDefinition[] = [
     icon: NotificationIcon,
     color: '#3b82f6',
     defaults: { type: 'action-notification', title: '', body: '', severity: 'info', deepLink: '', targets: [] },
+  },
+  {
+    type: 'action-notification-control',
+    category: 'action',
+    labelKey: 'components.automation_nodes.action_notification_control',
+    descriptionKey: 'components.automation_nodes.action_notification_control_desc',
+    icon: NotificationControlIcon,
+    color: '#3b82f6',
+    defaults: { type: 'action-notification-control', mode: 'disable', scope: 'global', userId: '' },
   },
   {
     type: 'action-http',

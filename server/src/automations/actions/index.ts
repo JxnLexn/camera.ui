@@ -3,6 +3,7 @@ import { actionDelay } from './delay.js';
 import { actionHttp } from './http.js';
 import { actionMqtt } from './mqtt.js';
 import { actionNotification } from './notification.js';
+import { actionNotificationControl } from './notificationControl.js';
 import { actionPlugin } from './plugin.js';
 import { actionSensor } from './sensor.js';
 import { actionSnapshot } from './snapshot.js';
@@ -14,6 +15,7 @@ export const ACTION_HANDLERS: Record<string, ActionHandler> = {
   'action-snapshot': actionSnapshot,
   'action-sensor': actionSensor,
   'action-notification': actionNotification,
+  'action-notification-control': actionNotificationControl,
   'action-http': actionHttp,
   'action-mqtt': actionMqtt,
   'action-delay': actionDelay,

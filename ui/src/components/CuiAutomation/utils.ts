@@ -69,6 +69,8 @@ export function getNodeSummary(data: AutomationNodeData | undefined, cameraName?
       return [cam(data.cameraId), data.sensorName || data.sensorType].filter(Boolean).join(' · ') || undefined;
     case 'action-notification':
       return data.title || undefined;
+    case 'action-notification-control':
+      return `${data.mode} · ${data.scope}`;
     case 'action-http':
       return data.url ? `${data.method} ${data.url}` : undefined;
     case 'action-mqtt':

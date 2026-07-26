@@ -202,6 +202,7 @@ export class NotificationManager {
 
     // Per-user filtering (settings / source / quiet-hours / history) is
     // genuinely per recipient; delivery is batched per notifier afterwards.
+    const globalSuppressed = this.isGloballySuppressed();
     const eligibleUserIds: string[] = [];
     for (const userId of userIds) {
       const settings = await this.notificationsService.getSettings(userId);
@@ -209,12 +210,13 @@ export class NotificationManager {
       if (source.kind === 'plugin' && settings.sources?.[source.id] === false) continue;
       if (source.kind === 'system' && settings.systemTypes?.[source.id] === false) continue;
 
-      // UI broadcast happens before the quiet-hours check — quiet hours
-      // suppress disruption (push/sound), not the in-app history entry.
+      // UI broadcast happens before the suppression checks — they suppress
+      // disruption (push/sound), not the in-app history entry.
       await this.appendHistory(userId, resolved);
 
-      // Quiet-hours suppress external delivery (except critical bypass).
-      if (resolved.severity !== Severity.Critical && this.inQuietHours(settings)) continue;
+      // Suppress external delivery (except critical bypass): automation mute
+      // (global / per-user, set by action-notification-control) and quiet-hours.
+      if (resolved.severity !== Severity.Critical && (globalSuppressed || settings.suppressed || this.inQuietHours(settings))) continue;
 
       eligibleUserIds.push(userId);
     }
@@ -246,6 +248,21 @@ export class NotificationManager {
     }
 
     return (await Promise.all(tasks)).flat();
+  }
+
+  public isGloballySuppressed(): boolean {
+    return this.dbs.settingsDB.get('settings')?.notificationsSuppressed === true;
+  }
+
+  public async setGlobalSuppressed(suppressed: boolean): Promise<void> {
+    const current = this.dbs.settingsDB.get('settings');
+    if (!current) return;
+    await this.dbs.settingsDB.put('settings', { ...current, notificationsSuppressed: suppressed });
+  }
+
+  public async setUserSuppressed(userId: string, suppressed: boolean): Promise<void> {
+    const settings = await this.notificationsService.getSettings(userId);
+    await this.notificationsService.setSettings(userId, { ...settings, suppressed });
   }
 
   public async registerDevice(pluginName: string, ownerUserId: string, input: Record<string, unknown>): Promise<NotifierDevice> {

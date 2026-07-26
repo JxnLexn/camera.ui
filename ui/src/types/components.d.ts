@@ -49,6 +49,7 @@ declare module 'vue' {
     ConfigActionImageInput: typeof import('./../components/CuiAutomation/config/ConfigActionImageInput.vue')['default']
     ConfigActionMqtt: typeof import('./../components/CuiAutomation/config/ConfigActionMqtt.vue')['default']
     ConfigActionNotification: typeof import('./../components/CuiAutomation/config/ConfigActionNotification.vue')['default']
+    ConfigActionNotificationControl: typeof import('./../components/CuiAutomation/config/ConfigActionNotificationControl.vue')['default']
     ConfigActionOutput: typeof import('./../components/CuiAutomation/config/ConfigActionOutput.vue')['default']
     ConfigActionPlugin: typeof import('./../components/CuiAutomation/config/ConfigActionPlugin.vue')['default']
     ConfigActionSensor: typeof import('./../components/CuiAutomation/config/ConfigActionSensor.vue')['default']

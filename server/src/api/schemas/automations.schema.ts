@@ -16,6 +16,7 @@ const VALID_NODE_TYPES = [
   'action-snapshot',
   'action-sensor',
   'action-notification',
+  'action-notification-control',
   'action-http',
   'action-mqtt',
   'action-delay',

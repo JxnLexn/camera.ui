@@ -12,6 +12,7 @@ export type ActionNodeType =
   | 'action-snapshot'
   | 'action-sensor'
   | 'action-notification'
+  | 'action-notification-control'
   | 'action-http'
   | 'action-delay'
   | 'action-variable'
@@ -128,6 +129,13 @@ export interface ActionNotificationData {
   image?: string;
 }
 
+export interface ActionNotificationControlData {
+  type: 'action-notification-control';
+  mode: 'enable' | 'disable';
+  scope: 'global' | 'user';
+  userId?: string;
+}
+
 export interface ActionHttpData extends RepeatSettings {
   type: 'action-http';
   url: string;
@@ -221,6 +229,7 @@ export type AutomationNodeData =
   | ActionSnapshotData
   | ActionSensorData
   | ActionNotificationData
+  | ActionNotificationControlData
   | ActionHttpData
   | ActionMqttData
   | ActionDelayData
@@ -545,6 +554,10 @@ export interface ConfigActionImageInputProps {
 export interface ConfigActionNotificationProps {
   data: ActionNotificationData;
   nodeId: string;
+}
+
+export interface ConfigActionNotificationControlProps {
+  data: ActionNotificationControlData;
 }
 
 export interface ConfigActionOutputProps {

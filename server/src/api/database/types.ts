@@ -64,6 +64,7 @@ export interface DBSettings {
   workerCredentials?: DBWorkerCredential[];
   workerPairings?: DBWorkerPairing[];
   backupScheduler?: DBBackupSchedulerSettings;
+  notificationsSuppressed?: boolean;
 }
 
 export interface DBKnownWorker {
@@ -368,6 +369,9 @@ export interface DBWorkerConnection {
 export interface DBNotificationSettings {
   readonly _id: string;
   enabled: boolean;
+  // automation-driven mute for this user, independent of `enabled` (the user's
+  // own toggle) — set by action-notification-control, cleared when it re-enables
+  suppressed?: boolean;
   sources?: Record<string, boolean>;
   systemTypes?: Record<string, boolean>;
   quietHours?: {
