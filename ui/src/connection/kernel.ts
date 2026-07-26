@@ -318,6 +318,8 @@ export function createConnection(options: ConnectionOptions): Connection {
       }
       return false;
     },
+    isServerError: (err) => axios.isAxiosError(err) && (err.response?.status ?? 0) >= 500,
+    maxServerErrorRetries: 1,
     refresh: options.callbacks.refresh,
     acquireRefreshLock,
     getLatestTokens: () => persistence.peek()?.tokens ?? null,
@@ -330,8 +332,9 @@ export function createConnection(options: ConnectionOptions): Connection {
     onRefreshSkipped: (reason) => diag('token-lifecycle', `refresh SKIPPED (${reason}) — another tab won`),
     onRefreshError: (reason, err, info) => {
       const msg = err instanceof Error ? err.message : String(err);
-      if (info.willRetry) diag('token-lifecycle', `refresh transient (${reason}) — ${msg}`, undefined, 'warn');
-      else if (info.transient) diag('token-lifecycle', `refresh transient exhausted (${reason}) — ${msg}`, undefined, 'error');
+      const tag = info.serverError ? 'server-error' : 'transient';
+      if (info.willRetry) diag('token-lifecycle', `refresh ${tag} (${reason}) — ${msg}`, undefined, 'warn');
+      else if (info.transient) diag('token-lifecycle', `refresh ${tag} give-up → rediscover (${reason}) — ${msg}`, undefined, 'error');
       else diag('token-lifecycle', `refresh permanent (${reason}) — ${msg}`, undefined, 'error');
     },
     onScheduled: (delayMs, expiresAt) => {
