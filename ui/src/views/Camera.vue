@@ -80,7 +80,7 @@
         v-show="!cameraCardIsFullscreen"
         id="camera-sidebar"
         ref="timelineRef"
-        class="min-w-[400px]"
+        class="min-w-[300px]"
         :class="{
           'border-t-[1px] border-color': smBreakpoint,
           'lg:fixed lg:right-safe-offset-2 lg:bottom-safe-offset-2': !smBreakpoint && !xmdBreakpoint,
