@@ -18,6 +18,8 @@ All notable changes to this project will be documented in this file.
 
 - **Expanding a camera in CamView no longer restarts the recording.** It jumped back and began a fresh playback every time, and after the first expand the small cards stopped playing altogether until expanded again. Playback now follows the card and keeps running, the way live already did.
 
+- **Clicking a detection jumps to it and plays.** Nothing happened before, so you had to scroll the timeline until you found the spot yourself. Dragging the list to scroll still works.
+
 - **Capture snapshot works during playback.** The button did nothing while a recording was playing and only worked on the live picture. The file is named after the moment on screen, not the time you clicked.
 
 - **A parked object no longer starts producing events again after a while.** It went quiet, then hours later the same picture came back as a new event, over and over. It also settles faster now, usually after the first event. A car that only stops briefly still counts as an event.
