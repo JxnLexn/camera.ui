@@ -2,6 +2,26 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.0.21]
+
+### Added
+
+- **The Android app has picture-in-picture.** The PiP button shrinks the live stream into a small floating window that stays on top while you use other apps. On the single camera view the stream also pops out on its own when you swipe home, as long as it is the only one playing.
+
+- **A Permissions page in the settings.** It shows whether this device lets camera.ui use the microphone, location and notifications, asks for missing ones and jumps into the system settings when something is blocked. The notification settings point there when notifications are turned off at the system level.
+
+### Fixed
+
+- **The Android app connects reliably.** It could search for the server forever, both on the server picker and at login, while iOS connected fine. One dead address could cancel the whole search and take the reachable ones down with it; every address now gets its chance, so picking a server and logging in settle in a second or two.
+
+- **Two-way audio works in the Android app.** Pressing the talk button always came back with permission denied, even with the microphone allowed in the app settings.
+
+- **Push notifications arrive on new Android phones.** The app never asked Android for permission to show them, so on Android 13 and newer nothing was delivered until you enabled it by hand in the system settings. Enabling push for a device now asks first.
+
+- **Accounts with the user role load snapshots and recordings again.** Camera images stopped refreshing and recordings, events and playback failed for members without admin rights. Sensor switches they cannot use now show as read-only instead of doing nothing.
+
+- **A loading stream no longer shows a gray play button on Android.** The picture stays black until the first frame arrives.
+
 ## [2.0.20]
 
 ### Added
