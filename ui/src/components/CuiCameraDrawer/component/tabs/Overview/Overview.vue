@@ -105,6 +105,7 @@
           :on="sensor.getProperty(LightProperty.On) ?? false"
           :brightness="sensor.getProperty(LightProperty.Brightness) ?? 100"
           :has-brightness="sensor.hasCapability('brightness')"
+          :disabled="!canControlSensors"
           size="small"
           class="card-border"
           @update:on="(value) => sensor.setProperty(LightProperty.On, value)"
@@ -121,6 +122,7 @@
           :key="sensor.id"
           :label="sensor.displayName.value"
           :on="sensor.getProperty(SwitchProperty.On) ?? false"
+          :disabled="!canControlSensors"
           size="small"
           class="card-border"
           @update:on="(value) => sensor.setProperty(SwitchProperty.On, value)"
@@ -137,6 +139,7 @@
           :label="sensor.displayName.value"
           :current-state="sensor.getProperty(LockProperty.CurrentState) ?? 2"
           :target-state="sensor.getProperty(LockProperty.TargetState) ?? 0"
+          :disabled="!canControlSensors"
           size="small"
           class="card-border"
           @update:target-state="(value) => sensor.setProperty(LockProperty.TargetState, value)"
@@ -154,6 +157,7 @@
           :active="sensor.getProperty(SirenProperty.Active) ?? false"
           :volume="sensor.getProperty(SirenProperty.Volume) ?? 100"
           :has-volume="sensor.hasCapability('volume')"
+          :disabled="!canControlSensors"
           size="small"
           class="card-border"
           @update:active="(value) => sensor.setProperty(SirenProperty.Active, value)"
@@ -171,6 +175,7 @@
           :label="sensor.displayName.value"
           :current-state="sensor.getProperty(SecuritySystemProperty.CurrentState) ?? 3"
           :target-state="sensor.getProperty(SecuritySystemProperty.TargetState) ?? 3"
+          :disabled="!canControlSensors"
           size="small"
           class="card-border"
           @update:target-state="(value) => sensor.setProperty(SecuritySystemProperty.TargetState, value)"
@@ -186,6 +191,7 @@
           :key="sensor.id"
           :label="sensor.displayName.value"
           :ring="sensor.getProperty(DoorbellProperty.Ring) ?? false"
+          :disabled="!canControlSensors"
           size="small"
           class="card-border"
           @trigger="() => sensor.setProperty(DoorbellProperty.Ring, true)"
@@ -259,6 +265,7 @@
           :current-state="sensor.getProperty(GarageProperty.CurrentState) ?? 1"
           :target-state="sensor.getProperty(GarageProperty.TargetState) ?? 1"
           :obstruction-detected="sensor.getProperty(GarageProperty.ObstructionDetected) ?? false"
+          :disabled="!canControlSensors"
           size="small"
           class="card-border"
           @update:target-state="(value) => sensor.setProperty(GarageProperty.TargetState, value)"
@@ -376,6 +383,8 @@ const { t } = useI18n();
 const { getCameraStatus, connect: connectStreamStatus } = useStreamStatus();
 const { cameraDevice, latestSnapshotSrc } = toRefs(props);
 const { sensors: allSensors } = useSensors(cameraDevice);
+
+const canControlSensors = hasPermission(undefined, 'admin');
 
 connectStreamStatus();
 
