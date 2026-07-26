@@ -149,6 +149,7 @@ declare module 'vue' {
     CuiLoadingScreen: typeof import('./../components/CuiLoadingScreen/CuiLoadingScreen.vue')['default']
     CuiLockControl: typeof import('./../components/CuiLockControl/CuiLockControl.vue')['default']
     CuiMarkdownContent: typeof import('./../components/CuiMarkdownContent/CuiMarkdownContent.vue')['default']
+    CuiMarkdownPanel: typeof import('./../components/CuiMarkdownPanel/CuiMarkdownPanel.vue')['default']
     CuiMenu: typeof import('./../components/CuiMenu/CuiMenu.vue')['default']
     CuiNavbar: typeof import('./../components/CuiNavbar/CuiNavbar.vue')['default']
     CuiNavbarToggle: typeof import('./../components/CuiNavbarToggle/CuiNavbarToggle.vue')['default']

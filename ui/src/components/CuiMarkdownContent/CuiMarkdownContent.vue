@@ -3,6 +3,8 @@
 </template>
 
 <script setup lang="ts">
+import 'highlight.js/styles/vs2015.min.css';
+
 import hljs from 'highlight.js/lib/core';
 import json from 'highlight.js/lib/languages/json';
 import python from 'highlight.js/lib/languages/python';

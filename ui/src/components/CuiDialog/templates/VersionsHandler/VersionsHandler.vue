@@ -21,7 +21,7 @@
 
     <div v-else-if="showReleaseNotes && changelog && !showConsole">
       <h3 class="text-base font-semibold border-b-[1px] border-color mb-3 pb-3">{{ $t('components.form.label.changelog') }}</h3>
-      <div class="markdown-body" v-html="markdownIt.render(changelog)" />
+      <CuiMarkdownContent :content="changelog" />
     </div>
 
     <div v-else-if="isUninstall && !showConsole">
@@ -51,15 +51,7 @@
 </template>
 
 <script setup lang="ts">
-import 'highlight.js/styles/vs2015.min.css';
-
 import { compareVersions } from 'compare-versions';
-import hljs from 'highlight.js/lib/core';
-import json from 'highlight.js/lib/languages/json';
-import python from 'highlight.js/lib/languages/python';
-import typescript from 'highlight.js/lib/languages/typescript';
-import yaml from 'highlight.js/lib/languages/yaml';
-import MarkdownIt from 'markdown-it';
 
 import { ConfigQuery } from '@/api/routes/config.js';
 import { PluginsQuery } from '@/api/routes/plugins.js';
@@ -73,11 +65,6 @@ import type { EngineIssue, IConfig } from '@shared/types';
 import type { ITerminalOptions } from '@xterm/xterm';
 import type { DynamicDialogInstance } from 'primevue/dynamicdialogoptions';
 import type { VersionsHandlerProps } from './types.js';
-
-hljs.registerLanguage('typescript', typescript);
-hljs.registerLanguage('yaml', yaml);
-hljs.registerLanguage('json', json);
-hljs.registerLanguage('python', python);
 
 const MIN_SERVER_VERSION = '2.0.0';
 
@@ -142,20 +129,6 @@ const { mutate: restartPlugin, isPending: restartPluginLoading } = pluginsQuery.
 const { mutateAsync: installPlugin, isPending: installPluginLoading } = pluginsQuery.installPluginQuery();
 const { mutateAsync: uninstallPlugin, isPending: uninstallPluginLoading } = pluginsQuery.uninstallPluginQuery();
 const { mutateAsync: updateServer, isPending: updateServerLoading } = serverQuery.updateServerQuery();
-
-const markdownIt = MarkdownIt('commonmark', {
-  highlight(str: string, lang: string): string {
-    if (lang && hljs.getLanguage(lang)) {
-      try {
-        return '<pre><code class="hljs">' + hljs.highlight(str, { language: lang, ignoreIllegals: true }).value + '</code></pre>';
-      } catch {
-        // ignore
-      }
-    }
-
-    return '<pre><code class="hljs">' + markdownIt.utils.escapeHtml(str) + '</code></pre>';
-  },
-});
 
 const consoleRef = useTemplateRef<InstanceType<typeof CuiConsole>>('consoleRef');
 const showConsole = ref(false);

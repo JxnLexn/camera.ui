@@ -155,47 +155,29 @@
         </Card>
       </div>
 
-      <div class="lg:col-span-2 order-3">
-        <span class="lg:!hidden card-title">{{ $t('views.plugin.readme') }}</span>
-        <Card class="cui-card !h-auto lg:!h-full">
-          <template #content>
-            <h3 class="hidden lg:block text-base font-semibold border-b-[1px] border-color mb-3 pb-3">{{ $t('views.plugin.readme') }}</h3>
-            <div v-if="readmeLoading" class="flex w-full h-full items-center justify-center">
-              <ProgressSpinner class="w-[30px] h-[30px] m-0" stroke-width="5" />
-            </div>
-            <div v-else class="markdown-body" v-html="markdownIt.render(readme || $t('views.plugin.no_readme'))" />
-          </template>
-        </Card>
-      </div>
+      <CuiMarkdownPanel
+        class="lg:col-span-2 order-3"
+        :title="$t('views.plugin.readme')"
+        :placeholder="$t('views.plugin.no_readme')"
+        :content="readme"
+        :loading="readmeLoading"
+      />
 
-      <div class="lg:col-span-2 order-4">
-        <span class="lg:!hidden card-title">{{ $t('views.plugin.changelog') }}</span>
-        <Card class="cui-card !h-auto lg:!h-full">
-          <template #content>
-            <h3 class="hidden lg:block text-base font-semibold border-b-[1px] border-color mb-3 pb-3">{{ $t('views.plugin.changelog') }}</h3>
-            <div v-if="changelogLoading" class="flex w-full h-full items-center justify-center">
-              <ProgressSpinner class="w-[30px] h-[30px] m-0" stroke-width="5" />
-            </div>
-            <div v-else class="markdown-body" v-html="markdownIt.render(changelog || $t('views.plugin.no_changelog'))" />
-          </template>
-        </Card>
-      </div>
+      <CuiMarkdownPanel
+        class="lg:col-span-2 order-4"
+        :title="$t('views.plugin.changelog')"
+        :placeholder="$t('views.plugin.no_changelog')"
+        :content="changelog"
+        :loading="changelogLoading"
+      />
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import 'highlight.js/styles/vs2015.min.css';
-
 import { usePluginStorage } from '@camera.ui/browser';
 import { hasInterface, isHub, PluginInterface, SensorType } from '@camera.ui/sdk';
 import { generateStorableConfig, PLUGIN_STATUS } from '@shared/types';
-import hljs from 'highlight.js/lib/core';
-import json from 'highlight.js/lib/languages/json';
-import python from 'highlight.js/lib/languages/python';
-import typescript from 'highlight.js/lib/languages/typescript';
-import yaml from 'highlight.js/lib/languages/yaml';
-import MarkdownIt from 'markdown-it';
 import CctvIcon from '~icons/bxs/cctv';
 import AudioIcon from '~icons/lucide/audio-lines';
 import ObjectIcon from '~icons/material-symbols/detection-and-zone';
@@ -278,25 +260,6 @@ const showSettingsTab = computed(() => {
   if (pluginConfig.value?.schema?.length) return true;
   return pluginConfigLoading.value;
 });
-
-const markdownIt = MarkdownIt('commonmark', {
-  highlight(str: string, lang: string): string {
-    if (lang && hljs.getLanguage(lang)) {
-      try {
-        return '<pre><code class="hljs">' + hljs.highlight(str, { language: lang, ignoreIllegals: true }).value + '</code></pre>';
-      } catch {
-        // ignore
-      }
-    }
-
-    return '<pre><code class="hljs">' + markdownIt.utils.escapeHtml(str) + '</code></pre>';
-  },
-});
-
-hljs.registerLanguage('typescript', typescript);
-hljs.registerLanguage('yaml', yaml);
-hljs.registerLanguage('json', json);
-hljs.registerLanguage('python', python);
 
 // If true, this specific camera was created by the plugin and the toggle should be hidden
 // (can't disable plugin for cameras it created).

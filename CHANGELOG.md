@@ -18,6 +18,8 @@ All notable changes to this project will be documented in this file.
 
 - **Expanding a camera in CamView no longer restarts the recording.** It jumped back and began a fresh playback every time, and after the first expand the small cards stopped playing altogether until expanded again. Playback now follows the card and keeps running, the way live already did.
 
+- **A long readme no longer stretches the plugin page.** Readme and changelog keep a readable height and scroll on their own, and a button in their corner opens them to full height.
+
 - **Clicking a detection jumps to it and plays.** Nothing happened before, so you had to scroll the timeline until you found the spot yourself. Dragging the list to scroll still works.
 
 - **Capture snapshot works during playback.** The button did nothing while a recording was playing and only worked on the live picture. The file is named after the moment on screen, not the time you clicked.
