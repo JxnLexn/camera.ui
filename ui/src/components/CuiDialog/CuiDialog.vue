@@ -135,6 +135,7 @@ const {
   tabs,
   goTo,
   draggable,
+  blockDragOnSelectors,
   rootId,
   markdown: md,
   headerActions,
@@ -160,7 +161,15 @@ const { style, x, y } = useDraggable(dialogHeader, {
   containerElement() {
     return document.getElementById('app');
   },
-  onStart() {
+  onStart(_position, event) {
+    const target = event.target as HTMLElement | null;
+    if (!target) return;
+    if (target.closest('button')) return false;
+    for (const selector of blockDragOnSelectors?.value ?? []) {
+      if (target.closest(selector)) return false;
+    }
+  },
+  onMove() {
     hasDragged.value = true;
   },
 });
