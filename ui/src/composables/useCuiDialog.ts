@@ -312,12 +312,21 @@ export function useCuiDialog() {
     return dialogRef;
   };
 
+  function releaseNonInteractiveFocus(): void {
+    const active = document.activeElement;
+    if (!(active instanceof HTMLElement) || active === document.body) return;
+    if (active.closest('button, a[href], input, select, textarea, [contenteditable="true"]')) return;
+    active.blur();
+  }
+
   function createDialog<T extends ContentTextProps | ContentImageProps | ContentComponentProps<any> | ContentStepperProps<any>>(
     type: DialogType,
     options: { component?: Component } & CustomDialogOptions<T>,
     props?: Partial<DynamicDialogOptions['props']>,
   ): DynamicDialogInstance {
     const { component, data, onConfirm, onCancel, onSettled, events, ...rest } = options;
+
+    releaseNonInteractiveFocus();
 
     const templates: DialogTemplates = {
       content: component ? markRaw(component) : undefined,

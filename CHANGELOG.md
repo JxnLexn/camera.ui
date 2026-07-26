@@ -14,6 +14,8 @@ All notable changes to this project will be documented in this file.
 
 - **The close button on a recording closes it on the first click.** Pressing X moved the dialog away instead, sometimes three times in a row before it gave in. Dragging a dialog by its header still works.
 
+- **The page behind a dialog no longer jumps when it closes.** Closing a recording scrolled the list and the header out of place for a moment.
+
 - **Expanding a camera in CamView no longer restarts the recording.** It jumped back and began a fresh playback every time, and after the first expand the small cards stopped playing altogether until expanded again. Playback now follows the card and keeps running, the way live already did.
 
 - **Capture snapshot works during playback.** The button did nothing while a recording was playing and only worked on the live picture. The file is named after the moment on screen, not the time you clicked.
