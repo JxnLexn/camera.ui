@@ -117,6 +117,7 @@ export class NATS {
 
                   // Camera controller — view/playback reads only
                   'rpc.camera.*.controller.rpc.snapshot',
+                  'rpc.camera.*.controller.rpc.snapshotWithMeta',
                   'rpc.camera.*.controller.rpc.probeStream',
                   'rpc.camera.*.controller.rpc.streamUrl',
                   'rpc.camera.*.controller.rpc.refreshStates',
@@ -126,6 +127,7 @@ export class NATS {
                   'rpc.camera.*.sensors.rpc.getSensorStates',
 
                   // NVR specific — read-only access
+                  'rpc.plugin.*.child.rpc.getInstanceId',
                   'rpc.plugin.*.child.rpc.getEvents',
                   'rpc.plugin.*.child.rpc.getCameraEvents',
                   'rpc.plugin.*.child.rpc.getEventThumbnails',
