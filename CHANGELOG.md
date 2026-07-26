@@ -4,6 +4,8 @@ All notable changes to this project will be documented in this file.
 
 ## [2.0.21]
 
+**The Android app is in review at Google.** As soon as it passes, the closed beta starts. More on that on Discord once the review is through.
+
 ### Added
 
 - **The Android app has picture-in-picture.** The PiP button shrinks the live stream into a small floating window that stays on top while you use other apps. On the single camera view the stream also pops out on its own when you swipe home, as long as it is the only one playing.
