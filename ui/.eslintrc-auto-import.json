@@ -2,6 +2,8 @@
   "globals": {
     "App": true,
     "AppBus": true,
+    "AppPermissionName": true,
+    "AppPermissionState": true,
     "BackupRestorePhase": true,
     "BannerMode": true,
     "BiometryStatus": true,
@@ -366,6 +368,7 @@
     "useParentElement": true,
     "usePerformanceObserver": true,
     "usePermission": true,
+    "usePermissions": true,
     "usePlugin": true,
     "usePluginsSocket": true,
     "usePointer": true,

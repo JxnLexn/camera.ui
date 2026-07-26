@@ -609,7 +609,7 @@ export interface ConsoleSettings {
   zoom: number; // 8 - 20
 }
 
-export type SettingsViews = 'account' | 'appearance' | 'user' | 'notifications' | 'recordings' | 'remote' | 'backup' | 'system';
+export type SettingsViews = 'account' | 'appearance' | 'user' | 'notifications' | 'permissions' | 'recordings' | 'remote' | 'backup' | 'system';
 
 export interface CamviewLayoutOverride {
   index: number;

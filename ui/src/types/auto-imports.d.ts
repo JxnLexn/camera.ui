@@ -308,6 +308,7 @@ declare global {
   const useParentElement: typeof import('@vueuse/core').useParentElement
   const usePerformanceObserver: typeof import('@vueuse/core').usePerformanceObserver
   const usePermission: typeof import('@vueuse/core').usePermission
+  const usePermissions: typeof import('../composables/usePermissions').usePermissions
   const usePlugin: typeof import('@camera.ui/browser').usePlugin
   const usePluginsSocket: typeof import('../composables/sockets/usePluginsSocket').usePluginsSocket
   const usePointer: typeof import('@vueuse/core').usePointer
@@ -459,6 +460,9 @@ declare global {
   // @ts-ignore
   export type { DownloadOptions } from '../composables/useFileDownload'
   import('../composables/useFileDownload')
+  // @ts-ignore
+  export type { AppPermissionState, AppPermissionName } from '../composables/usePermissions'
+  import('../composables/usePermissions')
   // @ts-ignore
   export type { HiddenDevice, CamerasSocketState } from '../composables/sockets/useCamerasSocket'
   import('../composables/sockets/useCamerasSocket')
@@ -801,6 +805,7 @@ declare module 'vue' {
     readonly useParentElement: UnwrapRef<typeof import('@vueuse/core')['useParentElement']>
     readonly usePerformanceObserver: UnwrapRef<typeof import('@vueuse/core')['usePerformanceObserver']>
     readonly usePermission: UnwrapRef<typeof import('@vueuse/core')['usePermission']>
+    readonly usePermissions: UnwrapRef<typeof import('../composables/usePermissions')['usePermissions']>
     readonly usePlugin: UnwrapRef<typeof import('@camera.ui/browser')['usePlugin']>
     readonly usePluginsSocket: UnwrapRef<typeof import('../composables/sockets/usePluginsSocket')['usePluginsSocket']>
     readonly usePointer: UnwrapRef<typeof import('@vueuse/core')['usePointer']>

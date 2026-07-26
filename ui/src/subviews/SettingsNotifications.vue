@@ -8,6 +8,11 @@
             <div class="flex flex-col gap-6">
               <span class="text-sm">{{ $t('views.settings.notifications.general_info') }}</span>
 
+              <Message v-if="permissionStates.notifications === 'denied'" severity="warn" size="small">
+                {{ $t('views.settings.notifications.os_permission_denied') }}
+                <RouterLink to="/settings/permissions" class="underline">{{ $t('views.settings.notifications.os_permission_link') }}</RouterLink>
+              </Message>
+
               <div v-if="settingsLoading && !draft" class="flex items-center justify-center py-8">
                 <ProgressSpinner class="w-[30px] h-[30px] m-0" stroke-width="5" />
               </div>
@@ -252,6 +257,7 @@ const toast = useCuiToast();
 const isAdmin = hasPermission(undefined, 'admin');
 const { registerForPush, forgetIfThisDevice, isServerSynced } = usePushRegistration();
 const { isElectronApp, electron } = useElectron();
+const { states: permissionStates, refresh: refreshPermissions } = usePermissions();
 
 const { data: settings, isLoading: settingsLoading } = notificationsQuery.getSettingsQuery();
 const { data: devices, isLoading: devicesLoading } = notificationsQuery.listDevicesQuery(() => true);
@@ -453,6 +459,7 @@ watch(settings, syncDraft, { immediate: true });
 onMounted(() => {
   if (isCapacitor) refreshDeviceSync();
   if (isElectronApp) refreshDesktopEnabled();
+  refreshPermissions();
 });
 </script>
 

@@ -29,6 +29,8 @@ import ConsoleIcon from '~icons/mdi/bug-outline';
 import SettingsIconActive from '~icons/mdi/cog';
 import SettingsIcon from '~icons/mdi/cog-outline';
 import FacesIcon from '~icons/mdi/face-recognition';
+import SettingsPermissionsIconActive from '~icons/mdi/shield-check';
+import SettingsPermissionsIcon from '~icons/mdi/shield-check-outline';
 import ConfigIconActive from '~icons/mdi/note-edit';
 import ConfigIcon from '~icons/mdi/note-edit-outline';
 import SettingsMqttIcon from '~icons/mdi/transit-connection-variant';
@@ -83,6 +85,7 @@ const SettingsMqtt = () => import('@/subviews/SettingsMqtt.vue');
 const SettingsSystem = () => import('@/subviews/SettingsSystem.vue');
 const SettingsUsers = () => import('@/subviews/SettingsUsers.vue');
 const SettingsNotifications = () => import('@/subviews/SettingsNotifications.vue');
+const SettingsPermissions = () => import('@/subviews/SettingsPermissions.vue');
 
 const { smBreakpoint } = useSharedCuiBreakpoint();
 
@@ -888,6 +891,31 @@ export const routes: RouteRecordRaw[] = [
             icon: {
               default: SettingsNotificationsIcon,
               active: SettingsNotificationsIconActive,
+            },
+          },
+        },
+      },
+      {
+        name: 'SettingsPermissions',
+        path: 'permissions',
+        component: SettingsPermissions,
+        meta: {
+          name: 'permissions',
+          description: 'permissions_description',
+          auth: {
+            requiresAuth: true,
+            role: 'user',
+          },
+          ui: {
+            showNavbar: true,
+            showTopbar: true,
+            showBottombar: true,
+            showRouterLoadingSub: true,
+          },
+          settingsBar: {
+            icon: {
+              default: SettingsPermissionsIcon,
+              active: SettingsPermissionsIconActive,
             },
           },
         },

@@ -1,4 +1,12 @@
-export type InvokeChannel = 'get-app-version' | 'get-update-available' | 'quit-and-install' | 'get-desktop-notifications' | 'set-desktop-notifications';
+export type InvokeChannel =
+  | 'get-app-version'
+  | 'get-update-available'
+  | 'quit-and-install'
+  | 'get-desktop-notifications'
+  | 'set-desktop-notifications'
+  | 'get-mic-access'
+  | 'ask-mic-access'
+  | 'open-mic-settings';
 export type SendChannel = 'change-language' | 'change-window' | 'check-for-updates' | 'show-notification' | 'set-badge-count';
 export type ReceiveChannel = 'fullscreen' | 'app-status' | 'notification-click' | 'deep-link';
 
