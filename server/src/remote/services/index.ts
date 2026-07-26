@@ -14,6 +14,8 @@ import type { CloudflareManagedService, ManagedTunnelStatus } from './cloudflare
 
 type ActiveMode = 'cloudflare' | 'cloudflareQuick' | 'customDomain' | null;
 
+const FALLBACK_RECHECK_MS = 60_000;
+
 export class RemoteAccessService {
   private remoteService: RemoteService;
   private cloudflareService: CloudflareService;
@@ -24,6 +26,7 @@ export class RemoteAccessService {
   private activeMode: ActiveMode = null;
   private override: DirectOverrideStatus = { active: false, fallback: false };
   private reconcileChain: Promise<void> = Promise.resolve();
+  private fallbackWatch: NodeJS.Timeout | null = null;
 
   constructor(
     private logger: Logger,
@@ -41,6 +44,7 @@ export class RemoteAccessService {
   }
 
   public stop(): void {
+    this.stopFallbackWatch();
     this.cloudflareService.stop();
     this.customDomainService.reset();
     this.urlReadiness.clear();
@@ -159,6 +163,7 @@ export class RemoteAccessService {
 
     if (this.activeMode === 'cloudflareQuick' && this.cloudflareService.isRunning) {
       this.override = { active: true, fallback: true };
+      this.startFallbackWatch();
       return;
     }
 
@@ -175,6 +180,29 @@ export class RemoteAccessService {
     await this.cloudflareService.startQuick();
     this.activeMode = 'cloudflareQuick';
     this.override = { active: true, fallback: true };
+    this.startFallbackWatch();
+  }
+
+  private startFallbackWatch(): void {
+    if (this.fallbackWatch || this.remoteConfig.directMode !== 'customDomain') return;
+    this.fallbackWatch = setInterval(() => void this.recheckFallback(), FALLBACK_RECHECK_MS);
+    this.fallbackWatch.unref();
+  }
+
+  private stopFallbackWatch(): void {
+    if (!this.fallbackWatch) return;
+    clearInterval(this.fallbackWatch);
+    this.fallbackWatch = null;
+  }
+
+  private async recheckFallback(): Promise<void> {
+    const target = this.configuredTargetUrl();
+    if (!target || !(await this.probeUrl(target)).ok) return;
+
+    this.logger.log(`Configured direct target ${target} is reachable again, leaving the Cloudflare Quick Tunnel.`);
+    this.stopFallbackWatch();
+    this.teardownActive();
+    await this.reconcile();
   }
 
   private ensureMode(mode: DBRemoteDirectMode): void {
@@ -327,6 +355,7 @@ export class RemoteAccessService {
   }
 
   private teardownActive(): void {
+    this.stopFallbackWatch();
     if (this.activeMode === 'cloudflare' || this.activeMode === 'cloudflareQuick') {
       this.cloudflareService.stop();
     } else if (this.activeMode === 'customDomain') {

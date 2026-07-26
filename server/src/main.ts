@@ -138,9 +138,9 @@ class CameraUi {
       message: 'Starting server...',
     });
 
-    this.remoteAccessManager.start().catch(() => {});
     await this.server.register();
     await this.server.listen();
+    this.remoteAccessManager.start().catch(() => {});
     await this.tunnelClient.start();
     await this.mqttManager.start();
 

@@ -22,6 +22,8 @@ All notable changes to this project will be documented in this file.
 
 - **A parked object no longer starts producing events again after a while.** It went quiet, then hours later the same picture came back as a new event, over and over. It also settles faster now, usually after the first event. A car that only stops briefly still counts as an event.
 
+- **Your own domain is no longer dropped for a temporary tunnel it can't get back from.** The address was checked once at startup, before the server was ready to answer, so it looked unreachable and camera.ui switched to a Cloudflare tunnel until the next restart, even though Test connection said the address was fine. It now checks after the server is up and switches back on its own once your domain answers.
+
 - **The app no longer briefly reconnects when you return to it.** On phones, opening the app after it sat in the background could show it reconnecting and reload everything, a moment after it had already come back on its own. It now recognizes the connection is still alive and keeps it running.
 
 - **Faster recovery after the server restarts.** A server restart or short outage left the app retrying for several seconds before it reconnected. It now looks for the server again right away, so live, playback and the timeline come back in a second or two.
