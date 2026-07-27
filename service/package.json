@@ -34,7 +34,7 @@
   "devDependencies": {
     "@stylistic/eslint-plugin": "^5.10.0",
     "@types/fs-extra": "^11.0.4",
-    "@types/node": "26.1.1",
+    "@types/node": "26.1.2",
     "@types/tail": "^2.2.3",
     "@typescript-eslint/parser": "^8.65.0",
     "eslint": "9.39.2",
@@ -46,7 +46,7 @@
     "tsyringe": "^4.10.0",
     "typescript": "5.9.3",
     "typescript-eslint": "^8.65.0",
-    "updates": "^17.19.1"
+    "updates": "^17.19.2"
   },
   "author": "seydx (https://github.com/cameraui/camera.ui)",
   "bugs": {
