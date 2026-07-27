@@ -122,6 +122,12 @@ export class PluginRegistry {
     return false;
   }
 
+  public hasEligibleObjectAssist(): boolean {
+    const assist = this.single.get(SensorType.ObjectAssist);
+    const object = this.single.get(SensorType.Object);
+    return !!assist && !object?.requiresFrames && assist.pluginId !== object?.pluginId;
+  }
+
   public needsAdHocLoop(): boolean {
     const obj = this.single.get(SensorType.Object);
     if (!obj) return false;

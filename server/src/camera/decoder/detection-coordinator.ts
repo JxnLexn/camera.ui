@@ -131,8 +131,6 @@ export class DetectionCoordinator {
       const sourceId = config.controllerSnapshotSourceId;
       const controllerProxy = this.proxy.createProxy<CameraDeviceInterface>(NamespaceManager.cameraNamespaces(config.cameraId).cameraControllerRpc);
       frameSourceConfig.snapshotProvider = async () => {
-        // fresh + plugin-native, a sub-stream snapshot source must not cap the
-        // detection image
         const jpeg = await controllerProxy.snapshot(sourceId, true, true);
         if (!jpeg || jpeg.byteLength === 0) return null;
         return Buffer.from(jpeg);
@@ -321,7 +319,9 @@ export class DetectionCoordinator {
         this.thumbnailer.fetchEventThumbnailAsync();
       }
 
-      if (!this.plugins.hasFrameBasedSecondary()) return;
+      // assist alone is enough: its boxes upgrade zones, bboxes and thumbnails
+      // even when no face/plate/clip secondary consumes them
+      if (!this.plugins.hasFrameBasedSecondary() && !this.plugins.hasEligibleObjectAssist()) return;
       if (this.processingExternalSecondary) return; // previous RPC still running
 
       this.processingExternalSecondary = true;
@@ -333,6 +333,7 @@ export class DetectionCoordinator {
           try {
             const results: DetectionResults = { timestamp: Date.now() };
             const objects = await this.runObjectAssist(peeked.frame, rawExternal);
+            this.ingestAssistedObjects(sensorId, objects);
             // processExternal only adapts the shape, external boxes get no real tracking
             const objectDetections = this.pipeline.processExternal(objects.detections);
             await this.runSecondariesAndThumbnails(peeked.frame, objectDetections, results);
@@ -353,6 +354,7 @@ export class DetectionCoordinator {
         try {
           const results: DetectionResults = { timestamp: Date.now() };
           const objects = await this.runObjectAssist(fetched.frame, rawExternal);
+          this.ingestAssistedObjects(sensorId, objects);
 
           if (objects.assisted) {
             // real boxes: crop the object like the frame pipeline, so face and
@@ -1226,12 +1228,20 @@ export class DetectionCoordinator {
     return scaled ? this.frameScaler.toVideoFrameData(scaled) : undefined;
   }
 
+  private ingestAssistedObjects(sensorId: string, objects: { detections: Detection[]; assisted: boolean }): void {
+    if (!objects.assisted) return;
+    const refiltered = this.applyExternalDetectionFilters(SensorType.Object, {
+      detected: objects.detections.length > 0,
+      detections: objects.detections,
+    });
+    this.ingestDetectionResult(SensorType.Object, sensorId, refiltered);
+  }
+
   private async runObjectAssist(frame: Frame, reported: Detection[]): Promise<{ detections: Detection[]; assisted: boolean }> {
-    const assist = this.plugins.get(SensorType.ObjectAssist);
-    const objectPlugin = this.plugins.get(SensorType.Object);
-    if (!assist || objectPlugin?.requiresFrames || assist.pluginId === objectPlugin?.pluginId) {
+    if (!this.plugins.hasEligibleObjectAssist()) {
       return { detections: reported, assisted: false };
     }
+    const assist = this.plugins.get(SensorType.ObjectAssist)!;
 
     const scaled = await this.scaleFrameForPlugin(frame, assist);
     if (!scaled) return { detections: reported, assisted: false };

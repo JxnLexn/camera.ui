@@ -18,6 +18,8 @@ All notable changes to this project will be documented in this file.
 
 - **Webhook automations are easier to call.** The webhook trigger now also accepts its secret as a plain X-Webhook-Secret header, so tools that can't compute an HMAC signature can fire automations too. Signed requests keep working as before.
 
+- **Object assist works on its own.** On cameras that detect by themselves it used to run only when face or plate recognition was assigned. Now it always gives those detections real bounding boxes, so zones apply properly and events show boxes, with or without recognition on top.
+
 ### Fixed
 
 - **The Android app connects reliably.** It could search for the server forever, both on the server picker and at login, while iOS connected fine. One dead address could cancel the whole search and take the reachable ones down with it; every address now gets its chance, so picking a server and logging in settle in a second or two.
