@@ -1,4 +1,4 @@
-import { createHmac, timingSafeEqual } from 'node:crypto';
+import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
 import { container } from 'tsyringe';
 
 import { AutomationsService } from '../api/services/automations.service.js';
@@ -143,21 +143,31 @@ export class AutomationEngine {
     if (!mapping) return { triggered: false };
 
     const signature = headers['x-webhook-signature'] ?? headers['X-Webhook-Signature'];
-    if (!signature) return { triggered: false, error: 'Missing X-Webhook-Signature header' };
+    const plainSecret = headers['x-webhook-secret'] ?? headers['X-Webhook-Secret'];
 
-    const payload = typeof body === 'string' ? body : JSON.stringify(body ?? '');
-    const expected = createHmac('sha256', mapping.secret ?? '')
-      .update(payload)
-      .digest('hex');
-
-    try {
-      const sigBuf = Buffer.from(signature, 'hex');
-      const expBuf = Buffer.from(expected, 'hex');
-      if (sigBuf.length !== expBuf.length || !timingSafeEqual(sigBuf, expBuf)) {
-        return { triggered: false, error: 'Invalid signature' };
+    if (plainSecret && mapping.secret) {
+      const given = createHash('sha256').update(plainSecret).digest();
+      const expected = createHash('sha256').update(mapping.secret).digest();
+      if (!timingSafeEqual(given, expected)) {
+        return { triggered: false, error: 'Invalid secret' };
       }
-    } catch {
-      return { triggered: false, error: 'Invalid signature format' };
+    } else {
+      if (!signature) return { triggered: false, error: 'Missing X-Webhook-Signature or X-Webhook-Secret header' };
+
+      const payload = typeof body === 'string' ? body : JSON.stringify(body ?? '');
+      const expected = createHmac('sha256', mapping.secret ?? '')
+        .update(payload)
+        .digest('hex');
+
+      try {
+        const sigBuf = Buffer.from(signature, 'hex');
+        const expBuf = Buffer.from(expected, 'hex');
+        if (sigBuf.length !== expBuf.length || !timingSafeEqual(sigBuf, expBuf)) {
+          return { triggered: false, error: 'Invalid signature' };
+        }
+      } catch {
+        return { triggered: false, error: 'Invalid signature format' };
+      }
     }
 
     const flow = this.automationsService.getById(mapping.flowId);

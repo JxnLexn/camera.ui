@@ -276,7 +276,7 @@ export default {
       webhook_url: 'Webhook-URL',
       webhook_url_hint: 'Sende einen POST-Request an diese URL um die Automatisierung auszulösen.',
       webhook_secret: 'HMAC-Secret',
-      webhook_secret_hint: 'Sende einen X-Webhook-Signature Header mit HMAC-SHA256(body, secret) zur Authentifizierung.',
+      webhook_secret_hint: 'Sende dieses Secret in einem X-Webhook-Secret Header. Alternativ den Body mit HMAC-SHA256(body, secret) in einem X-Webhook-Signature Header signieren.',
       webhook_secret_save_hint: 'Speichern Sie die Automatisierung, um ein HMAC-Secret zu generieren.',
       webhook_secret_copied: 'Kopiert',
       condition_variable: 'Variable',
