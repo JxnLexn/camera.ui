@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.0.22]
+
+- **The app reopens your last server.** Starting the iOS or Android app connects straight to the server you used last instead of stopping at the server list. Switch server in the menu still brings the list back, and a tapped notification for another server always wins.
+
+- **Settings open as a list on the phone.** Tapping Settings in the menu now slides to a list of all settings sections, just like the menu itself, and each section slides in from there. The back button top left returns to the list; the sidebar overlay on small screens is gone.
+
+- **Pick your start page.** A new option under Appearance chooses which page opens after login and when visiting the address directly, for example CamView or Recordings instead of Home. Everyone picks from the pages their role can access, per device.
+
+- **Webhook automations are easier to call.** The webhook trigger now also accepts its secret as a plain X-Webhook-Secret header, so tools that can't compute an HMAC signature can fire automations too. Signed requests keep working as before.
+
+- **Object assist works on its own.** On cameras that detect by themselves it used to run only when face or plate recognition was assigned. Now it always gives those detections real bounding boxes, so zones apply properly and events show boxes, with or without recognition on top.
+
 ## [2.0.21]
 
 **The Android app is in review at Google.** As soon as it passes, the closed beta starts. More on that on Discord once the review is through.
@@ -11,14 +23,6 @@ All notable changes to this project will be documented in this file.
 - **The Android app has picture-in-picture.** The PiP button shrinks the live stream into a small floating window that stays on top while you use other apps. On the single camera view the stream also pops out on its own when you swipe home, as long as it is the only one playing.
 
 - **A Permissions page in the settings.** It shows whether this device lets camera.ui use the microphone, location and notifications, asks for missing ones and jumps into the system settings when something is blocked. The notification settings point there when notifications are turned off at the system level.
-
-- **Settings open as a list on the phone.** Tapping Settings in the menu now slides to a list of all settings sections, just like the menu itself, and each section slides in from there. The back button top left returns to the list; the sidebar overlay on small screens is gone.
-
-- **Pick your start page.** A new option under Appearance chooses which page opens after login and when visiting the address directly, for example CamView or Recordings instead of Home. Everyone picks from the pages their role can access, per device.
-
-- **Webhook automations are easier to call.** The webhook trigger now also accepts its secret as a plain X-Webhook-Secret header, so tools that can't compute an HMAC signature can fire automations too. Signed requests keep working as before.
-
-- **Object assist works on its own.** On cameras that detect by themselves it used to run only when face or plate recognition was assigned. Now it always gives those detections real bounding boxes, so zones apply properly and events show boxes, with or without recognition on top.
 
 ### Fixed
 
