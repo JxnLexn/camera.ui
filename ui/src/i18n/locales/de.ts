@@ -2175,6 +2175,7 @@ export default {
       title_backup: 'Backup',
       title_go2rtc: 'Go2RTC',
       title_notifications: 'Benachrichtigungen',
+      title_settings: 'Einstellungen',
       notifications: {
         general: 'Allgemein',
         general_info:

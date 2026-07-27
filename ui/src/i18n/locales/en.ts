@@ -2160,6 +2160,7 @@ export default {
       title_nvr: 'NVR',
       title_permissions: 'Permissions',
       title_recordings: 'Recordings',
+      title_settings: 'Settings',
       notifications: {
         general: 'General',
         general_info:

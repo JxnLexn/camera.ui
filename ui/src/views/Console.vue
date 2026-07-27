@@ -70,7 +70,9 @@
         </div>
         <div v-for="(e, i) in filtered" :key="i" class="whitespace-pre-wrap break-words py-0.5 border-b border-white/5" :class="levelClass(e.level)">
           <span class="text-muted">{{ time(e.t) }}</span>
-          <span class="opacity-70"> <template v-if="e.level">[{{ e.level.toUpperCase() }}] </template>[{{ e.scope }}]</span>
+          <span class="opacity-70">
+            <template v-if="e.level">[{{ e.level.toUpperCase() }}] </template>[{{ e.scope }}]</span
+          >
           {{ e.msg }}
         </div>
       </div>

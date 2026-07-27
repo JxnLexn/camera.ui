@@ -29,10 +29,10 @@ import ConsoleIcon from '~icons/mdi/bug-outline';
 import SettingsIconActive from '~icons/mdi/cog';
 import SettingsIcon from '~icons/mdi/cog-outline';
 import FacesIcon from '~icons/mdi/face-recognition';
-import SettingsPermissionsIconActive from '~icons/mdi/shield-check';
-import SettingsPermissionsIcon from '~icons/mdi/shield-check-outline';
 import ConfigIconActive from '~icons/mdi/note-edit';
 import ConfigIcon from '~icons/mdi/note-edit-outline';
+import SettingsPermissionsIconActive from '~icons/mdi/shield-check';
+import SettingsPermissionsIcon from '~icons/mdi/shield-check-outline';
 import SettingsMqttIcon from '~icons/mdi/transit-connection-variant';
 import SettingsUsersIconActive from '~icons/mdi/users';
 import SettingsUsersIcon from '~icons/mdi/users-outline';
@@ -82,6 +82,7 @@ const SettingsBackup = () => import('@/subviews/SettingsBackup.vue');
 const SettingsRecordings = () => import('@/subviews/SettingsRecordings.vue');
 const SettingsRemote = () => import('@/subviews/SettingsRemote.vue');
 const SettingsMqtt = () => import('@/subviews/SettingsMqtt.vue');
+const SettingsList = () => import('@/subviews/SettingsList.vue');
 const SettingsSystem = () => import('@/subviews/SettingsSystem.vue');
 const SettingsUsers = () => import('@/subviews/SettingsUsers.vue');
 const SettingsNotifications = () => import('@/subviews/SettingsNotifications.vue');
@@ -796,6 +797,24 @@ export const routes: RouteRecordRaw[] = [
     },
     children: [
       {
+        name: 'SettingsList',
+        path: '',
+        component: SettingsList,
+        meta: {
+          name: 'settings',
+          auth: {
+            requiresAuth: true,
+            role: 'user',
+          },
+          ui: {
+            showNavbar: true,
+            showTopbar: true,
+            showBottombar: true,
+            showRouterLoadingSub: true,
+          },
+        },
+      },
+      {
         name: 'SettingsAccount',
         path: 'account',
         component: SettingsAccount,
@@ -1059,7 +1078,8 @@ function getTransitionInfo(path: string): { group: string; key: string; ignore?:
   if (p === '/faces') return { group: 'menu', key: 'faces', depth: 1 };
   if (p === '/plugins') return { group: 'menu', key: 'plugins', depth: 1 };
   if (p.startsWith('/plugins/')) return { group: 'menu', key: 'plugin-detail', depth: 2 };
-  if (p.startsWith('/settings')) return { group: 'menu', key: 'settings', depth: 1 };
+  if (p === '/settings') return { group: 'menu', key: 'settings', depth: 1 };
+  if (p.startsWith('/settings/')) return { group: 'menu', key: 'settings-detail', depth: 2 };
   if (p === '/admin') return { group: 'menu', key: 'admin', depth: 1 };
   if (p === '/config') return { group: 'menu', key: 'config', depth: 1 };
   if (p === '/console') return { group: 'menu', key: 'console', depth: 1 };
@@ -1152,7 +1172,7 @@ router.beforeEach(async (to, from) => {
       return '/home';
     } else if (pageName === 'login') {
       return '/home';
-    } else if (to.path === '/settings') {
+    } else if (to.path === '/settings' && window.innerWidth >= 640) {
       const view = useUiStore().uiSettings.interface.selectedSettingsView;
       return `/settings/${settingsViews.includes(view) ? view : 'account'}`;
     }

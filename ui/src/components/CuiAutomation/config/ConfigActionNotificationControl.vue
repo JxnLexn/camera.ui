@@ -2,12 +2,26 @@
   <div class="flex flex-col gap-4">
     <div class="flex flex-col field-gap">
       <label class="cui-label">{{ t('components.automation_nodes.notification_control_mode') }}</label>
-      <Select :model-value="data.mode ?? 'disable'" :options="modeOptions" option-label="label" option-value="value" class="w-full" @update:model-value="update('mode', $event)" />
+      <Select
+        :model-value="data.mode ?? 'disable'"
+        :options="modeOptions"
+        option-label="label"
+        option-value="value"
+        class="w-full"
+        @update:model-value="update('mode', $event)"
+      />
     </div>
 
     <div class="flex flex-col field-gap">
       <label class="cui-label">{{ t('components.automation_nodes.notification_control_scope') }}</label>
-      <Select :model-value="data.scope ?? 'global'" :options="scopeOptions" option-label="label" option-value="value" class="w-full" @update:model-value="update('scope', $event)" />
+      <Select
+        :model-value="data.scope ?? 'global'"
+        :options="scopeOptions"
+        option-label="label"
+        option-value="value"
+        class="w-full"
+        @update:model-value="update('scope', $event)"
+      />
       <Message severity="secondary" variant="simple" size="small" class="cui-input-hint">{{ scopeHint }}</Message>
     </div>
 
@@ -52,7 +66,9 @@ const scopeOptions = [
 
 const userOptions = computed(() => (users.value?.result ?? []).map((u) => ({ value: u._id, label: u.username })));
 const scopeHint = computed(() =>
-  props.data.scope === 'user' ? t('components.automation_nodes.notification_control_scope_user_hint') : t('components.automation_nodes.notification_control_scope_global_hint'),
+  props.data.scope === 'user'
+    ? t('components.automation_nodes.notification_control_scope_user_hint')
+    : t('components.automation_nodes.notification_control_scope_global_hint'),
 );
 
 function update(key: string, value: unknown) {

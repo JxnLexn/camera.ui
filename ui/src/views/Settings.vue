@@ -5,48 +5,14 @@
     </CuiTopbarSlot>
 
     <CuiTopbarSlot position="left">
-      <Button
-        id="menu-icon"
-        class="cui-button relative group p-2 transition-colors duration-100 w-[40px] h-[42px] flex items-center justify-center"
-        severity="secondary"
-        text
-        @click="toggleNavbar"
-      >
-        <div class="relative flex overflow-hidden items-center justify-center w-5 h-5">
-          <div class="flex flex-col justify-between w-4 h-3 transform transition-all duration-100 origin-center overflow-hidden">
-            <div
-              class="h-0.5 w-2 transform transition-all duration-100 origin-center"
-              :class="{
-                'w-4 rotate-45 translate-y-[5px]': subnavbarState === 'opened',
-              }"
-              :style="{
-                backgroundColor: 'var(--text-color)',
-              }"
-            />
-            <div
-              class="h-0.5 w-4 rounded transform transition-all duration-100"
-              :class="{
-                'opacity-0': subnavbarState === 'opened',
-              }"
-              :style="{
-                backgroundColor: 'var(--text-color)',
-              }"
-            />
-            <div
-              class="h-0.5 w-3 transform transition-all duration-100 origin-center"
-              :class="{
-                'w-4 -rotate-45 -translate-y-[5px]': subnavbarState === 'opened',
-              }"
-              :style="{
-                backgroundColor: 'var(--text-color)',
-              }"
-            />
-          </div>
-        </div>
+      <Button severity="secondary" text class="cui-button p-2 text-color non-draggable-region" @click="$router.push(isListRoute ? '/menu' : '/settings')">
+        <template #icon>
+          <i-weui:back-filled class="w-6 h-6" />
+        </template>
       </Button>
     </CuiTopbarSlot>
 
-    <CuiSubNavbar ref="subnavbarRef" class="z-4 min-w-0" />
+    <CuiSubNavbar v-if="!smBreakpoint" ref="subnavbarRef" class="z-4 min-w-0" />
 
     <main
       class="relative w-full h-full"
@@ -119,6 +85,8 @@ const subnavbarRef = useTemplateRef<InstanceType<typeof CuiSubNavbar>>('subnavba
 const containerRef = useTemplateRef('containerRef');
 const allowSipe = ref(true);
 
+const isListRoute = computed(() => router.currentRoute.value.path === '/settings');
+
 const swipeOptions: UseSwipeOptions = {
   threshold: 50,
   onSwipeStart(e) {
@@ -157,8 +125,15 @@ function toggleNavbar() {
   bus.emit({ subbarState: state });
 }
 
+watch(smBreakpoint, (isMobile) => {
+  if (!isMobile && isListRoute.value) {
+    const view = useUiStore().uiSettings.interface.selectedSettingsView;
+    router.replace(`/settings/${settingsViews.includes(view) ? view : 'account'}`);
+  }
+});
+
 watch([isSwiping, direction], () => {
-  if (isSwiping.value && allowSipe.value) {
+  if (isSwiping.value && allowSipe.value && !isListRoute.value) {
     const oldRouteIndex = uiRoutes.findIndex((route) => route.path === router.currentRoute.value.path.split('/settings/')[1]);
 
     switch (direction.value) {

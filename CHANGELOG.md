@@ -12,6 +12,8 @@ All notable changes to this project will be documented in this file.
 
 - **A Permissions page in the settings.** It shows whether this device lets camera.ui use the microphone, location and notifications, asks for missing ones and jumps into the system settings when something is blocked. The notification settings point there when notifications are turned off at the system level.
 
+- **Settings open as a list on the phone.** Tapping Settings in the menu now slides to a list of all settings sections, just like the menu itself, and each section slides in from there. The back button top left returns to the list; the sidebar overlay on small screens is gone.
+
 ### Fixed
 
 - **The Android app connects reliably.** It could search for the server forever, both on the server picker and at login, while iOS connected fine. One dead address could cancel the whole search and take the reachable ones down with it; every address now gets its chance, so picking a server and logging in settle in a second or two.
