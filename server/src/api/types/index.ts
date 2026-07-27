@@ -638,6 +638,7 @@ export interface InterfaceSettinges {
   showBottomBarOnMobile: boolean;
   selectedSettingsView: SettingsViews;
   navbarStayCollapsed: boolean;
+  landingPage: string;
 }
 
 export interface UiSettingsLocalStorage {

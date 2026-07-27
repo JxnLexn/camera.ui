@@ -15,7 +15,7 @@
   >
     <div class="h-full flex flex-col overflow-y-scroll">
       <div class="w-full flex items-center shrink-0 h-[60px]">
-        <RouterLink to="/home" class="pl-[13px]">
+        <RouterLink to="/" class="pl-[13px]">
           <InlineSvg
             :src="getImageUrl('logo_animated.svg')"
             width="32px"
@@ -29,7 +29,7 @@
         <div class="overflow-hidden w-full pr-4">
           <Transition name="fade">
             <div v-if="navbarWidth === NAVBAR_SIZE.EXPANDED" class="ml-2 w-full flex flex-row items-center">
-              <RouterLink to="/home" class="text-white font-bold text-lg text-shadow">camera.ui</RouterLink>
+              <RouterLink to="/" class="text-white font-bold text-lg text-shadow">camera.ui</RouterLink>
             </div>
           </Transition>
         </div>

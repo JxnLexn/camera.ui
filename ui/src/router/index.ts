@@ -1068,6 +1068,48 @@ export const routes: RouteRecordRaw[] = [
   },
 ];
 
+const landingPages = [
+  '/home',
+  '/camview',
+  '/cameras',
+  '/recordings',
+  '/faces',
+  '/automations',
+  '/plugins',
+  '/settings',
+  '/config',
+  '/logs',
+  '/terminal',
+  '/instances',
+  '/workers',
+  '/admin',
+];
+
+function serverRunsInElectron(): boolean {
+  try {
+    return !!(useQueryClient().getQueryData(['api']) as { electron?: boolean } | undefined)?.electron;
+  } catch {
+    return false;
+  }
+}
+
+export function landingPageRoutes(): RouteRecordRaw[] {
+  const isElectron = serverRunsInElectron();
+  return landingPages.flatMap((path) => {
+    const route = routes.find((r) => r.path === path);
+    if (!route || !hasPermission(route) || (route.meta?.disabledInElectron && isElectron)) return [];
+    return [route];
+  });
+}
+
+export function resolveLandingPage(): string {
+  const stored = useUiStore().uiSettings.interface.landingPage;
+  if (stored && landingPageRoutes().some((route) => route.path === stored)) {
+    return stored;
+  }
+  return '/home';
+}
+
 function getTransitionInfo(path: string): { group: string; key: string; ignore?: string; depth?: number } | null {
   const p = path.toLowerCase();
   if (p === '/home') return { group: 'main', key: 'home', ignore: 'camview' };
@@ -1144,7 +1186,7 @@ router.beforeEach(async (to, from) => {
   const routerStore = useRouterStore();
 
   if (to.meta.disabledInElectron && (queryClient.getQueryData(['api']) as { electron?: boolean } | undefined)?.electron) {
-    return '/home';
+    return resolveLandingPage();
   }
 
   const pageName = (to.name as string).toLowerCase();
@@ -1169,9 +1211,9 @@ router.beforeEach(async (to, from) => {
         authStore.user.role !== 'admin' &&
         authStore.user.role !== 'master')
     ) {
-      return '/home';
+      return resolveLandingPage();
     } else if (pageName === 'login') {
-      return '/home';
+      return resolveLandingPage();
     } else if (to.path === '/settings' && window.innerWidth >= 640) {
       const view = useUiStore().uiSettings.interface.selectedSettingsView;
       return `/settings/${settingsViews.includes(view) ? view : 'account'}`;

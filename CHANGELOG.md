@@ -14,6 +14,8 @@ All notable changes to this project will be documented in this file.
 
 - **Settings open as a list on the phone.** Tapping Settings in the menu now slides to a list of all settings sections, just like the menu itself, and each section slides in from there. The back button top left returns to the list; the sidebar overlay on small screens is gone.
 
+- **Pick your start page.** A new option under Appearance chooses which page opens after login and when visiting the address directly, for example CamView or Recordings instead of Home. Everyone picks from the pages their role can access, per device.
+
 ### Fixed
 
 - **The Android app connects reliably.** It could search for the server forever, both on the server picker and at login, while iOS connected fine. One dead address could cancel the whole search and take the reachable ones down with it; every address now gets its chance, so picking a server and logging in settle in a second or two.

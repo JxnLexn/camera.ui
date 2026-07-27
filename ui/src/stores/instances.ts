@@ -5,7 +5,7 @@ import { createInstanceFn, deleteInstanceFn, getInstancesFn, isRequires2fa, logi
 import InstanceTwoFactorPrompt from '@/components/CuiDialog/templates/InstanceTwoFactorPrompt/InstanceTwoFactorPrompt.vue';
 import { getConnection, instanceOverride } from '@/connection/instance.js';
 import { i18n } from '@/i18n/index.js';
-import router from '@/router/index.js';
+import router, { resolveLandingPage } from '@/router/index.js';
 
 import type { CreateInstancePayload, UpdateInstancePayload } from '@/api/routes/instances.js';
 import type { InstanceEntry, InstanceTokens, RedirectInfo } from '@/components/CuiInstanceSwitcher/types.js';
@@ -369,8 +369,9 @@ export const useInstanceStore = defineStore('instances', () => {
       // Calling here would race the probe (transport still has no target during
       // `discovering`) and produce a spurious "no target" cancellation.
       switchKey.value++;
-      log.debug('[switch]', `DONE gen=${generation} → /home`);
-      router.push('/home');
+      const landing = resolveLandingPage();
+      log.debug('[switch]', `DONE gen=${generation} → ${landing}`);
+      router.push(landing);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       if (msg === 'switch_timeout') {

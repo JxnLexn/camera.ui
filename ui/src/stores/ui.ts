@@ -28,6 +28,7 @@ const defaultUiSettings: UiSettingsLocalStorage & LoggerLocalStorage = {
     showBottomBarOnMobile: true,
     selectedSettingsView: 'account',
     navbarStayCollapsed: true,
+    landingPage: '/home',
   },
   'cui-logger-debug': 1,
   'cui-logger-recording': 1,
@@ -37,6 +38,8 @@ export const useUiStore = defineStore('ui', () => {
   const uiSettings = useLocalStorage<UiSettingsLocalStorage>('ui', defaultUiSettings, {
     mergeDefaults: true,
   });
+
+  uiSettings.value.interface.landingPage ??= '/home';
 
   return {
     uiSettings,

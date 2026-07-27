@@ -50,9 +50,16 @@
         <Card class="cui-card">
           <template #content>
             <div class="flex flex-col gap-6">
+              <div class="flex flex-col field-gap">
+                <label class="cui-label">{{ $t('components.form.label.default_landing_page') }}</label>
+                <Select v-model="uiSettings.interface.landingPage" :options="landingOptions" option-label="label" option-value="value" />
+
+                <Message severity="secondary" variant="simple" size="small" class="cui-input-hint">{{ $t('components.form.hint.default_landing_page') }}</Message>
+              </div>
+
               <div v-if="hasPermission(undefined, 'admin')" class="flex flex-col field-gap">
                 <label class="cui-label">{{ $t('components.form.label.default_settings_page') }}</label>
-                <Select v-model="uiSettings.interface.selectedSettingsView" :options="settingsViews" />
+                <Select v-model="uiSettings.interface.selectedSettingsView" :options="settingsViewOptions" option-label="label" option-value="value" />
 
                 <Message severity="secondary" variant="simple" size="small" class="cui-input-hint">{{ $t('components.form.hint.default_settings_page') }}</Message>
               </div>
@@ -71,29 +78,38 @@
                     <ToggleSwitch v-model="uiSettings.interface.navbarStayCollapsed" class="ml-auto shrink-0" />
                   </div>
                 </div>
+              </div>
+            </div>
+          </template>
+        </Card>
+      </div>
 
-                <div class="flex flex-col field-gap cui-toggle-switch">
-                  <div class="flex items-center gap-4">
-                    <div class="flex flex-col field-switch-gap">
-                      <label class="cui-label-switch">{{ $t('components.form.label.debug_verbose') }}</label>
+      <div>
+        <span class="card-title">{{ $t('views.settings.debugging') }}</span>
+        <Card class="cui-card">
+          <template #content>
+            <div class="w-full flex flex-col gap-2">
+              <div class="flex flex-col field-gap cui-toggle-switch">
+                <div class="flex items-center gap-4">
+                  <div class="flex flex-col field-switch-gap">
+                    <label class="cui-label-switch">{{ $t('components.form.label.debug_verbose') }}</label>
 
-                      <Message severity="secondary" variant="simple" size="small" class="cui-input-switch-hint">{{ $t('components.form.hint.debug_verbose') }}</Message>
-                    </div>
-
-                    <ToggleSwitch :model-value="debugOn" class="ml-auto shrink-0" @update:model-value="setDebug" />
+                    <Message severity="secondary" variant="simple" size="small" class="cui-input-switch-hint">{{ $t('components.form.hint.debug_verbose') }}</Message>
                   </div>
+
+                  <ToggleSwitch :model-value="debugOn" class="ml-auto shrink-0" @update:model-value="setDebug" />
                 </div>
+              </div>
 
-                <div class="flex flex-col field-gap cui-toggle-switch">
-                  <div class="flex items-center gap-4">
-                    <div class="flex flex-col field-switch-gap">
-                      <label class="cui-label-switch">{{ $t('components.form.label.record_logs') }}</label>
+              <div class="flex flex-col field-gap cui-toggle-switch">
+                <div class="flex items-center gap-4">
+                  <div class="flex flex-col field-switch-gap">
+                    <label class="cui-label-switch">{{ $t('components.form.label.record_logs') }}</label>
 
-                      <Message severity="secondary" variant="simple" size="small" class="cui-input-switch-hint">{{ $t('components.form.hint.record_logs') }}</Message>
-                    </div>
-
-                    <ToggleSwitch :model-value="recording" class="ml-auto shrink-0" @update:model-value="setRecording" />
+                    <Message severity="secondary" variant="simple" size="small" class="cui-input-switch-hint">{{ $t('components.form.hint.record_logs') }}</Message>
                   </div>
+
+                  <ToggleSwitch :model-value="recording" class="ml-auto shrink-0" @update:model-value="setRecording" />
                 </div>
               </div>
             </div>
@@ -108,6 +124,9 @@
 import { Logger } from '@camera.ui/logger';
 
 import { isHomeAssistant } from '@/common/base.js';
+import { landingPageRoutes } from '@/router/index.js';
+
+const { t } = useI18n();
 
 const localeStore = useLocaleStore();
 const { language, languageOptions } = storeToRefs(localeStore);
@@ -120,6 +139,20 @@ const { uiSettings } = storeToRefs(uiStore);
 
 const recording = ref(Logger.isRecording());
 const debugOn = ref(Logger.isDebug());
+
+const landingOptions = computed(() =>
+  landingPageRoutes().map((route) => ({
+    label: t(`navigation.${route.meta!.name as string}`),
+    value: route.path,
+  })),
+);
+
+const settingsViewOptions = computed(() =>
+  settingsViews.map((view) => ({
+    label: t(`navigation.${view}`),
+    value: view,
+  })),
+);
 
 const offFlags = Logger.onChange(() => {
   recording.value = Logger.isRecording();

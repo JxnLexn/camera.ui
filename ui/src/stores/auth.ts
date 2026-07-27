@@ -2,7 +2,7 @@ import { useLocalStorage } from '@vueuse/core';
 
 import { UsersQuery } from '@/api/routes/users.js';
 import { login as connectionLogin, verify2FA as connectionVerify2FA, isTwoFactorPending, logoutCurrent, useConnection } from '@/connection/index.js';
-import router from '@/router/index.js';
+import router, { resolveLandingPage } from '@/router/index.js';
 
 import type { UserLanguage } from '@shared/types';
 import type { LoginCredentials, LoginUserData } from '@/connection/index.js';
@@ -68,7 +68,7 @@ export const useAuthStore = defineStore('auth', () => {
         return;
       }
       setUserFromLogin(outcome.user);
-      router.push('/home');
+      router.push(resolveLandingPage());
     } finally {
       loginLoading.value = false;
     }
@@ -81,7 +81,7 @@ export const useAuthStore = defineStore('auth', () => {
       const result = await connectionVerify2FA(pending2FA.value.tempToken, code);
       setUserFromLogin(result.user);
       pending2FA.value = null;
-      router.push('/home');
+      router.push(resolveLandingPage());
     } finally {
       verify2FALoading.value = false;
     }
