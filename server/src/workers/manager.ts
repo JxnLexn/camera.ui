@@ -290,6 +290,16 @@ export class WorkerManager {
     return worker.plugins?.find((plugin) => plugin.id === pluginName)?.state;
   }
 
+  public async renameWorker(agentId: string, name: string): Promise<void> {
+    await this.workersService.renameWorker(agentId, name);
+
+    const worker = this.workers.get(agentId);
+    if (worker) {
+      worker.name = name;
+      this.emitWorkerUpdate(worker);
+    }
+  }
+
   public async removeWorker(agentId: string): Promise<void> {
     this.logger.log(`Removing worker ${agentId}`);
 
@@ -482,7 +492,7 @@ export class WorkerManager {
 
     const workerInfo: WorkerInfo = {
       agentId: heartbeat.agentId,
-      name: heartbeat.name,
+      name: this.workersService.getWorkerDisplayName(heartbeat.agentId) ?? heartbeat.name,
       online: true,
       lastHeartbeat: Date.now(),
       cameras: heartbeat.cameras,
@@ -522,7 +532,7 @@ export class WorkerManager {
     for (const known of this.workersService.listKnownWorkers()) {
       this.workers.set(known.agentId, {
         agentId: known.agentId,
-        name: known.name,
+        name: known.displayName ?? known.name,
         online: false,
         lastHeartbeat: known.lastSeen,
         cameras: [],

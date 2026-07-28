@@ -2460,8 +2460,10 @@ export default {
       platform: 'Plattform',
       remove: 'Entfernen',
       remove_worker: 'Worker entfernen',
+      rename_worker: 'Worker umbenennen',
       remove_worker_confirm:
         '"{name}" entfernen? Die Zugangsdaten werden widerrufen und die Verbindung gekappt — zugewiesene Kameras laufen wieder auf dieser Maschine. Der interne Message-Broker startet kurz neu.',
+      version: 'Version',
       version_mismatch: 'Versionskonflikt — Worker läuft mit {version}, bitte aktualisieren',
     },
   },

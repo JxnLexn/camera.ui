@@ -28,6 +28,10 @@ export const unassignPluginSchema = zod.object({
   pluginName: zod.string().min(1, 'Plugin name is required'),
 });
 
+export const renameWorkerSchema = zod.object({
+  name: zod.string().trim().min(1, 'Name is required').max(64, 'Maximum 64 characters'),
+});
+
 export const patchWorkersConfigSchema = zod
   .object({
     enabled: zod.boolean().optional(),
@@ -40,4 +44,5 @@ export type AssignCameraInput = zod.output<typeof assignCameraSchema>;
 export type UnassignCameraInput = zod.output<typeof unassignCameraSchema>;
 export type AgentParamsInput = zod.output<typeof agentParamsSchema>;
 export type PairWorkerInput = zod.output<typeof pairWorkerSchema>;
+export type RenameWorkerInput = zod.output<typeof renameWorkerSchema>;
 export type PatchWorkersConfigInput = zod.output<typeof patchWorkersConfigSchema>;

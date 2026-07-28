@@ -65,6 +65,10 @@ export async function restartWorker(agentId: string): Promise<void> {
   await api.post(`/workers/${agentId}/restart`);
 }
 
+export async function renameWorker({ agentId, name }: { agentId: string; name: string }): Promise<void> {
+  await api.patch(`/workers/${agentId}`, { name });
+}
+
 export async function assignCameraToWorker({ cameraId, agentId }: { cameraId: string; agentId: string }): Promise<AckResponse> {
   const response: AxiosResponse<AckResponse> = await api.post('/workers/assign', { cameraId, agentId });
   return response.data;
@@ -150,6 +154,15 @@ export class WorkersQuery {
   public restartWorkerQuery() {
     return useMutation({
       mutationFn: restartWorker,
+    });
+  }
+
+  public renameWorkerQuery() {
+    return useMutation({
+      mutationFn: renameWorker,
+      onError: (error) => {
+        this.toast.add({ severity: 'error', detail: error, life: 3000 });
+      },
     });
   }
 

@@ -217,13 +217,17 @@
 import CopyIcon from '~icons/fluent/copy-16-filled';
 import RestartIcon from '~icons/ic/round-restart-alt';
 import RemoveIcon from '~icons/mdi/delete-outline';
+import EditIcon from '~icons/mdi/pencil-outline';
 
+import { ApiQuery } from '@/api/routes/api.js';
 import { CamerasQuery } from '@/api/routes/cameras.js';
 import { copyToClipboard as copy } from '@/common/utils.js';
 import { PluginsQuery } from '@/api/routes/plugins.js';
 import { WorkersQuery } from '@/api/routes/workers.js';
+import RenameWorkerDialog from '@/components/CuiDialog/templates/RenameWorker/RenameWorker.vue';
 
 import type { WorkerInfo, WorkerPairing } from '@/api/routes/workers.js';
+import type { RenameWorkerProps } from '@/components/CuiDialog/templates/RenameWorker/types.js';
 import type { TableHeader } from '@/components/CuiChartTable/types.js';
 import type { PassThrough } from '@primevue/core';
 import type { CameraUiPlugin, DBCamera } from '@shared/types';
@@ -237,6 +241,7 @@ const dialog = useCuiDialog();
 const workersSocket = useWorkersSocket();
 const { workers, workerHistory, isConnected } = workersSocket;
 
+const apiQuery = new ApiQuery();
 const camerasQuery = new CamerasQuery();
 const pluginsQuery = new PluginsQuery();
 const workersQuery = new WorkersQuery();
@@ -252,6 +257,8 @@ const { mutateAsync: createPairing, isPending: generatingCode } = workersQuery.c
 const { mutateAsync: removeWorkerMutation } = workersQuery.removeWorkerQuery();
 const { mutateAsync: assignPlugin } = workersQuery.assignPluginQuery();
 const { mutateAsync: unassignPlugin } = workersQuery.unassignPluginQuery();
+const { mutateAsync: renameWorkerMutation } = workersQuery.renameWorkerQuery();
+const { data: apiInfo } = apiQuery.apiInfoQuery();
 
 const assignmentTablePt: PassThrough<DataTablePassThroughOptions> = {
   bodyRow: {
@@ -280,6 +287,7 @@ const addressOptions = computed(() => (workersConfig.value?.suggestedAddresses ?
 const portChanged = computed(() => portDraft.value !== (workersConfig.value?.port ?? 7422));
 const configDirty = computed(() => addressDraft.value !== (workersConfig.value?.address ?? '') || portChanged.value);
 const workerIds = computed(() => new Set(workers.value.map((w) => w.agentId)));
+const masterVersion = computed(() => apiInfo.value?.version);
 
 const pairingMinutesLeft = computed(() => {
   if (!pairing.value) return 0;
@@ -328,6 +336,20 @@ const workerHeaders = computed<TableHeader[]>(() => [
     },
     props: {
       class: 'font-bold text-color',
+    },
+  },
+  {
+    type: 'category',
+    field: (item: WorkerInfo) => {
+      if (!item.version) return '—';
+      if (item.versionMismatch && masterVersion.value) return `v${item.version} → v${masterVersion.value}`;
+      return `v${item.version}`;
+    },
+    name: t('views.workers.version'),
+    asChip: true,
+    columnProps: {
+      headerClass: 'min-w-30',
+      class: 'min-w-30',
     },
   },
   {
@@ -395,6 +417,10 @@ const workerHeaders = computed<TableHeader[]>(() => [
     },
     buttons: [
       {
+        icon: EditIcon,
+        action: (item: WorkerInfo) => handleRenameWorker(item),
+      },
+      {
         icon: RestartIcon,
         loading: (item: WorkerInfo) => workersRestarting.value.includes(item.name),
         disabled: (item: WorkerInfo) => !item.online,
@@ -450,6 +476,22 @@ const workerChartData = computed<Record<string, ChartData<'bar'>>>(() => {
     return acc;
   }, {});
 });
+
+function handleRenameWorker(worker: WorkerInfo) {
+  dialog.openComponentDialog<RenameWorkerProps>(RenameWorkerDialog, {
+    data: {
+      title: t('views.workers.rename_worker'),
+      confirmText: t('views.workers.save'),
+      contentProps: {
+        currentName: worker.name,
+      },
+    },
+    onConfirm: async (newName: string | null) => {
+      if (!newName || newName === worker.name) return;
+      await renameWorkerMutation({ agentId: worker.agentId, name: newName });
+    },
+  });
+}
 
 async function handleRestartWorker(workerName: string, agentId: string) {
   workersRestarting.value.push(workerName);

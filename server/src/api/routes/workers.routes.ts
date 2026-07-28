@@ -7,6 +7,7 @@ import {
   assignPluginSchema,
   pairWorkerSchema,
   patchWorkersConfigSchema,
+  renameWorkerSchema,
   unassignCameraSchema,
   unassignPluginSchema,
 } from '../schemas/workers.schema.js';
@@ -130,6 +131,19 @@ export const WorkersRoute: FastifyPluginAsync = async (app: FastifyInstance): Pr
       tags: ['Workers'],
       summary: 'Unassign a plugin from its worker agent',
       body: unassignPluginSchema,
+    },
+  });
+
+  app.withTypeProvider<ZodTypeProvider>().route({
+    url: '/:agentId',
+    method: 'PATCH',
+    preValidation: [validJWTNeeded, onlyAdminCanDoThisAction],
+    handler: workersController.renameWorker.bind(workersController),
+    schema: {
+      tags: ['Workers'],
+      summary: 'Rename a worker',
+      params: agentParamsSchema,
+      body: renameWorkerSchema,
     },
   });
 

@@ -70,6 +70,7 @@ export interface DBSettings {
 export interface DBKnownWorker {
   agentId: string;
   name: string;
+  displayName?: string;
   lastSeen: number;
 }
 

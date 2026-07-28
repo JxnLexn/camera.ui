@@ -104,5 +104,6 @@ export interface WorkerAgentRPC {
 export interface KnownWorker {
   agentId: string;
   name: string;
+  displayName?: string;
   lastSeen: number;
 }

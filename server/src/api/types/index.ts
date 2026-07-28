@@ -939,6 +939,11 @@ export interface WorkerRestartRequest {
   Params: { agentId: string };
 }
 
+export interface WorkerRenameRequest {
+  Params: { agentId: string };
+  Body: { name: string };
+}
+
 export interface WorkerAssignRequest {
   Body: { cameraId: string; agentId: string };
 }

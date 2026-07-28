@@ -2441,8 +2441,10 @@ export default {
       platform: 'Platform',
       remove: 'Remove',
       remove_worker: 'Remove Worker',
+      rename_worker: 'Rename Worker',
       remove_worker_confirm:
         'Remove "{name}"? Its credentials are revoked and the connection is dropped — assigned cameras fall back to this machine. The internal message broker restarts briefly.',
+      version: 'Version',
       version_mismatch: 'Version mismatch — worker runs {version}, please update it',
     },
   },

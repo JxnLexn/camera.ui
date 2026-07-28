@@ -18,6 +18,8 @@ All notable changes to this project will be documented in this file.
 
 - **Webhook automations are easier to call.** The webhook trigger now also accepts its secret as a plain X-Webhook-Secret header, so tools that can't compute an HMAC signature can fire automations too. Signed requests keep working as before.
 
+- **Workers can be renamed and show their version.** A pencil button on the Workers page gives a worker a friendlier name without touching its config file. A new version column shows each worker's version; on an outdated worker it shows both the worker's and the server's version so you see what to update to. In the desktop app, worker mode now also asks for a name during setup.
+
 - **Read-only fields have a copy button.** Values you can't edit, like generated addresses or tokens in plugin and connection forms, can now be copied with one tap instead of selecting the text by hand.
 
 ### Fixed

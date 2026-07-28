@@ -62,6 +62,21 @@ export class WorkersService {
     await this.dbs.settingsDB.put('settings', settings);
   }
 
+  public getWorkerDisplayName(agentId: string): string | undefined {
+    return this.listKnownWorkers().find((worker) => worker.agentId === agentId)?.displayName;
+  }
+
+  public async renameWorker(agentId: string, displayName: string): Promise<void> {
+    const settings = this.readSettings();
+    const known = settings.knownWorkers?.find((worker) => worker.agentId === agentId);
+    if (!known) {
+      throw new Error(`Worker ${agentId} is unknown`);
+    }
+
+    known.displayName = displayName;
+    await this.dbs.settingsDB.put('settings', settings);
+  }
+
   public async forgetWorker(agentId: string): Promise<void> {
     const settings = this.readSettings();
     if (!settings.knownWorkers?.length) return;

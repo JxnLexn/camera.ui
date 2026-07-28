@@ -15,6 +15,7 @@ import type {
   WorkerConfigPatchRequest,
   WorkerPairRequest,
   WorkerRemoveRequest,
+  WorkerRenameRequest,
   WorkerRestartRequest,
   WorkerUnassignPluginRequest,
   WorkerUnassignRequest,
@@ -213,6 +214,15 @@ export class WorkersController {
     try {
       const { pluginName } = req.body;
       await this.workerManager.unassignPlugin(pluginName);
+      return reply.code(204).send();
+    } catch (error: any) {
+      return reply.code(500).send({ statusCode: 500, message: error.message });
+    }
+  }
+
+  public async renameWorker(req: FastifyRequest<AuthLoginRequest & WorkerRenameRequest>, reply: FastifyReply): Promise<FastifyReply> {
+    try {
+      await this.workerManager.renameWorker(req.params.agentId, req.body.name);
       return reply.code(204).send();
     } catch (error: any) {
       return reply.code(500).send({ statusCode: 500, message: error.message });
