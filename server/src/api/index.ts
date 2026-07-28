@@ -98,6 +98,9 @@ export class Server {
 
     this.app.setValidatorCompiler(validatorCompiler);
     this.app.setSerializerCompiler(serializerCompiler);
+    this.app.addContentTypeParser('application/octet-stream', { parseAs: 'buffer' }, (_req, body, done) => {
+      done(null, (body as Buffer).length > 0 ? body : undefined);
+    });
     this.trackConnections(this.app.server);
     this.trackConnections(this.internalApp.server);
     this.setupListeners();

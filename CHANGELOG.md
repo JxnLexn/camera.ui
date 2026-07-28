@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.0.23]
+
+### Fixed
+
+- **Restart and similar buttons work behind Home Assistant and other proxies.** Pressing Restart through the Home Assistant panel failed with "Unsupported Media Type" because some proxies tag empty requests with a content type the server rejected. The server now accepts them.
+
 ## [2.0.22]
 
 ### Added
