@@ -4,6 +4,8 @@ All notable changes to this project will be documented in this file.
 
 ## [2.0.22]
 
+### Added
+
 - **H.265 cameras now play on devices that can't decode H.265.** Live view and playback switch to the next stream the device can play instead of loading forever or showing "No recording" although recordings exist. A small icon on the player tells you when you are watching a lower quality stream because of this, and if no stream is playable at all you get a clear message.
 
 - **The app reopens your last server.** Starting the iOS or Android app connects straight to the server you used last instead of stopping at the server list. Switch server in the menu still brings the list back, and a tapped notification for another server always wins.
@@ -15,6 +17,10 @@ All notable changes to this project will be documented in this file.
 - **Webhook automations are easier to call.** The webhook trigger now also accepts its secret as a plain X-Webhook-Secret header, so tools that can't compute an HMAC signature can fire automations too. Signed requests keep working as before.
 
 - **Read-only fields have a copy button.** Values you can't edit, like generated addresses or tokens in plugin and connection forms, can now be copied with one tap instead of selecting the text by hand.
+
+### Fixed
+
+- **Toggling a camera off and on in a plugin's camera list keeps its sensors working.** Turning a camera off there released its sensors, but turning it back on didn't bring them back, so motion, object and the rest stayed off until you re-enabled each one in the camera settings. Toggling on now activates the plugin's sensors again, except ones already owned by another plugin.
 
 - **Object assist works on its own.** On cameras that detect by themselves it used to run only when face or plate recognition was assigned. Now it always gives those detections real bounding boxes, so zones apply properly and events show boxes, with or without recognition on top.
 

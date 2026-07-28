@@ -176,7 +176,7 @@
 
 <script setup lang="ts">
 import { usePluginStorage } from '@camera.ui/browser';
-import { hasInterface, isHub, PluginInterface, SensorType } from '@camera.ui/sdk';
+import { hasInterface, PluginInterface } from '@camera.ui/sdk';
 import { generateStorableConfig, PLUGIN_STATUS } from '@shared/types';
 import CctvIcon from '~icons/bxs/cctv';
 import AudioIcon from '~icons/lucide/audio-lines';
@@ -240,8 +240,8 @@ const storage = usePluginStorage(resolvedPluginName);
 const pluginConfig = storage.config;
 const pluginConfigLoading = storage.isLoading;
 
-const { mutate: addPlugin, isPending: addPluginPending } = camerasQuery.addCameraExtensionQuery();
-const { mutate: removePlugin, isPending: removePluginPending } = camerasQuery.removeCameraExtensionQuery();
+const { mutate: addPlugin, isPending: addPluginPending } = camerasQuery.activateCameraExtensionQuery();
+const { mutate: removePlugin, isPending: removePluginPending } = camerasQuery.deactivateCameraExtensionQuery();
 
 const currentTab = ref('settings');
 const segments = ref<SegmentItem[]>([]);
@@ -319,31 +319,24 @@ async function onFormSubmit(configData: PluginConfig): Promise<void> {
 
 async function toggleCamera(camera: PluginContractCamera) {
   if (plugin.value && plugin.value.contract) {
-    // Hub plugins: use 'hub' as assignment type. Other plugins: use provides types.
-    const assignmentTypes: (SensorType | 'hub')[] = isHub(plugin.value.contract) ? ['hub'] : plugin.value.contract.provides;
-
     if (enabledCameras.value.includes(camera.name)) {
-      for (const type of assignmentTypes) {
-        removePlugin(
-          { cameraname: camera.name, pluginname: plugin.value.pluginName, type },
-          {
-            onSuccess: () => {
-              enabledCameras.value = enabledCameras.value.filter((enabledCamera) => enabledCamera !== camera.name);
-            },
+      removePlugin(
+        { cameraname: camera.name, pluginname: plugin.value.pluginName },
+        {
+          onSuccess: () => {
+            enabledCameras.value = enabledCameras.value.filter((enabledCamera) => enabledCamera !== camera.name);
           },
-        );
-      }
+        },
+      );
     } else {
-      for (const type of assignmentTypes) {
-        addPlugin(
-          { cameraname: camera.name, pluginname: plugin.value.pluginName, type },
-          {
-            onSuccess: () => {
-              enabledCameras.value = [...enabledCameras.value, camera.name];
-            },
+      addPlugin(
+        { cameraname: camera.name, pluginname: plugin.value.pluginName },
+        {
+          onSuccess: () => {
+            enabledCameras.value = [...enabledCameras.value, camera.name];
           },
-        );
-      }
+        },
+      );
     }
   }
 }
