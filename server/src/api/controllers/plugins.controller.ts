@@ -901,6 +901,9 @@ export class PluginsController {
 
       this.logger.log(`Plugin uninstalled: ${plugin.pluginName}.${plugin.displayName} (${plugin.info.installedVersion})`);
 
+      const serverNsp = this.socketService.namespaces.get('/server');
+      await (serverNsp as ServerNamespace).checkPlugins();
+
       return reply.code(204).send();
     } catch (error: any) {
       return reply.code(500).send({

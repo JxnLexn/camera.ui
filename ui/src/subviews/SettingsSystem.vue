@@ -388,8 +388,13 @@ watch(
   { deep: true, immediate: true },
 );
 
-watch(isOnline, (online, wasOnline) => {
-  if (online && !wasOnline && !isElectronBuild.value) {
+watch([isOnline, restarting], ([online, restart], [wasOnline, wasRestart]) => {
+  if (isElectronBuild.value) return;
+
+  const reconnected = online && !wasOnline;
+  const restartEnded = wasRestart && !restart && online;
+
+  if (reconnected || restartEnded) {
     apiQuery.queryClient.invalidateQueries({ queryKey: ['api'] });
     serverQuery.queryClient.invalidateQueries({ queryKey: ['version'] });
   }

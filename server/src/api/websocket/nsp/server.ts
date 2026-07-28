@@ -84,8 +84,8 @@ export class ServerNamespace {
     await this.checkPluginUpdates();
 
     if (this.pluginUpdates.length > 0) {
-      if (!pluginUpdatesSize || interval) {
-        this.nsp.emit('plugins-updates', this.pluginUpdates);
+      if (pluginUpdatesSize !== this.pluginUpdates.length || interval) {
+        this.nsp.emit('plugin-updates', this.pluginUpdates);
       }
 
       if (!pluginUpdatesSize) {
@@ -103,6 +103,10 @@ export class ServerNamespace {
 
       this.restartPluginInterval(10 * 60 * 1000);
     } else {
+      if (pluginUpdatesSize > 0) {
+        this.nsp.emit('plugin-updates', this.pluginUpdates);
+      }
+
       this.proxyServer.notificationManager.removeByTagForAll(SystemNotificationTypeId.PluginUpdateAvailable);
       this.restartPluginInterval();
     }
@@ -136,6 +140,10 @@ export class ServerNamespace {
 
       this.restartServerInterval(10 * 60 * 1000);
     } else {
+      if (hadUpdate) {
+        this.nsp.emit('server-updates', this.serverUpdate);
+      }
+
       this.lastNotifiedServerVersion = undefined;
       this.proxyServer.notificationManager.removeByTagForAll(SystemNotificationTypeId.UpdateAvailable);
       this.restartServerInterval();

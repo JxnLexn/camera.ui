@@ -20,6 +20,8 @@ All notable changes to this project will be documented in this file.
 
 ### Fixed
 
+- **Update indicators disappear without a page reload.** The update dot in the navbar stayed on after installing the plugin or server update, and the System page kept offering an update the server already had. Both now clear on their own.
+
 - **Toggling a camera off and on in a plugin's camera list keeps its sensors working.** Turning a camera off there released its sensors, but turning it back on didn't bring them back, so motion, object and the rest stayed off until you re-enabled each one in the camera settings. Toggling on now activates the plugin's sensors again, except ones already owned by another plugin.
 
 - **Object assist works on its own.** On cameras that detect by themselves it used to run only when face or plate recognition was assigned. Now it always gives those detections real bounding boxes, so zones apply properly and events show boxes, with or without recognition on top.
