@@ -22,7 +22,8 @@ export function applySourceUrlFlags(url: string, source: { preload: boolean; mut
 
 export function buildTargetUrl(rtspUrl: string, options: RTSPUrlOptions): string {
   const url = new URL(rtspUrl);
-  const baseUrl = `${url.protocol}//${url.host}${url.pathname}`;
+  const auth = url.username ? `${url.username}${url.password ? `:${url.password}` : ''}@` : '';
+  const baseUrl = `${url.protocol}//${auth}${url.host}${url.pathname}`;
 
   const { video = true, audio = true, audioSingleTrack = true, backchannel = false, timeout = 15, gop = true } = options;
   const validatedTimeout = Math.min(Math.max(5, timeout), 30);
