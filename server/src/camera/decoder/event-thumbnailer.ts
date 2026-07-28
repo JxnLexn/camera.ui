@@ -1,6 +1,7 @@
 import { SnapshotSource } from './sources/snapshot-source.js';
 
 import type { Logger } from '@camera.ui/common/logger';
+import type { FrameWorkerDecoderSettings } from '@camera.ui/sdk';
 import type { Frame } from 'node-av/lib';
 import type { DetectionEventManager } from './event-manager.js';
 import type { FrameScaler } from './frame-scaler.js';
@@ -17,6 +18,7 @@ interface EventThumbnailerDeps {
   frameScaler: FrameScaler;
   eventManager: DetectionEventManager;
   logger: Logger;
+  decoder?: FrameWorkerDecoderSettings;
 }
 
 function resolveHqSourceUrl(sources?: CoordinatorSourceUrl[]): string | undefined {
@@ -45,7 +47,7 @@ export class EventThumbnailer {
   ) {
     const hqUrl = resolveHqSourceUrl(availableSources);
     if (hqUrl) {
-      this.hqSource = new SnapshotSource({ url: hqUrl }, deps.logger);
+      this.hqSource = new SnapshotSource({ url: hqUrl, decoder: deps.decoder }, deps.logger);
     }
   }
 

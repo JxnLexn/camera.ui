@@ -125,6 +125,7 @@ export class DetectionCoordinator {
       streamUrl: config.streamUrl,
       snapshotUrl: config.snapshotUrl,
       fps: this.config.frameWorkerSettings.fps,
+      decoder: this.config.frameWorkerSettings.decoder,
     };
 
     if (config.controllerSnapshotSourceId) {
@@ -151,7 +152,13 @@ export class DetectionCoordinator {
     this.eventManager.onEventEnd(() => this.handleEventEnded());
 
     this.thumbnailer = new EventThumbnailer(
-      { frameSource: this.frameSource, frameScaler: this.frameScaler, eventManager: this.eventManager, logger },
+      {
+        frameSource: this.frameSource,
+        frameScaler: this.frameScaler,
+        eventManager: this.eventManager,
+        logger,
+        decoder: this.config.frameWorkerSettings.decoder,
+      },
       config.availableSources,
     );
     this.thumbnailer.sync(this.config.frameWorkerSettings.hqSnapshots === true);

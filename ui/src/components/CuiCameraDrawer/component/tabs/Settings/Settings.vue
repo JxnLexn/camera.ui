@@ -1333,6 +1333,53 @@
             }}</Message>
           </Field>
 
+          <Field
+            v-slot="{ errors }"
+            :model-value="cameraForm.frameWorkerSettings.decoder?.hardware ?? 'auto'"
+            name="frameWorkerSettings.decoder.hardware"
+            as="div"
+            class="flex flex-col field-gap"
+          >
+            <label for="frameWorkerSettings.decoder.hardware" class="cui-label">{{ $t('components.form.label.decoder_hardware') }}</label>
+            <InputGroup>
+              <Select
+                :model-value="cameraForm.frameWorkerSettings.decoder?.hardware ?? 'auto'"
+                :options="decoderHardwareOptions"
+                option-label="label"
+                option-value="value"
+                :invalid="errors.length > 0"
+                :loading="isLoading"
+                @update:model-value="(e) => setDecoderHardware(e)"
+              />
+            </InputGroup>
+            <Message v-if="!errors.length" severity="secondary" variant="simple" size="small" class="cui-input-hint">{{
+              $t('components.form.hint.decoder_hardware')
+            }}</Message>
+          </Field>
+
+          <Field
+            v-if="decoderDeviceVisible"
+            v-slot="{ errors }"
+            :model-value="cameraForm.frameWorkerSettings.decoder?.device ?? ''"
+            name="frameWorkerSettings.decoder.device"
+            as="div"
+            class="flex flex-col field-gap"
+          >
+            <label for="frameWorkerSettings.decoder.device" class="cui-label">{{ $t('components.form.label.decoder_device') }}</label>
+            <InputGroup>
+              <InputText
+                :model-value="cameraForm.frameWorkerSettings.decoder?.device ?? ''"
+                :invalid="errors.length > 0"
+                :loading="isLoading"
+                type="text"
+                @update:model-value="(e) => setDecoderDevice(e ?? '')"
+              />
+            </InputGroup>
+            <Message v-if="!errors.length" severity="secondary" variant="simple" size="small" class="cui-input-hint">{{
+              $t('components.form.hint.decoder_device')
+            }}</Message>
+          </Field>
+
           <div class="w-full flex flex-col gap-2">
             <Field
               v-slot="{ field, errors }"
@@ -1394,6 +1441,7 @@ import type {
   CameraRecordingSettings,
   CameraType,
   DetectionZone,
+  FrameWorkerDecoderHardware,
   MotionResolution,
   RecordingMode,
   RecordingSource,
@@ -1452,9 +1500,30 @@ const aspectRatios = ref<CameraAspectRatio[]>(['16:9', '9:16', '8:3', '4:3', '1:
 const motionResolutions = ref<MotionResolution[]>(['low', 'medium', 'high']);
 const recordingModes = ref<RecordingMode[]>(['continuous', 'event', 'adhoc']);
 const recordingSources = ref<RecordingSource[]>(['high', 'mid', 'low']);
+
+const decoderHardwareOptions: { label: string; value: FrameWorkerDecoderHardware }[] = [
+  { label: 'Auto', value: 'auto' },
+  { label: 'CPU (Software)', value: 'cpu' },
+  { label: 'CUDA (NVIDIA)', value: 'cuda' },
+  { label: 'VAAPI (Intel/AMD)', value: 'vaapi' },
+  { label: 'Quick Sync (Intel)', value: 'qsv' },
+  { label: 'VideoToolbox (macOS)', value: 'videotoolbox' },
+  { label: 'D3D11VA (Windows)', value: 'd3d11va' },
+  { label: 'D3D12VA (Windows)', value: 'd3d12va' },
+  { label: 'DXVA2 (Windows)', value: 'dxva2' },
+  { label: 'Vulkan', value: 'vulkan' },
+  { label: 'OpenCL', value: 'opencl' },
+  { label: 'DRM', value: 'drm' },
+  { label: 'RKMPP (Rockchip)', value: 'rkmpp' },
+];
 const localRooms = ref<string[]>([]);
 
 const hasPtzCapability = computed(() => allSensors.value.some((s) => s.type === SensorType.PTZ));
+
+const decoderDeviceVisible = computed(() => {
+  const hardware = cameraForm.value.frameWorkerSettings.decoder?.hardware;
+  return !!hardware && hardware !== 'auto' && hardware !== 'cpu';
+});
 
 const hasNvrPlugin = computed(() => (cameraExtensions.value ?? []).some((p) => p.contract.interfaces?.includes(PluginInterface.NVR)));
 
@@ -1509,6 +1578,16 @@ const roomOptions = computed(() => {
 });
 
 const isLoading = computed(() => parentLoading.value || removeLoading.value);
+
+function setDecoderHardware(hardware: FrameWorkerDecoderHardware) {
+  const device = hardware === 'auto' || hardware === 'cpu' ? '' : (cameraForm.value.frameWorkerSettings.decoder?.device ?? '');
+  cameraForm.value.frameWorkerSettings.decoder = { hardware, device };
+}
+
+function setDecoderDevice(device: string) {
+  const hardware = cameraForm.value.frameWorkerSettings.decoder?.hardware ?? 'auto';
+  cameraForm.value.frameWorkerSettings.decoder = { hardware, device };
+}
 
 function updateRecordingSettings(patch: Partial<CameraRecordingSettings>) {
   const current: CameraRecordingSettings = cameraForm.value.recordingSettings ?? { enabled: true, mode: 'continuous', preBuffer: 10, sources: ['high', 'mid', 'low'] };

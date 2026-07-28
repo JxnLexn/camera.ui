@@ -943,6 +943,10 @@ export default {
         ptz_autotrack_return_home: 'Kamera zur Home-Position zurückfahren, wenn länger kein Ziel erkannt wird.',
         ptz_autotrack_home_wait: 'Wartezeit ohne Ziel, bevor die Kamera zur Home-Position zurückfährt.',
         frameworker_fps: "Die Anzahl der Frames pro Sekunde, welche für den Frame Worker verwendet werden. '0' verwendet die native Framerate",
+        decoder_hardware:
+          'Hardware, mit der diese Kamera für die Erkennung decodiert wird. Auto wählt die beste verfügbare. Gilt auf der Maschine, die diese Kamera decodiert (Server oder zugewiesener Worker).',
+        decoder_device:
+          'Welches Gerät das Backend öffnet, zum Beispiel 0 für die erste GPU oder /dev/dri/renderD128. Leer verwendet den Backend-Standard. Fällt auf Auto zurück, wenn nicht nutzbar.',
         hq_snapshots: 'Event-Thumbnails aus dem höchstauflösenden Stream erzeugen.',
         motion_resolution: 'Auflösungsvoreinstellung für Bewegungserkennung (low: schnell, medium: ausgewogen, high: genau)',
         hot_mode: 'Lässt die Verbindung zur Kamera aktiv, um die Verzögerung zu minimieren',
@@ -1032,6 +1036,8 @@ export default {
         external_url: 'Externe URL',
         firmware_version: 'Firmware Version',
         fps: 'FPS',
+        decoder_hardware: 'Decoder-Hardware',
+        decoder_device: 'Decoder-Gerät',
         hardware_version: 'Hardware Version',
         hot_mode: 'Hot Modus',
         hq_snapshots: 'HQ-Event-Thumbnails',

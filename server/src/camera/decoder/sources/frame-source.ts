@@ -1,13 +1,18 @@
-import { Decoder, Demuxer, FilterAPI, FilterPreset, HardwareContext } from 'node-av/api';
+import { Decoder, Demuxer, FilterAPI, FilterPreset } from 'node-av/api';
 import { AV_HWDEVICE_TYPE_OPENCL } from 'node-av/constants';
 
+import { createHardwareContext } from '../hardware.js';
+
 import type { Logger } from '@camera.ui/common/logger';
+import type { FrameWorkerDecoderSettings } from '@camera.ui/sdk';
 import type { Frame } from 'node-av/lib';
+import type { HardwareContext } from 'node-av/api';
 
 export interface FrameSourceConfig {
   streamUrl: string;
   snapshotUrl: string;
   fps: number;
+  decoder?: FrameWorkerDecoderSettings;
   snapshotTimeoutMs?: number;
   snapshotProvider?: () => Promise<Buffer | null>;
 }
@@ -203,9 +208,11 @@ export class FrameSource {
       throw new Error('No video stream found');
     }
 
-    this._hardwareContext = HardwareContext.auto();
+    this._hardwareContext = createHardwareContext(this.config.decoder, this.logger);
     if (this._hardwareContext) {
       this.logger.debug('Using hardware acceleration:', this._hardwareContext.deviceTypeName);
+    } else if (this.config.decoder?.hardware === 'cpu') {
+      this.logger.debug('Software decoding (configured)');
     } else {
       this.logger.warn('No hardware acceleration available, using software decoding');
     }

@@ -6,6 +6,8 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
+- **Pick which GPU decodes each camera.** A new decoder option in the camera's frame worker settings chooses the hardware (CUDA, VAAPI, Quick Sync, ...) and the exact device, so machines with more than one GPU can split duties, for example decoding on the integrated GPU while the NVIDIA card runs detection. Auto keeps today's behavior, and a selection that doesn't work on that machine falls back to it. The nvidia Docker image now ships the Intel/AMD video drivers, so both GPUs work in one container.
+
 - **H.265 cameras now play on devices that can't decode H.265.** Live view and playback switch to the next stream the device can play instead of loading forever or showing "No recording" although recordings exist. A small icon on the player tells you when you are watching a lower quality stream because of this, and if no stream is playable at all you get a clear message.
 
 - **The app reopens your last server.** Starting the iOS or Android app connects straight to the server you used last instead of stopping at the server list. Switch server in the menu still brings the list back, and a tapped notification for another server always wins.

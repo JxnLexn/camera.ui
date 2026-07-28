@@ -308,9 +308,17 @@ export const aspectRatioSchema: zod.ZodType<CameraAspectRatio> = zod
   }, 'Both sides must be greater than 0')
   .transform((value) => value as CameraAspectRatio);
 
+export const frameWorkerDecoderSchema = zod
+  .object({
+    hardware: zod.enum(['auto', 'cpu', 'cuda', 'vaapi', 'qsv', 'videotoolbox', 'd3d11va', 'd3d12va', 'dxva2', 'vulkan', 'opencl', 'drm', 'rkmpp']).default('auto'),
+    device: zod.string().trim().max(128).optional(),
+  })
+  .strict();
+
 export const frameWorkerSettingsSchema = zod.object({
   fps: zod.number().min(0, 'Minimum 0 fps').max(30, 'Maximum 30 fps'),
   hqSnapshots: zod.boolean().default(false),
+  decoder: frameWorkerDecoderSchema.optional(),
 });
 
 export const cameraTypeSchema = zod.union([zod.literal('camera'), zod.literal('doorbell')]);

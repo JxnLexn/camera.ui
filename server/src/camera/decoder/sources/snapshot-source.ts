@@ -1,13 +1,17 @@
-import { Decoder, Demuxer, HardwareContext } from 'node-av/api';
+import { Decoder, Demuxer } from 'node-av/api';
 
 import { FrameScaler } from '../frame-scaler.js';
+import { createHardwareContext } from '../hardware.js';
 import { ReconnectBackoff } from '../reconnect-backoff.js';
 
 import type { Logger } from '@camera.ui/common/logger';
+import type { FrameWorkerDecoderSettings } from '@camera.ui/sdk';
 import type { Frame, Packet, Stream } from 'node-av/lib';
+import type { HardwareContext } from 'node-av/api';
 
 export interface SnapshotSourceConfig {
   url: string;
+  decoder?: FrameWorkerDecoderSettings;
 }
 
 interface BufferedPacket {
@@ -173,7 +177,7 @@ export class SnapshotSource {
     }
     this.videoStream = videoStream;
 
-    this.hardwareContext ??= HardwareContext.auto();
+    this.hardwareContext ??= createHardwareContext(this.config.decoder, this.logger);
     this.frameScaler ??= new FrameScaler(this.hardwareContext, this.logger);
 
     this.waitingForKeyframe = true;
