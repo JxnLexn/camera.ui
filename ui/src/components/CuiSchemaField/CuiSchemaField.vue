@@ -30,6 +30,15 @@
 
           <Password v-else :model-value="fieldValue" :invalid="errors.length > 0" :readonly="schemaField.readonly" v-bind="field" :feedback="false" toggle-mask />
 
+          <InputGroupAddon v-if="schemaField.readonly">
+            <CuiActionButton
+              :action-text="$t('components.form.tooltip.copied')"
+              :icon="CopyIcon"
+              :button-props="{ severity: 'secondary', text: true }"
+              @action="copyToClipboard(String(fieldValue ?? ''))"
+            />
+          </InputGroupAddon>
+
           <InputGroupAddon v-if="arrayItem">
             <Button text severity="secondary" :loading @click="removeArrayItem(arrayItem.key, arrayItem.index)">
               <template #icon>
@@ -66,6 +75,15 @@
             @value-change="(e) => (fieldValue = e ?? undefined)"
             @input="(e) => (fieldValue = (e.value as any) ?? undefined)"
           />
+
+          <InputGroupAddon v-if="schemaField.readonly">
+            <CuiActionButton
+              :action-text="$t('components.form.tooltip.copied')"
+              :icon="CopyIcon"
+              :button-props="{ severity: 'secondary', text: true }"
+              @action="copyToClipboard(String(fieldValue ?? ''))"
+            />
+          </InputGroupAddon>
 
           <InputGroupAddon v-if="arrayItem">
             <Button text rounded severity="danger" :loading @click="removeArrayItem(arrayItem.key, arrayItem.index)">
@@ -267,6 +285,9 @@ import {
 } from '@shared/types';
 import qrcode from 'qrcode';
 import { ErrorMessage, Field } from 'vee-validate';
+import CopyIcon from '~icons/fluent/copy-16-filled';
+
+import { copyToClipboard } from '@/common/utils.js';
 
 import type { CuiSchemaFieldEmits, CuiSchemaFieldProps } from './types.js';
 

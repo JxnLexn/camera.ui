@@ -12,6 +12,8 @@ All notable changes to this project will be documented in this file.
 
 - **Webhook automations are easier to call.** The webhook trigger now also accepts its secret as a plain X-Webhook-Secret header, so tools that can't compute an HMAC signature can fire automations too. Signed requests keep working as before.
 
+- **Read-only fields have a copy button.** Values you can't edit, like generated addresses or tokens in plugin and connection forms, can now be copied with one tap instead of selecting the text by hand.
+
 - **Object assist works on its own.** On cameras that detect by themselves it used to run only when face or plate recognition was assigned. Now it always gives those detections real bounding boxes, so zones apply properly and events show boxes, with or without recognition on top.
 
 ## [2.0.21]
