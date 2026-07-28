@@ -158,16 +158,25 @@
                 <CuiHeatmap v-if="heatmapEnabled && camera && !isDisabled" :camera-id="camera._id" />
               </div>
 
-              <div v-if="nvrNoData || nvrLicenseRequired" class="absolute inset-0 z-3 pointer-events-none overflow-hidden">
+              <div v-if="nvrNoData || nvrLicenseRequired || codecUnsupported" class="absolute inset-0 z-3 pointer-events-none overflow-hidden">
                 <div class="w-full h-full blur-xs">
                   <CuiCameraSnapshot v-if="camera" :camera :show-loading-screen="false" :image-style="{ objectFit: 'fill' }" />
                 </div>
                 <div class="absolute inset-0 flex items-center justify-center bg-black/60">
                   <div class="flex flex-col items-center justify-center text-center">
                     <i-mdi:license v-if="nvrLicenseRequired" class="text-white w-[50px] h-[50px]" />
+                    <i-mdi:movie-off v-else-if="codecUnsupported" class="text-white w-[50px] h-[50px]" />
                     <i-mdi:video-off v-else class="text-white w-[50px] h-[50px]" />
                     <p v-if="isFullPlayer" class="text-white/80 text-sm max-w-xs mt-3">
-                      {{ nvrLicenseRequired ? $t('components.player.license_required') : $t('components.player.no_recording') }}
+                      {{
+                        nvrLicenseRequired
+                          ? $t('components.player.license_required')
+                          : codecUnsupported
+                            ? nvrPlaybackVisible
+                              ? $t('components.player.codec_unsupported_recording')
+                              : $t('components.player.codec_unsupported')
+                            : $t('components.player.no_recording')
+                      }}
                     </p>
                   </div>
                 </div>
@@ -205,8 +214,8 @@
           </VueZoomable>
 
           <div
-            v-if="!inStandby && (showCameraName || liveIndicatorOverlay)"
-            class="absolute top-0 w-full p-4 flex items-center justify-between gap-2 pointer-events-none"
+            v-if="!inStandby && (showCameraName || liveIndicatorOverlay || codecDegradedTooltip)"
+            class="absolute top-0 w-full p-4 flex items-center gap-2 pointer-events-none"
             :class="isDisabled ? 'z-9' : 'z-6'"
           >
             <div
@@ -214,7 +223,14 @@
               class="w-[10px] h-[10px] rounded-full shadow-md"
               :class="isDisabled ? 'bg-gray-500' : nvrPlaybackVisible ? 'bg-sky-500' : streamFinishedLoading ? 'bg-red-500' : 'bg-gray-500'"
             />
-            <span v-if="showCameraName" class="text-sm font-semibold p-2 bg-black/60 rounded-xl text-white">{{ cameraName }}</span>
+            <div class="ml-auto flex items-center gap-2">
+              <span v-if="showCameraName" class="text-sm font-semibold p-2 bg-black/60 rounded-xl text-white">{{ cameraName }}</span>
+              <i-material-symbols:info-outline
+                v-if="codecDegradedTooltip"
+                v-tooltip.bottom="{ value: codecDegradedTooltip }"
+                class="w-5 h-5 text-red-500/70 drop-shadow-md pointer-events-auto"
+              />
+            </div>
           </div>
 
           <Transition name="fade-2">
@@ -905,6 +921,22 @@ const nvrPlaybackVisible = computed(() => nvrMode.value !== 'idle');
 const nvrLicenseRequired = computed(() => nvrPlaybackVisible.value && (nvr.value?.licenseRequired.value ?? false));
 const nvrNoData = computed(() => nvrPlaybackVisible.value && !nvrLicenseRequired.value && (nvr.value?.noData.value ?? false));
 const nvrLoading = computed(() => nvrPlaybackVisible.value && (nvr.value?.loading.value ?? false));
+const codecUnsupported = computed(() => (nvrPlaybackVisible.value ? (nvr.value?.unsupported.value ?? false) : streamUnsupported.value));
+const codecDegraded = computed(() => {
+  if (nvrPlaybackVisible.value) return nvr.value?.playbackDegraded.value ?? null;
+  if (!streamDegradedFrom.value) return null;
+  return { from: streamDegradedFrom.value as string, to: activeResolution.value as string };
+});
+const codecDegradedTooltip = computed(() => {
+  const degraded = codecDegraded.value;
+  if (!degraded) return '';
+  const quality = degraded.to.startsWith('high')
+    ? t('components.player.source_role_high')
+    : degraded.to.startsWith('mid')
+      ? t('components.player.source_role_mid')
+      : t('components.player.source_role_low');
+  return t('components.player.codec_degraded', { quality });
+});
 
 const selectedStreamingMode = computed<VideoStreamingMode>(() => streamingMode.value ?? camera.value?.interfaceSettings.streamingMode ?? 'webrtc');
 const selectedSourceRole = computed<StreamingRole>(() => sourceRole.value ?? camera.value?.interfaceSettings.streamingSource ?? 'high-resolution');
@@ -937,6 +969,8 @@ const {
   hasBackchannel: streamHasBackchannel,
   activeMode,
   activeResolution,
+  degradedFrom: streamDegradedFrom,
+  unsupported: streamUnsupported,
   isReconnecting: reconnecting,
   inStandby,
 } = cameraStream;
@@ -986,6 +1020,7 @@ const isSnoozed = computed(() => camera.value?.detectionSettings?.snooze === tru
 const isLoading = computed(() => {
   if (isDisabled.value) return false;
   if (nvrPlaybackVisible.value) return nvrLoading.value;
+  if (streamUnsupported.value) return false;
   return cameraDeviceLoading.value || cameraLoading.value || !streamFinishedLoading.value || reconnecting.value;
 });
 const showCenterSpinner = computed(() => {
@@ -1000,7 +1035,7 @@ const streamHasIntercom = computed(() => Boolean(navigator.mediaDevices) && stre
 const micButtonDisabled = computed(() => !streamHasIntercom.value || isLoading.value || nvrPlaybackVisible.value);
 const streamIsLoading = computed(() => {
   if (nvrPlaybackVisible.value) return nvrLoading.value || timelineScrolling.value;
-  if (isDisabled.value) return false;
+  if (isDisabled.value || streamUnsupported.value) return false;
   return !streamFinishedLoading.value || timelineScrolling.value;
 });
 const showCameraName = computed(() => cameraNameOverlay.value && hovered.value && !mdBreakpoint.value && isFullPlayer.value && !gridSearchActive.value);

@@ -3,6 +3,7 @@ import { canCreateCameras, isHub, PluginRole, SensorType } from '@camera.ui/sdk'
 import { TTLCache } from '@isaacs/ttlcache';
 import { container, delay, registry } from 'tsyringe';
 
+import { clearSourceCodecInfos, deleteSourceCodecInfo, getSourceCodecInfo } from '../../camera/codecCache.js';
 import { getMultiProviderTypes, getSingleProviderTypes, getValidSensorTypes, SENSOR_TYPE_CONFIG, VIRTUAL_SENSOR_OWNER_ID } from '../../camera/sensors/types.js';
 import { ConfigService } from '../../services/config/index.js';
 import { applySourceUrlFlags, createSourceName, normalizeCameraName } from '../../utils/camera.js';
@@ -320,6 +321,7 @@ export class CamerasService {
       cameraController?.streamInfos.clear();
       for (const source of camera.sources) {
         cameraSourceProbeCache.delete(source._id);
+        deleteSourceCodecInfo(source._id);
       }
     }
 
@@ -584,6 +586,7 @@ export class CamerasService {
     const camerasToRemove = [...this.dbs.camerasDB.getRange()].map(({ value }) => value);
 
     cameraSourceProbeCache.clear();
+    clearSourceCodecInfos();
     await this.usersService.resetAllPreferences();
     await this.dbs.camerasDB.clearAsync();
     await Promise.all(camerasToRemove.map((camera) => this.removeCameraSourcesFromConfig(camera.name, camera.sources)));
@@ -641,6 +644,7 @@ export class CamerasService {
         hotMode: source.hotMode,
         preload: source.preload,
         muted: source.muted,
+        ...getSourceCodecInfo(source._id),
         childSourceId: source.childSourceId,
         urls: {
           ws: this.generateWsUrls(camera, source),
@@ -668,6 +672,7 @@ export class CamerasService {
   private async removeOne(camera: DBCamera): Promise<void> {
     for (const source of camera.sources) {
       cameraSourceProbeCache.delete(source._id);
+      deleteSourceCodecInfo(source._id);
     }
 
     await this.usersService.removeCameraFromPreferences(camera._id);

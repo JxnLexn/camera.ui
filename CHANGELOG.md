@@ -4,6 +4,8 @@ All notable changes to this project will be documented in this file.
 
 ## [2.0.22]
 
+- **H.265 cameras now play on devices that can't decode H.265.** Live view and playback switch to the next stream the device can play instead of loading forever or showing "No recording" although recordings exist. A small icon on the player tells you when you are watching a lower quality stream because of this, and if no stream is playable at all you get a clear message.
+
 - **The app reopens your last server.** Starting the iOS or Android app connects straight to the server you used last instead of stopping at the server list. Switch server in the menu still brings the list back, and a tapped notification for another server always wins.
 
 - **Settings open as a list on the phone.** Tapping Settings in the menu now slides to a list of all settings sections, just like the menu itself, and each section slides in from there. The back button top left returns to the list; the sidebar overlay on small screens is gone.

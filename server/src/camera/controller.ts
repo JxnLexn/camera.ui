@@ -7,6 +7,7 @@ import { container } from 'tsyringe';
 import { PLUGIN_STATUS } from '../plugins/types.js';
 import { NamespaceManager } from '../rpc/namespaces.js';
 import { buildSnapshotUrl, buildTargetUrl, createSourceName } from '../utils/camera.js';
+import { getSourceCodecInfo, setSourceCodecInfo } from './codecCache.js';
 import { FrameWorker } from './decoder/worker.js';
 import { CameraDevice } from './index.js';
 import { SensorController } from './sensors/controller.js';
@@ -38,6 +39,7 @@ import type {
 } from '@camera.ui/sdk';
 import type { DetectionEventMessage, SensorJSON } from '@camera.ui/sdk/internal';
 import type { CameraUiAPI } from '../api.js';
+import type { SourceCodecInfo } from './codecCache.js';
 import type { Go2RtcApi } from '../go2rtc/api/index.js';
 import type { InternalEventBus } from '../internal-bus.js';
 import type { ProxyServer } from '../rpc/index.js';
@@ -319,6 +321,7 @@ export class CameraController extends CameraDevice implements CameraDeviceInterf
       };
 
       this.streamInfos.set(sourceId, streamInfo);
+      this.applySourceCodec(sourceId, streamInfo);
     } catch (err) {
       this.logger.error('Error while probing stream source', err.message.split('\n')[0]);
     }
@@ -643,6 +646,26 @@ export class CameraController extends CameraDevice implements CameraDeviceInterf
         // and cascade state reset (true→false).
         this.sensorController.onFrameWorkerStateChanged(oldState, newState);
       });
+  }
+
+  private applySourceCodec(sourceId: string, streamInfo: ProbeStream): void {
+    const info: SourceCodecInfo = {
+      videoCodec: streamInfo.video.find((v) => v.direction === 'sendonly')?.codec,
+      audioCodecs: [...new Set(streamInfo.audio.filter((a) => a.direction === 'sendonly').map((a) => a.codec))],
+      backchannelAudioCodec: streamInfo.audio.find((a) => a.direction === 'recvonly')?.codec,
+    };
+    if (!info.audioCodecs?.length) delete info.audioCodecs;
+    if (!info.videoCodec && !info.audioCodecs && !info.backchannelAudioCodec) return;
+    if (isEqual(getSourceCodecInfo(sourceId), info, true)) return;
+
+    setSourceCodecInfo(sourceId, info);
+
+    const camera = this.cameraObject;
+    const source = camera.sources.find((s) => s._id === sourceId);
+    if (!source) return;
+
+    Object.assign(source, info);
+    this.updateCamera(camera);
   }
 
   private subscribeToCameraChanges(): Disposable {
