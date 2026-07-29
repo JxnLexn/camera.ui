@@ -205,7 +205,7 @@ export class CameraDeviceProxy extends CameraDevice {
   }
 
   public async addSensor<T extends object>(sensor: Sensor<T>): Promise<void> {
-    // pre-standalone SDK: its toJSON reads the removed cameraId getter and throws
+    // pre-standalone SDK: its toJSON reads the removed cameraId getter and throws, drop the guard with the stub window
     if (typeof (sensor as { _setId?: unknown })._setId !== 'function') {
       this.logger.warn(`Plugin "${this.#plugin.id}" uses a pre-standalone SDK, sensor "${sensor.name}" stays unavailable. Update the plugin.`);
       return;
