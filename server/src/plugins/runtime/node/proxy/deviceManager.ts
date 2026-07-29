@@ -8,10 +8,12 @@ import type { DeviceManagerInterface, DeviceManagerListenerMessagePayload } from
 import type { DiscoveryManagerInterface } from '../../../../rpc/interfaces/discovery.js';
 import type { DeviceManagerNamespaces, DiscoveryManagerNamespaces, PluginNamespaces } from '../../../../rpc/namespaces.js';
 import type { StorageController } from '../storageController.js';
+import type { SensorManagerProxy } from './sensorManager.js';
 
 export class DeviceManagerProxy implements DeviceManager {
   #proxy: RPCClient;
   #storageController: StorageController;
+  #sensorManager: SensorManagerProxy;
   #logger: Logger;
   #pluginInfo: PluginInfo;
   #pluginInstance?: BasePlugin;
@@ -23,9 +25,10 @@ export class DeviceManagerProxy implements DeviceManager {
 
   #devices = new Map<string, CameraDeviceProxy>();
 
-  constructor(proxy: RPCClient, storageController: StorageController, pluginInfo: PluginInfo, logger: Logger) {
+  constructor(proxy: RPCClient, storageController: StorageController, sensorManager: SensorManagerProxy, pluginInfo: PluginInfo, logger: Logger) {
     this.#proxy = proxy;
     this.#storageController = storageController;
+    this.#sensorManager = sensorManager;
     this.#logger = logger;
     this.#pluginInfo = pluginInfo;
     this.#namespaces = {
@@ -140,7 +143,7 @@ export class DeviceManagerProxy implements DeviceManager {
         cameraDevice = this.#devices.get(camera._id)!;
       } else {
         const cameraLogger = this.#logger.createLogger({ suffix: camera.name, targetId: camera._id, targetType: 'camera' });
-        cameraDevice = new CameraDeviceProxy(this.#proxy, this.#storageController, camera, this.#pluginInfo, cameraLogger);
+        cameraDevice = new CameraDeviceProxy(this.#proxy, this.#storageController, this.#sensorManager, camera, this.#pluginInfo, cameraLogger);
         this.#devices.set(camera._id, cameraDevice);
       }
     }

@@ -81,10 +81,8 @@ const sensorShortcutSchema = zod.object({
     .default(uuidv4())
     .transform(() => uuidv4()),
   type: zod.literal('sensor'),
+  sensorId: zod.string(),
   sensorType: sensorShortcutTypeSchema,
-  sensorName: zod.string(),
-  sensorPluginId: zod.string(),
-  sensorCameraId: zod.string(),
   points: pointsSchema,
 });
 
@@ -101,10 +99,8 @@ const patchCameraShortcutSchema = zod
 const patchSensorShortcutSchema = zod
   .object({
     type: zod.literal('sensor'),
+    sensorId: zod.string(),
     sensorType: sensorShortcutTypeSchema,
-    sensorName: zod.string(),
-    sensorPluginId: zod.string(),
-    sensorCameraId: zod.string(),
     points: pointsSchema,
   })
   .partial();

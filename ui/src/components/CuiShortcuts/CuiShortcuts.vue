@@ -320,7 +320,7 @@
 
       <Popover :ref="(el: any) => previewMenuRef(el, resolved.shortcut._id)" class="shadow-lg cui-rounded-corner" :pt="{ content: { class: 'p-2' } }">
         <div class="sensor-tooltip">
-          <div class="sensor-tooltip-name">{{ resolved.sensor?.displayName.value ?? resolved.shortcut.sensorName }}</div>
+          <div class="sensor-tooltip-name">{{ resolved.sensor?.displayName.value ?? $t(`components.camera_options.sensor_type_${resolved.shortcut.sensorType}`) }}</div>
           <div
             class="sensor-tooltip-status"
             :class="{
@@ -612,7 +612,7 @@ const resolvedSensorShortcuts = computed<ResolvedSensorShortcut[]>(() => {
   const list = sensorShortcuts.value;
 
   return list.map((shortcut) => {
-    const sensor = findSensorInList(currentSensors, shortcut.sensorType, shortcut.sensorName, shortcut.sensorPluginId);
+    const sensor = currentSensors.find((s) => s.id === shortcut.sensorId);
     return {
       shortcut,
       sensor,
@@ -652,12 +652,7 @@ function getOrCreateFollower(shortcut: DBCameraShortcut): NvrPlayback {
 }
 
 function isSensorAlreadyAdded(sensor: ReactiveSensor): boolean {
-  return sensorShortcuts.value.some(
-    (shortcut) =>
-      shortcut.sensorName === sensor.name &&
-      String(shortcut.sensorType).toLowerCase() === String(sensor.type).toLowerCase() &&
-      shortcut.sensorPluginId === sensor.pluginId,
-  );
+  return sensorShortcuts.value.some((shortcut) => shortcut.sensorId === sensor.id);
 }
 
 function isCameraAlreadyAdded(cam: DBCamera): boolean {
@@ -739,15 +734,6 @@ function mapSensorTypeToShortcutType(type: SensorType): SensorShortcutType {
   return SENSOR_SHORTCUTABLE_TYPES.has(shortcut) ? shortcut : 'contact';
 }
 
-function findSensorInList(sensors: ReactiveSensor[], sensorType: string, sensorName: string, sensorPluginId: string): ReactiveSensor | undefined {
-  return sensors.find((s) => {
-    const typeMatch = String(s.type).toLowerCase() === String(sensorType).toLowerCase();
-    const nameMatch = s.name === sensorName;
-    const pluginIdMatch = s.pluginId === sensorPluginId;
-    return typeMatch && nameMatch && pluginIdMatch;
-  });
-}
-
 function getSensorState(sensor: ReactiveSensor | undefined): boolean {
   if (!sensor) return false;
 
@@ -794,8 +780,7 @@ function getSensorState(sensor: ReactiveSensor | undefined): boolean {
 }
 
 async function toggleSensor(resolved: ResolvedSensorShortcut): Promise<void> {
-  // Look up sensor FRESH at click time — v-on-long-press directive caches closures.
-  const sensor = findSensorInList(allSensors.value, resolved.shortcut.sensorType, resolved.shortcut.sensorName, resolved.shortcut.sensorPluginId);
+  const sensor = allSensors.value.find((s) => s.id === resolved.shortcut.sensorId);
 
   if (!sensor) {
     return;
@@ -828,7 +813,7 @@ async function toggleSensor(resolved: ResolvedSensorShortcut): Promise<void> {
 }
 
 async function setSecuritySystemState(resolved: ResolvedSensorShortcut, state: SecuritySystemState): Promise<void> {
-  const sensor = findSensorInList(allSensors.value, resolved.shortcut.sensorType, resolved.shortcut.sensorName, resolved.shortcut.sensorPluginId);
+  const sensor = allSensors.value.find((s) => s.id === resolved.shortcut.sensorId);
   if (!sensor || !canControlSensors) return;
 
   try {
@@ -1250,10 +1235,8 @@ async function addSensor(sensor: ReactiveSensor): Promise<void> {
         _id: '',
         type: 'sensor',
         points: [xPercent, yPercent],
+        sensorId: sensor.id,
         sensorType: mapSensorTypeToShortcutType(sensor.type),
-        sensorName: sensor.name,
-        sensorPluginId: sensor.pluginId ?? '',
-        sensorCameraId: camera.value?._id ?? '',
       },
     },
     {

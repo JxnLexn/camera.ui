@@ -3,7 +3,6 @@ import { container } from 'tsyringe';
 
 import { CamerasService } from './api/services/cameras.service.js';
 import { PluginsService } from './api/services/plugins.service.js';
-import { VirtualSensorsService } from './api/services/virtualsensors.service.js';
 import { CameraController } from './camera/controller.js';
 
 import type { API_EVENT, Camera, PluginAssignments } from '@camera.ui/sdk';
@@ -21,7 +20,6 @@ export class CameraUiAPI extends EventEmitter {
 
   private _camerasService?: CamerasService;
   private _pluginsService?: PluginsService;
-  private _virtualSensorsService?: VirtualSensorsService;
 
   constructor() {
     super();
@@ -48,13 +46,6 @@ export class CameraUiAPI extends EventEmitter {
       await cameraController.init();
 
       this.cameraControllers.set(camera._id, cameraController);
-
-      try {
-        await this.virtualSensorsService.hydrateCamera(cameraController);
-      } catch (error) {
-        const logger = container.resolve<LoggerService>('logger');
-        logger.warn(`Failed to hydrate virtual sensors for camera ${camera.name}:`, error);
-      }
 
       try {
         const bus = container.resolve<InternalEventBus>('internalBus');
@@ -195,9 +186,5 @@ export class CameraUiAPI extends EventEmitter {
 
   private get pluginsService(): PluginsService {
     return (this._pluginsService ??= new PluginsService());
-  }
-
-  private get virtualSensorsService(): VirtualSensorsService {
-    return (this._virtualSensorsService ??= new VirtualSensorsService());
   }
 }

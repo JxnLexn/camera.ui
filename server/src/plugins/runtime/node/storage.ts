@@ -45,7 +45,7 @@ export class DeviceStorage<T extends Record<string, any> = Record<string, any>> 
     this.#sensorId = sensorId;
 
     if (location.kind === 'sensor' && this.#sensorId) {
-      const sensorNs = NamespaceManager.pluginSensorNamespaces(this.#plugin.id, location.cameraId, this.#sensorId);
+      const sensorNs = NamespaceManager.pluginSensorNamespaces(this.#plugin.id, this.#sensorId);
       this.#storageNamespace = sensorNs.sensorStorageRpc;
     } else if (location.kind === 'plugin') {
       const pluginNs = NamespaceManager.pluginNamespaces(this.#plugin.id);
@@ -58,10 +58,10 @@ export class DeviceStorage<T extends Record<string, any> = Record<string, any>> 
     }
   }
 
-  public getValue<T = string>(key: string): Promise<T> | undefined;
+  public getValue<T = string>(key: string): Promise<T | undefined>;
   public getValue<T = string>(key: string, defaultValue: T): Promise<T>;
   @RPCMethod
-  public getValue<T = string>(key: string, defaultValue?: T): Promise<T> | undefined {
+  public getValue<T = string>(key: string, defaultValue?: T): Promise<T | undefined> {
     const schema = this.schemas.find((schema) => schema.key === key);
     const configValue = getValueByKey(this.values, key);
     return (schema as any)?.onGet?.() ?? configValue ?? (schema as any)?.defaultValue ?? defaultValue;

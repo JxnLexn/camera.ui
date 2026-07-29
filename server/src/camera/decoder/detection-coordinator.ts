@@ -3,7 +3,7 @@ import { isNoRespondersError, RPCClass, RPCMethod } from '@camera.ui/rpc';
 import { SensorType } from '@camera.ui/sdk';
 
 import { NamespaceManager } from '../../rpc/namespaces.js';
-import { DETECTION_SENSOR_TYPES } from '../sensors/types.js';
+import { DETECTION_SENSOR_TYPES } from '../../sensors/types.js';
 import { normalizeZone } from '../utils/filter.js';
 import { AudioDetectionLoop } from './audio-loop.js';
 import { CascadeManager } from './cascade-manager.js';
@@ -18,12 +18,13 @@ import { ReconnectBackoff } from './reconnect-backoff.js';
 import { SecondaryStage } from './secondary-stage.js';
 import { FrameSource } from './sources/frame-source.js';
 import { StationarySuppressor } from './stationary-suppressor.js';
-import { DETECT_TIMEOUT_MS, MOTION_WIDTH_MAP } from './types.js';
+import { DETECT_TIMEOUT_MS, ensureDetectionBoxes, MOTION_WIDTH_MAP } from './types.js';
 
 import type { Logger } from '@camera.ui/common/logger';
 import type { RPCClient } from '@camera.ui/rpc';
 import type {
   AudioResult,
+  BoundingBox,
   CameraDetectionSettings,
   CameraFrameWorkerSettings,
   CameraUiSettings,
@@ -548,7 +549,7 @@ export class DetectionCoordinator {
       properties,
       timestamp: Date.now(),
     };
-    this.proxy.publish(NamespaceManager.sensorControllerNamespaces(this.config.cameraId).sensorWriteSubject, msg);
+    this.proxy.publish(NamespaceManager.sensorCameraViewNamespaces(this.config.cameraId).sensorWriteSubject, msg);
   }
 
   private buildSnapshot(): ProcessedDetectionData {
@@ -595,9 +596,8 @@ export class DetectionCoordinator {
     const raw = properties.detections;
     if (!Array.isArray(raw) || raw.length === 0) return properties;
 
-    // older/third-party plugins can send box-less detections, but the zone
-    // filter and rust merge assume a box on every detection
-    const detections = raw.map((detection) => (detection.box ? detection : { ...detection, box: { x: 0, y: 0, width: 1, height: 1 } }));
+    // the zone filter and the rust merge assume a box on every detection
+    const detections = ensureDetectionBoxes(raw as { box?: BoundingBox }[]);
 
     let filtered: Detection[];
     switch (sensorType) {
@@ -742,7 +742,7 @@ export class DetectionCoordinator {
     const wasVideoNeeded = this.plugins.shouldVideoBeActive();
     const wasAudioNeeded = this.plugins.shouldAudioBeActive();
 
-    const namespaces = NamespaceManager.sensorProviderNamespaces(sensor.pluginId, this.config.cameraId, sensor.sensorId);
+    const namespaces = NamespaceManager.sensorProviderNamespaces(sensor.pluginId, sensor.sensorId);
     const sensorProxy = this.proxy.createProxy<DetectionPluginInterface>(namespaces.sensorRpc);
 
     const registered = this.plugins.register({
@@ -986,7 +986,7 @@ export class DetectionCoordinator {
             // is garbage during ego-motion, but skipping frames would leave a
             // stale background that lights up the whole scene after the move
           } else if (result.detections.length > 0) {
-            const filtered = this.pipeline.runMergeAndZoneFilter(result.detections);
+            const filtered = this.pipeline.runMergeAndZoneFilter(ensureDetectionBoxes(result.detections));
             motionDetected = filtered.length > 0;
             results.motion = { ...result, detections: filtered };
           } else {
@@ -1033,7 +1033,7 @@ export class DetectionCoordinator {
           // run the pipeline even on empty frames so Norfair advances its
           // Kalman state; the pose delta keeps predictions stable across pans
           const poseDelta = this.ptzAutotracker.consumePoseDelta();
-          const pipelineResult = this.pipeline.process(result.detections, objectFrame, poseDelta);
+          const pipelineResult = this.pipeline.process(ensureDetectionBoxes(result.detections), objectFrame, poseDelta);
 
           // track id churn is invisible in the event log without this
           if (pipelineResult.created.length > 0 || pipelineResult.removed.length > 0) {
@@ -1256,7 +1256,7 @@ export class DetectionCoordinator {
     try {
       const result = await PromiseTimeout(assist.proxy.detectObjects(scaled), DETECT_TIMEOUT_MS, undefined, `Object assist timed out after ${DETECT_TIMEOUT_MS}ms`);
       const reportedLabels = new Set(reported.map((d) => d.label.toLowerCase()));
-      const found = (result?.detections ?? []).filter((d) => reportedLabels.size === 0 || reportedLabels.has(d.label.toLowerCase()));
+      const found = ensureDetectionBoxes(result?.detections ?? []).filter((d) => reportedLabels.size === 0 || reportedLabels.has(d.label.toLowerCase()));
       if (found.length === 0) return { detections: reported, assisted: false };
       return { detections: found, assisted: true };
     } catch (error) {

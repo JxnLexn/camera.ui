@@ -1,7 +1,7 @@
 import de from '../ui/src/i18n/locales/de.js';
 import en from '../ui/src/i18n/locales/en.js';
 import { assignmentsSchema } from '../server/src/api/schemas/cameras.schema.js';
-import { getMultiProviderTypes, getSingleProviderTypes, getValidSensorTypes, SENSOR_PROPERTY_MAP, SENSOR_TYPE_CONFIG } from '../server/src/camera/sensors/types.js';
+import { getMultiProviderTypes, getSingleProviderTypes, getValidSensorTypes, SENSOR_PROPERTY_MAP, SENSOR_TYPE_CONFIG } from '../server/src/sensors/types.js';
 
 const errors: string[] = [];
 

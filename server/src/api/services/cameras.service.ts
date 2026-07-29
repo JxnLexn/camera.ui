@@ -4,7 +4,7 @@ import { TTLCache } from '@isaacs/ttlcache';
 import { container, delay, registry } from 'tsyringe';
 
 import { clearSourceCodecInfos, deleteSourceCodecInfo, getSourceCodecInfo } from '../../camera/codecCache.js';
-import { getMultiProviderTypes, getSingleProviderTypes, getValidSensorTypes, SENSOR_TYPE_CONFIG, VIRTUAL_SENSOR_OWNER_ID } from '../../camera/sensors/types.js';
+import { getMultiProviderTypes, getSingleProviderTypes, getValidSensorTypes, SENSOR_TYPE_CONFIG, VIRTUAL_SENSOR_OWNER_ID } from '../../sensors/types.js';
 import { ConfigService } from '../../services/config/index.js';
 import { applySourceUrlFlags, createSourceName, normalizeCameraName } from '../../utils/camera.js';
 import { Database } from '../database/index.js';

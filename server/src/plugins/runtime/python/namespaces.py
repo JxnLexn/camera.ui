@@ -47,9 +47,9 @@ class PluginSensorNamespaces:
 
 
 @dataclass(frozen=True, slots=True)
-class SensorControllerNamespaces:
-    sensor_subject: str
-    sensor_rpc: str
+class SensorRegistryNamespaces:
+    sensors_subject: str
+    sensors_rpc: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -159,30 +159,28 @@ class NamespaceManager:
         )
 
     @staticmethod
-    def plugin_sensor_namespaces(plugin_id: str, camera_id: str, sensor_id: str) -> PluginSensorNamespaces:
+    def plugin_sensor_namespaces(plugin_id: str, sensor_id: str) -> PluginSensorNamespaces:
         return PluginSensorNamespaces(
-            sensor_storage_rpc=f"plugin.{plugin_id}.camera.{camera_id}.sensor.{sensor_id}.storage.rpc",
+            sensor_storage_rpc=f"plugin.{plugin_id}.sensor.{sensor_id}.storage.rpc",
         )
 
     @staticmethod
-    def sensor_controller_namespaces(camera_id: str) -> SensorControllerNamespaces:
-        return SensorControllerNamespaces(
-            sensor_subject=f"camera.{camera_id}.sensors.subject",
-            sensor_rpc=f"camera.{camera_id}.sensors.rpc",
+    def sensor_registry_namespaces() -> SensorRegistryNamespaces:
+        return SensorRegistryNamespaces(
+            sensors_subject="sensors.subject",
+            sensors_rpc="sensors.rpc",
         )
 
     @staticmethod
-    def sensor_event_namespaces(camera_id: str, sensor_id: str) -> SensorEventNamespaces:
+    def sensor_event_namespaces(sensor_id: str) -> SensorEventNamespaces:
         return SensorEventNamespaces(
-            sensor_subject=f"camera.{camera_id}.sensor.{sensor_id}.subject",
+            sensor_subject=f"sensor.{sensor_id}.subject",
         )
 
     @staticmethod
-    def sensor_provider_namespaces(
-        plugin_id: str, camera_id: str, sensor_id: str
-    ) -> SensorProviderNamespaces:
+    def sensor_provider_namespaces(plugin_id: str, sensor_id: str) -> SensorProviderNamespaces:
         return SensorProviderNamespaces(
-            sensor_rpc=f"plugin.{plugin_id}.camera.{camera_id}.sensor.{sensor_id}.rpc",
+            sensor_rpc=f"plugin.{plugin_id}.sensor.{sensor_id}.rpc",
         )
 
     @staticmethod
@@ -196,7 +194,3 @@ class NamespaceManager:
         return DetectionEventNamespaces(
             detection_event_subject=f"camera.{camera_id}.events.subject",
         )
-
-    @staticmethod
-    def sensor_controller_rpc(camera_id: str) -> str:
-        return f"camera.{camera_id}.sensors.controller.rpc"

@@ -1,7 +1,7 @@
 import { uuidv4 } from '@camera.ui/common/utils';
 import * as zod from 'zod';
 
-import type { CameraAspectRatio, DetectionLabel, SensorType, VideoStreamingMode } from '@camera.ui/sdk';
+import type { CameraAspectRatio, DetectionLabel, VideoStreamingMode } from '@camera.ui/sdk';
 
 export function hasCloudProtocol(urls: string[]): boolean {
   const cloudProtocols = ['kasa://', 'nest:', 'ring:', 'tapo://'];
@@ -108,15 +108,7 @@ export const detectionSettingsSchema = zod.object({
     .default({ confidence: 0.9, minLength: 4 }),
   sensor: zod.object({
     timeout: zod.number().min(10, 'Minimum 10 seconds'),
-    triggers: zod
-      .array(
-        zod.object({
-          sensorType: zod.string().trim().min(1, 'Sensor type is required') as zod.ZodType<SensorType>,
-          sensorName: zod.string().trim().min(1, 'Sensor name is required'),
-          pluginId: zod.string().trim().min(1, 'Plugin ID is required'),
-        }),
-      )
-      .default([]),
+    triggers: zod.array(zod.string().trim().min(1, 'Sensor id is required')).default([]),
   }),
   cascadeDetection: zod.boolean().default(true),
   cascadeTimeout: zod.number().min(1, 'Minimum 1 second').max(300, 'Maximum 300 seconds').default(10),
@@ -567,18 +559,20 @@ export const scopedPluginParamsSchema = zod.object({
   pluginname: zod.string(),
 });
 
-export const sensorParamsSchema = zod.object({
+export const cameraSensorConfigParamsSchema = zod.object({
   cameraname: zod.string(),
   pluginname: zod.string(),
   sensorId: zod.string(),
 });
 
-export const sensorCommandParamsSchema = zod.object({
+/** @deprecated stub window, superseded by /api/sensors schemas */
+export const legacyCameraSensorCommandParamsSchema = zod.object({
   cameraname: zod.string(),
   stableId: zod.string(),
 });
 
-export const sensorCommandSchema = zod.object({
+/** @deprecated stub window, superseded by /api/sensors schemas */
+export const legacyCameraSensorCommandSchema = zod.object({
   property: zod.string(),
   value: zod.unknown(),
 });
@@ -612,7 +606,7 @@ export type SnapshotQueryInput = zod.output<typeof snapshotQuerySchema>;
 export type ProbeQueryInput = zod.output<typeof probeQuerySchema>;
 export type ExtensionTypeQueryInput = zod.output<typeof extensionTypeQuerySchema>;
 export type ScopedSensorParamsInput = zod.output<typeof scopedSensorParamsSchema>;
-export type SensorParamsInput = zod.output<typeof sensorParamsSchema>;
+export type SensorParamsInput = zod.output<typeof cameraSensorConfigParamsSchema>;
 export type CameraPluginParamsInput = zod.output<typeof cameraPluginParamsSchema>;
 export type ScopedPluginParamsInput = zod.output<typeof scopedPluginParamsSchema>;
 export type StreamParamsInput = zod.output<typeof streamParamsSchema>;

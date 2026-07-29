@@ -1,6 +1,5 @@
 import { Subject } from '@camera.ui/sdk';
 
-import { computeSensorGlobalId, computeSensorStableId } from '../../../../camera/sensors/stable-id.js';
 import { NamespaceManager } from '../../../../rpc/namespaces.js';
 
 import type { Promisify, RPCClient } from '@camera.ui/rpc';
@@ -8,38 +7,46 @@ import type { Observable, SensorLike, SensorType } from '@camera.ui/sdk';
 import type { PropertyChangedEvent } from '@camera.ui/sdk/internal';
 import type { SensorRefreshedState, StoredSensorData } from '../../../../rpc/interfaces/sensor.js';
 
-// Cross-process consumer proxy: caches sensor state from broadcasts, forwards Control writes via RPC.
 export class SensorProxy implements SensorLike {
   readonly onPropertyChanged: Observable<{ property: string; value: unknown; timestamp: number }>;
   readonly onCapabilitiesChanged: Observable<string[]>;
+  readonly onConnectedChanged: Observable<boolean>;
 
   readonly #propertyChangedSubject = new Subject<{ property: string; value: unknown; timestamp: number }>();
   readonly #capabilitiesChangedSubject = new Subject<string[]>();
+  readonly #connectedChangedSubject = new Subject<boolean>();
 
   private _id: string;
   private _type: SensorType;
   private _name: string;
   private _displayName: string;
+  private _nativeId?: string;
   private _ownerId: string;
-  private _cameraId: string;
+  private _assignedCameraIds: string[];
+  private _exposed: boolean;
+  private _connected: boolean;
   private _proxy: RPCClient;
   private _properties = new Map<string, unknown>();
   private _capabilities: string[] = [];
   private _rpcProxy: Promisify<SensorLike>;
   private _eventSubscription?: () => void;
 
-  constructor(data: StoredSensorData, proxy: RPCClient, ownerNamespace: string, cameraId: string) {
+  constructor(data: StoredSensorData, proxy: RPCClient, ownerNamespace: string) {
     this._id = data.id;
     this._type = data.type;
     this._name = data.name;
     this._displayName = data.displayName ?? data.name;
+    this._nativeId = data.nativeId;
     this._ownerId = data.pluginId;
-    this._cameraId = cameraId;
+    this._assignedCameraIds = [...data.assignedCameraIds];
+    this._exposed = data.exposed;
+    this._connected = data.connected;
     this._proxy = proxy;
     this._capabilities = data.capabilities ?? [];
 
     this.onPropertyChanged = this.#propertyChangedSubject.asObservable();
     this.onCapabilitiesChanged = this.#capabilitiesChangedSubject.asObservable();
+    this.onConnectedChanged = this.#connectedChangedSubject.asObservable();
 
     // RPC directly to owner - for Control sensors
     this._rpcProxy = proxy.createProxy<SensorLike>(ownerNamespace);
@@ -65,16 +72,32 @@ export class SensorProxy implements SensorLike {
     return this._displayName;
   }
 
-  setDisplayName(value: string): void {
-    this._displayName = value;
-  }
-
   get pluginId(): string | undefined {
     return this._ownerId;
   }
 
+  get nativeId(): string | undefined {
+    return this._nativeId;
+  }
+
+  get assignedCameraIds(): readonly string[] {
+    return this._assignedCameraIds;
+  }
+
+  get connected(): boolean {
+    return this._connected;
+  }
+
+  get exposed(): boolean {
+    return this._exposed;
+  }
+
   get capabilities(): string[] {
     return this._capabilities;
+  }
+
+  setDisplayName(value: string): void {
+    this._displayName = value;
   }
 
   hasCapability(capability: string): boolean {
@@ -89,11 +112,6 @@ export class SensorProxy implements SensorLike {
     return Object.fromEntries(this._properties);
   }
 
-  // Forwards to the owning sensor's `updateValue` via RPC. On the owning side
-  // the dispatch lands on the sensor instance — for control sensors that override
-  // `updateValue` (Light, Switch, Siren, Lock, Garage, SecuritySystem, PTZ), the
-  // call routes through the appropriate semantic method (`setOn`, `setActive`, etc.)
-  // so plugin overrides drive hardware and state stays consistent.
   async updateValue(property: string, value: unknown): Promise<void> {
     await this._rpcProxy.updateValue(property, value);
   }
@@ -123,10 +141,24 @@ export class SensorProxy implements SensorLike {
     this.#capabilitiesChangedSubject.next(capabilities);
   }
 
+  _setConnected(connected: boolean): void {
+    if (this._connected === connected) return;
+    this._connected = connected;
+    this.#connectedChangedSubject.next(connected);
+  }
+
+  _setAssignedCameras(cameraIds: string[]): void {
+    this._assignedCameraIds = [...cameraIds];
+  }
+
+  _setExposed(exposed: boolean): void {
+    this._exposed = exposed;
+  }
+
   _subscribeToEvents(): void {
     if (this._eventSubscription) return;
 
-    const namespace = NamespaceManager.sensorEventNamespaces(this._cameraId, this.id);
+    const namespace = NamespaceManager.sensorEventNamespaces(this.id);
     this._proxy
       .subscribe<{ type: string; data: unknown }>(namespace.sensorSubject, (event) => {
         this._handleSensorEvent(event);
@@ -164,16 +196,16 @@ export class SensorProxy implements SensorLike {
   }
 
   toStoredData(): StoredSensorData {
-    const stableId = computeSensorStableId(this._ownerId, this.type, this.name);
-
     return {
       id: this.id,
-      stableId,
-      globalId: computeSensorGlobalId(this._cameraId, stableId),
       type: this.type,
       name: this.name,
       displayName: this.displayName,
+      nativeId: this._nativeId,
       pluginId: this._ownerId,
+      assignedCameraIds: [...this._assignedCameraIds],
+      exposed: this._exposed,
+      connected: this._connected,
       properties: this.getValues(),
       capabilities: this._capabilities,
     };

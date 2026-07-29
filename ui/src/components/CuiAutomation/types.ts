@@ -37,10 +37,8 @@ export interface TriggerDetectionData {
 
 export interface TriggerSensorData {
   type: 'trigger-sensor';
-  cameraId: string;
+  sensorId: string;
   sensorType: string;
-  sensorName: string;
-  sensorPluginId: string;
   properties: string[];
 }
 
@@ -90,10 +88,8 @@ export interface ConditionSwitchData {
 
 export interface ConditionSensorStateData {
   type: 'condition-sensorstate';
-  cameraId: string;
+  sensorId: string;
   sensorType: string;
-  sensorName: string;
-  sensorPluginId: string;
   conditions: Array<{ property: string; expectedValue: string }>;
   logic: 'AND' | 'OR';
 }
@@ -112,10 +108,8 @@ export interface RepeatSettings {
 
 export interface ActionSensorData {
   type: 'action-sensor';
-  cameraId: string;
+  sensorId: string;
   sensorType: string;
-  sensorName: string;
-  sensorPluginId: string;
   properties: Array<{ property: string; value: string }>;
 }
 

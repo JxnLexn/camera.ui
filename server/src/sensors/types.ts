@@ -7,6 +7,7 @@ export interface SensorTypeMetadata {
   assignmentKey: string;
   multiProvider: boolean;
   isDetectionType: boolean;
+  cameraBound: boolean;
   cascadeTrigger?: { property: string; value: unknown; sustained: boolean };
 }
 
@@ -18,6 +19,7 @@ function buildSensorTypeConfig(): Record<SensorType, SensorTypeMetadata> {
       assignmentKey: meta.assignmentKey,
       multiProvider: meta.multiProvider,
       isDetectionType: meta.isDetectionType,
+      cameraBound: meta.cameraBound ?? false,
       ...(meta.cascadeTrigger ? { cascadeTrigger: meta.cascadeTrigger } : {}),
     };
   }
@@ -116,6 +118,13 @@ export function getWritableSensorProperties(type: SensorType | string): string[]
   return Object.entries(specs)
     .filter(([, spec]) => spec.writable)
     .map(([name]) => name);
+}
+
+export function isWritableSensor(type: SensorType | string, pluginId?: string): boolean {
+  const meta = SENSOR_TYPE_CONFIG[type as SensorType];
+  if (!meta) return false;
+  if (meta.category === SensorCategory.Control || meta.category === SensorCategory.Trigger) return true;
+  return pluginId === VIRTUAL_SENSOR_OWNER_ID && !meta.isDetectionType;
 }
 
 export const MULTI_PROVIDER_TYPES = new Set<SensorType>(getMultiProviderTypes());

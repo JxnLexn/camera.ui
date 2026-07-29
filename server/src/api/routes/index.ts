@@ -17,7 +17,7 @@ import { ServerRoute } from './server.routes.js';
 import { SharesRoute } from './shares.routes.js';
 import { TunnelRoute } from './tunnel.routes.js';
 import { UsersRoute } from './users.routes.js';
-import { VirtualSensorsRoute } from './virtualsensors.routes.js';
+import { SensorsRoute } from './sensors.routes.js';
 import { WorkersRoute } from './workers.routes.js';
 
 import { normalizeBase, normalizeEmbed, renderIndexHtml } from '../render-index.js';
@@ -51,7 +51,7 @@ export class FastifyRoutes {
     await this.app.register(InstancesRoute, { prefix: '/api/instances' });
     await this.app.register(SharesRoute, { prefix: '/api/shares' });
     await this.app.register(AutomationsRoute, { prefix: '/api/automations' });
-    await this.app.register(VirtualSensorsRoute, { prefix: '/api/virtual-sensors' });
+    await this.app.register(SensorsRoute, { prefix: '/api/sensors' });
     await this.app.register(NotificationsRoute, { prefix: '/api/notifications' });
     await this.app.register(OAuthCallbackRoute, { prefix: '/oauth' });
 

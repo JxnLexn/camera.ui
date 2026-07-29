@@ -185,7 +185,8 @@ function producersFor(node: RawNode): FlowVariable[] {
         watched.map((p) => ({ value: p, labelKey: `sensor_property_${p}` })),
       );
       add('{{sensor.sensorType}}', 'string', 'variable_sensor_type');
-      add('{{sensor.cameraId}}', 'string', 'variable_sensor_camera');
+      add('{{sensor.sensorId}}', 'string', 'variable_sensor_id');
+      add('{{sensor.assignedCameraIds}}', 'string', 'variable_sensor_cameras');
       break;
     }
 

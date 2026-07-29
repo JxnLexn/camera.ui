@@ -40,36 +40,18 @@
       @update:model-value="emit('update:modelValue', $event)"
     />
 
-    <template v-else-if="input.type === 'sensor'">
-      <Select
-        v-model="sensorCameraId"
-        :options="cameraOptions"
-        option-label="label"
-        option-value="value"
-        :placeholder="$t('components.automation_import.select_camera')"
-        class="w-full"
-      />
-      <Select
-        v-model="sensorTypeValue"
-        :options="sensorTypeOptions"
-        option-label="label"
-        option-value="value"
-        :placeholder="$t('components.automation_import.select_sensor_type')"
-        class="w-full"
-        :disabled="!sensorCameraId"
-      />
-      <Select
-        :model-value="selectedInstanceKey"
-        :options="instanceSelectOptions"
-        option-label="label"
-        option-value="value"
-        :placeholder="$t('components.automation_import.select_sensor')"
-        class="w-full"
-        :loading="instancesLoading"
-        :disabled="!sensorTypeValue"
-        @update:model-value="onInstanceChange"
-      />
-    </template>
+    <Select
+      v-else-if="input.type === 'sensor'"
+      :model-value="selectedSensorId"
+      :options="sensorOptions"
+      option-label="label"
+      option-value="value"
+      :placeholder="$t('components.automation_import.select_sensor')"
+      class="w-full"
+      :loading="sensorsLoading"
+      filter
+      @update:model-value="onSensorChange"
+    />
 
     <InputText
       v-else-if="input.type === 'system-target'"
@@ -90,8 +72,6 @@
 </template>
 
 <script setup lang="ts">
-import { SensorType } from '@camera.ui/sdk';
-
 import { PluginsQuery } from '@/api/routes/plugins.js';
 import { useCameraOptions } from '@/components/CuiAutomation/config/useCameraOptions.js';
 import { useUserOptions } from '@/components/CuiAutomation/config/useUserOptions.js';
@@ -104,14 +84,12 @@ const pluginsQuery = new PluginsQuery();
 const props = defineProps<AutomationInputPickerProps>();
 const emit = defineEmits<AutomationInputPickerEmits>();
 
-const { t } = useI18n();
-const { cameraOptions, getSensorTypes, useSensorInstances } = useCameraOptions();
+const { cameraOptions, useSensorOptions } = useCameraOptions();
 const { userOptions } = useUserOptions();
 
 const { data: pluginsData } = pluginsQuery.getPluginsQuery({ page: 1, pageSize: -1 });
 
-const sensorCameraId = ref('');
-const sensorTypeValue = ref('');
+const { sensorOptions, sensorById, isLoading: sensorsLoading } = useSensorOptions();
 
 const pluginOptions = computed(() => {
   const required = props.input.interface;
@@ -120,33 +98,11 @@ const pluginOptions = computed(() => {
     .map((plugin) => ({ label: plugin.displayName || plugin.pluginName, value: plugin.pluginName }));
 });
 
-const sensorTypeOptions = computed(() => {
-  if (!sensorCameraId.value) return [];
-  return getSensorTypes(sensorCameraId.value).map((sensor) => ({
-    label: t(`components.camera_options.sensor_type_${sensor.value}`),
-    value: sensor.value,
-  }));
-});
+const selectedSensorId = computed(() => (props.modelValue as SensorBinding | undefined)?.sensorId ?? '');
 
-const cameraIdRef = computed(() => sensorCameraId.value || undefined);
-const sensorTypeRef = computed(() => (sensorTypeValue.value as SensorType) || SensorType.Contact);
-const { instanceOptions, isLoading: instancesLoading } = useSensorInstances(cameraIdRef, sensorTypeRef);
-
-const instanceSelectOptions = computed(() =>
-  instanceOptions.value.map((instance) => ({
-    label: instance.label,
-    value: `${instance.sensorName}::${instance.pluginId}`,
-  })),
-);
-
-const selectedInstanceKey = computed(() => {
-  const binding = props.modelValue as SensorBinding | undefined;
-  if (!binding?.sensorName || !binding.sensorPluginId) return '';
-  return `${binding.sensorName}::${binding.sensorPluginId}`;
-});
-
-function onInstanceChange(key: unknown) {
-  const [sensorName, sensorPluginId] = String(key).split('::');
-  emit('update:modelValue', { sensorType: sensorTypeValue.value, sensorName, sensorPluginId } satisfies SensorBinding);
+function onSensorChange(value: unknown) {
+  const sensor = sensorById(String(value ?? ''));
+  if (!sensor) return;
+  emit('update:modelValue', { sensorId: sensor.id, sensorType: String(sensor.type) } satisfies SensorBinding);
 }
 </script>

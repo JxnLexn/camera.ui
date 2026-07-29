@@ -12,7 +12,6 @@ import { createAutomationSchema } from '../schemas/automations.schema.js';
 import { createCameraBaseSchema } from '../schemas/cameras.schema.js';
 import { notificationSettingsSchema } from '../schemas/notifications.schema.js';
 import { createShareSchema } from '../schemas/shares.schema.js';
-import { createVirtualSensorSchema } from '../schemas/virtualsensors.schema.js';
 import { REGEX_ESCAPE } from '../utils/regex.js';
 import { backfillDefaults, backfillSingletonDefaults } from './backfill.js';
 import {
@@ -30,6 +29,8 @@ import {
   PLUGINS_ID,
   REMOTE_ID,
   SERVER_ID,
+  SENSOR_HISTORY_ID,
+  SENSORS_ID,
   SETTINGS_ID,
   SHARES_ID,
   TOKENS_ID,
@@ -66,6 +67,8 @@ import type {
   DBNotificationSettings,
   DBPlugin,
   DBRemote,
+  DBSensor,
+  DBSensorHistoryEntry,
   DBServer,
   DBSettings,
   DBShare,
@@ -77,7 +80,7 @@ import type {
 const INGRESS_USERNAME = 'homeassistant';
 
 export class Database {
-  static readonly VERSION = '2.0.51';
+  static readonly VERSION = '2.1.0';
 
   public workerStateDB!: DB<DBWorkerState, 'state'>;
 
@@ -95,6 +98,9 @@ export class Database {
   public sharesDB!: DB<DBShare, string>;
   public automationsDB!: DB<DBAutomation, string>;
   public automationStateDB!: DB<unknown, string>;
+  public sensorsDB!: DB<DBSensor, string>;
+  public sensorHistoryDB!: DB<DBSensorHistoryEntry, string>;
+  /** @deprecated read only by the v2.1.0 migration, remove with it */
   public virtualSensorsDB!: DB<DBVirtualSensor, string>;
   public notificationsDB!: DB<DBNotificationSettings, string>;
   public notificationHistoryDB!: DB<DBNotificationHistory, string>;
@@ -142,6 +148,8 @@ export class Database {
     this.instancesDB = this.lowdb.openDB({ name: INSTANCES_ID });
     this.automationsDB = this.lowdb.openDB({ name: AUTOMATIONS_ID });
     this.automationStateDB = this.lowdb.openDB({ name: AUTOMATION_STATE_ID });
+    this.sensorsDB = this.lowdb.openDB({ name: SENSORS_ID });
+    this.sensorHistoryDB = this.lowdb.openDB({ name: SENSOR_HISTORY_ID });
     this.virtualSensorsDB = this.lowdb.openDB({ name: VIRTUAL_SENSORS_ID });
     this.notificationsDB = this.lowdb.openDB({ name: NOTIFICATIONS_ID });
     this.notificationHistoryDB = this.lowdb.openDB({ name: NOTIFICATION_HISTORY_ID });
@@ -278,7 +286,6 @@ export class Database {
   private async backfillSchemaDefaults(): Promise<void> {
     await backfillDefaults(this.camerasDB, createCameraBaseSchema.strip(), this.logger, CAMERAS_ID);
     await backfillDefaults(this.automationsDB, createAutomationSchema.strip(), this.logger, AUTOMATIONS_ID);
-    await backfillDefaults(this.virtualSensorsDB, createVirtualSensorSchema.strip(), this.logger, VIRTUAL_SENSORS_ID);
     await backfillDefaults(this.sharesDB, createShareSchema.strip(), this.logger, SHARES_ID);
     await backfillDefaults(this.notificationsDB, notificationSettingsSchema.strip(), this.logger, NOTIFICATIONS_ID);
     await backfillDefaults(this.usersDB, dbUserSchema, this.logger, USERS_ID);

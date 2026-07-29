@@ -1251,56 +1251,6 @@
       </AccordionContent>
     </AccordionPanel>
 
-    <AccordionPanel value="sensors">
-      <AccordionHeader class="px-0">
-        <span class="text-color font-normal">{{ $t('components.camera_options.virtual_sensors') }}</span>
-      </AccordionHeader>
-      <AccordionContent :pt="{ content: { class: 'px-0' } }">
-        <div class="flex flex-col gap-4">
-          <Message severity="secondary" variant="simple" size="small" class="cui-input-hint">
-            {{ $t('components.camera_options.virtual_sensors_hint') }}
-          </Message>
-
-          <div v-if="cameraVirtualSensors.length" class="flex flex-col gap-2">
-            <div v-for="virtualSensor in cameraVirtualSensors" :key="virtualSensor._id" class="flex items-center gap-2 p-2 rounded-md border-color">
-              <div class="flex flex-col flex-1 min-w-0">
-                <span class="text-sm font-medium truncate">{{ virtualSensor.displayName || virtualSensor.name }}</span>
-                <span class="text-xs text-muted">{{ $t(`components.camera_options.sensor_type_${virtualSensor.type}`) }}</span>
-              </div>
-              <Button
-                v-tooltip.top="$t('components.camera_options.sensor_display_name')"
-                text
-                rounded
-                severity="secondary"
-                class="cui-icon-sm shrink-0"
-                @click="openRenameVirtualSensorDialog(virtualSensor)"
-              >
-                <template #icon>
-                  <i-mdi:pencil width="100%" height="100%" />
-                </template>
-              </Button>
-              <Button
-                v-tooltip.top="$t('components.camera_options.virtual_sensor_delete')"
-                text
-                rounded
-                severity="danger"
-                class="cui-icon-sm shrink-0"
-                @click="confirmDeleteVirtualSensor(virtualSensor)"
-              >
-                <template #icon>
-                  <i-mdi:trash-can-outline width="100%" height="100%" />
-                </template>
-              </Button>
-            </div>
-          </div>
-
-          <span v-else class="text-sm text-muted text-center min-h-[30px]">{{ $t('components.camera_options.virtual_sensors_empty') }}</span>
-
-          <Button fluid class="cui-button-medium" :label="$t('components.camera_options.virtual_sensor_create')" @click="openCreateVirtualSensorDialog" />
-        </div>
-      </AccordionContent>
-    </AccordionPanel>
-
     <AccordionPanel value="frameworker">
       <AccordionHeader class="px-0">
         <span class="text-color font-normal">{{ $t('components.camera_options.frame_worker') }}</span>
@@ -1425,15 +1375,11 @@ import { PluginInterface, SensorType } from '@camera.ui/sdk';
 import { ErrorMessage, Field } from 'vee-validate';
 
 import { CamerasQuery } from '@/api/routes/cameras.js';
-import { VirtualSensorsQuery } from '@/api/routes/virtualsensors.js';
 import AspectRatioDialog from '@/components/CuiDialog/templates/AspectRatio/AspectRatio.vue';
 import CreateRoomDialog from '@/components/CuiDialog/templates/CreateRoom/CreateRoom.vue';
-import RenameSensorDialog from '@/components/CuiDialog/templates/RenameSensor/RenameSensor.vue';
-import VirtualSensorCreateDialog from '@/components/CuiDialog/templates/VirtualSensorCreate/VirtualSensorCreate.vue';
 import ZoneEditorDialog from '@/components/CuiDialog/templates/ZoneEditor/ZoneEditor.vue';
 
 import type { AspectRatioProps } from '@/components/CuiDialog/templates/AspectRatio/types.js';
-import type { VirtualSensorCreateResult } from '@/components/CuiDialog/templates/VirtualSensorCreate/types.js';
 import type { ZoneEditorProps } from '@/components/CuiDialog/templates/ZoneEditor/types.js';
 import type { VideoStreamingMode } from '@camera.ui/browser';
 import type {
@@ -1447,7 +1393,7 @@ import type {
   RecordingSource,
   StreamingRole,
 } from '@camera.ui/sdk';
-import type { DBCamera, DBVirtualSensor } from '@shared/types';
+import type { DBCamera } from '@shared/types';
 import type { CameraOptionsTabEmits, CameraOptionsTabProps } from '../../types.js';
 
 const TRIGGERABLE_TYPES = new Set([
@@ -1466,7 +1412,6 @@ const TRIGGERABLE_TYPES = new Set([
 
 const camerasQuery = new CamerasQuery();
 const camerasQueryRooms = new CamerasQuery();
-const virtualSensorsQuery = new VirtualSensorsQuery();
 
 const props = defineProps<CameraOptionsTabProps>();
 
@@ -1488,10 +1433,6 @@ const { data: cameraExtensions } = camerasQuery.getCameraExtensionsQuery(cameraF
 const { mutateAsync: removeCamera, isPending: removeLoading } = camerasQuery.removeCameraQuery();
 const { mutateAsync: patchZones, isPending: zonesPatching } = camerasQuery.patchZonesQuery();
 const { mutateAsync: patchLines, isPending: linesPatching } = camerasQuery.patchLinesQuery();
-const { data: virtualSensorsData } = virtualSensorsQuery.getVirtualSensorsQuery();
-const { mutateAsync: createVirtualSensor, isPending: virtualSensorCreating } = virtualSensorsQuery.createVirtualSensorQuery();
-const { mutateAsync: patchVirtualSensor } = virtualSensorsQuery.patchVirtualSensorQuery();
-const { mutateAsync: deleteVirtualSensor, isPending: virtualSensorDeleting } = virtualSensorsQuery.deleteVirtualSensorQuery();
 
 const cameraTypes = ref<CameraType[]>(['camera', 'doorbell']);
 const streamingModes = ref<VideoStreamingMode[]>(['auto', 'mse', 'webrtc', 'webrtc/tcp']);
@@ -1527,8 +1468,6 @@ const decoderDeviceVisible = computed(() => {
 
 const hasNvrPlugin = computed(() => (cameraExtensions.value ?? []).some((p) => p.contract.interfaces?.includes(PluginInterface.NVR)));
 
-const cameraVirtualSensors = computed(() => (virtualSensorsData.value ?? []).filter((sensor) => sensor.cameraId === cameraForm.value._id));
-
 const zoneEntryDeleting = computed(() => zonesPatching.value || linesPatching.value);
 
 const zoneEntries = computed(() => [
@@ -1555,17 +1494,11 @@ const ptzAutotrackLabels = computed(() => [
   { label: t('components.automation_nodes.label_package'), value: 'package' },
 ]);
 
-const triggerableSensors = computed(() =>
-  allSensors.value.filter((s) => TRIGGERABLE_TYPES.has(s.type)).map((s) => ({ label: s.displayName.value, value: toSensorKey(s.type, s.name, s.pluginId) })),
-);
+const triggerableSensors = computed(() => allSensors.value.filter((s) => TRIGGERABLE_TYPES.has(s.type)).map((s) => ({ label: s.displayName.value, value: s.id })));
 
-const onlineSensorKeys = computed(() => new Set(triggerableSensors.value.map((s) => s.value)));
+const onlineSensorIds = computed(() => new Set(triggerableSensors.value.map((s) => s.value)));
 
-const visibleSensorTriggerKeys = computed(() =>
-  (cameraForm.value.detectionSettings.sensor?.triggers ?? [])
-    .map((ref) => toSensorKey(ref.sensorType, ref.sensorName, ref.pluginId))
-    .filter((key) => onlineSensorKeys.value.has(key)),
-);
+const visibleSensorTriggerKeys = computed(() => (cameraForm.value.detectionSettings.sensor?.triggers ?? []).filter((sensorId) => onlineSensorIds.value.has(sensorId)));
 
 const roomOptions = computed(() => {
   const apiRooms = roomsData.value ?? ['Default'];
@@ -1594,20 +1527,10 @@ function updateRecordingSettings(patch: Partial<CameraRecordingSettings>) {
   cameraForm.value.recordingSettings = { ...current, ...patch };
 }
 
-function toSensorKey(sensorType: string, sensorName: string, pluginId: string) {
-  return `${sensorType}::${sensorName}::${pluginId}`;
-}
-
-function updateSensorTriggers(selectedKeys: string[]) {
-  const offlineRefs = (cameraForm.value.detectionSettings.sensor?.triggers ?? []).filter(
-    (ref) => !onlineSensorKeys.value.has(toSensorKey(ref.sensorType, ref.sensorName, ref.pluginId)),
-  );
-  const selectedRefs = selectedKeys.map((key) => {
-    const [sensorType, sensorName, pluginId]: [SensorType, string, string] = key.split('::') as [SensorType, string, string];
-    return { sensorType, sensorName, pluginId };
-  });
+function updateSensorTriggers(selectedIds: string[]) {
+  const offlineIds = (cameraForm.value.detectionSettings.sensor?.triggers ?? []).filter((sensorId) => !onlineSensorIds.value.has(sensorId));
   if (!cameraForm.value.detectionSettings.sensor) cameraForm.value.detectionSettings.sensor = { timeout: 30, triggers: [] };
-  cameraForm.value.detectionSettings.sensor.triggers = [...offlineRefs, ...selectedRefs];
+  cameraForm.value.detectionSettings.sensor.triggers = [...offlineIds, ...selectedIds];
 }
 
 function openCreateRoomDialog() {
@@ -1619,59 +1542,10 @@ function openCreateRoomDialog() {
     },
     onConfirm: (name: string | null) => {
       if (!name) return;
-      // Case-insensitive: use existing room if it matches
       const existing = roomOptions.value.find((r) => r.value.toLowerCase() === name.toLowerCase());
       const roomValue = existing?.value ?? name;
       if (!existing) localRooms.value.push(roomValue);
       cameraForm.value.room = roomValue;
-    },
-  });
-}
-
-function openCreateVirtualSensorDialog() {
-  dialog.openComponentDialog<{ cameraId: string }>(VirtualSensorCreateDialog, {
-    data: {
-      title: t('components.camera_options.virtual_sensor_create'),
-      confirmText: t('components.form.button.save'),
-      loading: virtualSensorCreating,
-      contentProps: {
-        cameraId: cameraForm.value._id,
-      },
-    },
-    onConfirm: async (result: VirtualSensorCreateResult | null) => {
-      if (!result) return;
-      await createVirtualSensor({ data: result });
-    },
-  });
-}
-
-function openRenameVirtualSensorDialog(sensor: DBVirtualSensor) {
-  dialog.openComponentDialog<{ currentDisplayName: string }>(RenameSensorDialog, {
-    data: {
-      title: t('components.camera_options.sensor_display_name'),
-      confirmText: t('components.form.button.save'),
-      contentProps: {
-        currentDisplayName: sensor.displayName || sensor.name,
-      },
-    },
-    onConfirm: async (newName: string | null) => {
-      if (newName && newName !== sensor.displayName) {
-        await patchVirtualSensor({ id: sensor._id, data: { displayName: newName } });
-      }
-    },
-  });
-}
-
-function confirmDeleteVirtualSensor(sensor: DBVirtualSensor) {
-  dialog.openTextDialog({
-    data: {
-      title: t('components.camera_options.virtual_sensor_delete'),
-      contentText: t('components.camera_options.virtual_sensor_delete_confirm'),
-      confirmText: t('components.form.button.remove'),
-      loading: virtualSensorDeleting,
-    },
-    onConfirm: async () => {
-      await deleteVirtualSensor({ id: sensor._id });
     },
   });
 }

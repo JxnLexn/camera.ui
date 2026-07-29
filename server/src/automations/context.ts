@@ -18,7 +18,8 @@ export interface FlowContext {
     previousValue: unknown;
     property: string;
     sensorType: string;
-    cameraId: string;
+    sensorId: string;
+    assignedCameraIds: string[];
   };
 
   webhook?: {
@@ -77,7 +78,8 @@ export function seedVariables(context: FlowContext): void {
     context.variables.set('sensor.previousValue', stringifyValue(context.sensor.previousValue));
     context.variables.set('sensor.property', context.sensor.property);
     context.variables.set('sensor.sensorType', context.sensor.sensorType);
-    context.variables.set('sensor.cameraId', context.sensor.cameraId);
+    context.variables.set('sensor.sensorId', context.sensor.sensorId);
+    context.variables.set('sensor.assignedCameraIds', context.sensor.assignedCameraIds.join(','));
     seedValuePaths(context.variables, 'sensor.value', context.sensor.value);
     seedValuePaths(context.variables, 'sensor.previousValue', context.sensor.previousValue);
   }

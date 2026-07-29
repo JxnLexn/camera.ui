@@ -1,12 +1,13 @@
 import { SensorType } from '@camera.ui/sdk';
 import { container } from 'tsyringe';
 
-import { SENSOR_TYPE_CONFIG } from '../camera/sensors/types.js';
+import { isWritableSensor } from '../sensors/types.js';
 import { ConfigService } from '../services/config/index.js';
 import { buildCameraDiscovery, buildSensorDiscovery } from './ha-discovery.js';
 
 import type { DetectionEvent, DetectionEventType } from '@camera.ui/sdk';
 import type { CameraUiAPI } from '../api.js';
+import type { Database } from '../api/database/index.js';
 import type { CameraController } from '../camera/controller.js';
 import type {
   CameraEventPayload,
@@ -20,11 +21,16 @@ import type {
 } from '../internal-bus.js';
 import type { PluginManager } from '../plugins/index.js';
 import type { StoredSensorData } from '../rpc/interfaces/sensor.js';
+import type { SensorRegistry } from '../sensors/registry.js';
 import type { MqttManager } from './manager.js';
 
 interface ActiveDetectionState {
   motion: boolean;
   labels: Set<string>;
+}
+
+function sensorBucket(sensorId: string): string {
+  return `sensor:${sensorId}`;
 }
 
 export class MqttBridge {
@@ -110,28 +116,33 @@ export class MqttBridge {
       }
     });
 
-    this.onBus('sensor:added', (payload) => this.republishSensor(payload as SensorLifecyclePayload));
+    this.onBus('sensor:added', (payload) => this.republishSensor((payload as SensorLifecyclePayload).sensorId));
 
-    this.onBus('sensor:removed', (payload) => {
+    this.onBus('sensor:deleted', (payload) => {
       const sensor = payload as SensorLifecyclePayload;
-      const sensorPrefix = `${this.manager.topics.sensorPrefix(sensor.cameraId, sensor.sensorStableId)}/`;
-      const discoveryMarker = `/cameraui_${sensor.cameraId}/${sensor.sensorStableId}/`;
-      this.clearRetained(sensor.cameraId, (topic) => topic.startsWith(sensorPrefix) || topic.includes(discoveryMarker));
+      this.clearRetained(sensorBucket(sensor.sensorId));
+    });
+
+    this.onBus('sensor:connected:changed', (payload) => {
+      const sensor = payload as SensorLifecyclePayload;
+      if (sensor.connected) this.republishSensor(sensor.sensorId);
+      else this.clearRetained(sensorBucket(sensor.sensorId));
     });
 
     // a rename or capability flip changes the discovery config (name, brightness
     // channel), so republish the whole sensor rather than a single property
-    this.onBus('sensor:displayName:changed', (payload) => this.republishSensor(payload as SensorLifecyclePayload));
+    this.onBus('sensor:displayName:changed', (payload) => this.republishSensor((payload as SensorLifecyclePayload).sensorId));
 
-    this.onBus('sensor:capabilities:changed', (payload) => this.republishSensor(payload as SensorLifecyclePayload));
+    this.onBus('sensor:capabilities:changed', (payload) => this.republishSensor((payload as SensorLifecyclePayload).sensorId));
+
+    // republishSensor clears everything when the sensor is no longer exposed
+    this.onBus('sensor:exposed:changed', (payload) => this.republishSensor((payload as SensorLifecyclePayload).sensorId));
 
     this.onBus('sensor:property:changed', (payload) => {
       const change = payload as SensorPropertyChangedPayload;
-      this.publishRetained(
-        change.cameraId,
-        this.manager.topics.sensorProperty(change.cameraId, change.sensorStableId, change.property),
-        JSON.stringify(change.value ?? null),
-      );
+      const sensor = this.registry.getSensor(change.sensorId);
+      if (!sensor?.data.exposed) return;
+      this.publishRetained(sensorBucket(change.sensorId), this.manager.topics.sensorProperty(change.sensorId, change.property), JSON.stringify(change.value ?? null));
     });
 
     for (const controller of this.api.getCameras()) {
@@ -157,18 +168,15 @@ export class MqttBridge {
   }
 
   public handleCommand(topic: string, payload: Buffer): void {
-    const commandRoot = `${this.manager.topics.prefix}/camera/`;
+    const commandRoot = `${this.manager.topics.prefix}/sensor/`;
     if (!topic.startsWith(commandRoot) || !topic.endsWith('/set')) return;
 
     const parts = topic.slice(commandRoot.length).split('/');
-    if (parts.length !== 5 || parts[1] !== 'sensor') return;
-    const [cameraId, , stableId, property] = parts;
+    if (parts.length !== 3) return;
+    const [sensorId, property] = parts;
 
-    const controller = this.api.getCamera(cameraId);
-    if (!controller) return;
-
-    const sensor = controller.sensorController.getAllSensors().find((s) => s.data.stableId === stableId);
-    if (!sensor || SENSOR_TYPE_CONFIG[sensor.type]?.isDetectionType) return;
+    const sensor = this.registry.getSensor(sensorId, { connectedOnly: true });
+    if (!sensor?.data.exposed || !isWritableSensor(sensor.type, sensor.pluginId)) return;
 
     sensor.updateValue(property, parseCommandPayload(payload.toString('utf8')));
   }
@@ -196,6 +204,44 @@ export class MqttBridge {
       this.subscribeCamera(controller);
       this.publishCameraState(controller);
     }
+
+    for (const sensor of this.registry.getAllSensors()) {
+      if (sensor.data.exposed) this.publishSensorState(sensor.data);
+    }
+
+    this.sweepLegacyRetained();
+  }
+
+  private sweepLegacyRetained(): void {
+    const dbs = container.resolve<Database>('dbs');
+    const record = dbs.mqttDB.get('mqtt');
+    if (!record || record.legacySensorSweepDone) return;
+
+    const haPrefix = record.haDiscovery.prefix;
+    // camera entity configs that must survive under cameraui_<cameraId>
+    const keepObjectIds = new Set(['status', 'motion', 'snapshot']);
+
+    const unsubscribers = [
+      this.manager.subscribeTrigger(`${this.manager.topics.prefix}/camera/+/sensor/#`, (topic) => {
+        this.manager.publish(topic, '', { retain: true });
+      }),
+      this.manager.subscribeTrigger(`${haPrefix}/+/+/+/config`, (topic) => {
+        const rel = topic.slice(haPrefix.length + 1).split('/');
+        if (rel.length !== 4) return;
+        const [, nodeId, objectId] = rel;
+        if (!nodeId.startsWith('cameraui_') || nodeId.startsWith('cameraui_sensor_')) return;
+        if (keepObjectIds.has(objectId) || objectId.startsWith('detection_')) return;
+        this.manager.publish(topic, '', { retain: true });
+      }),
+    ];
+
+    setTimeout(() => {
+      for (const unsubscribe of unsubscribers) unsubscribe();
+      const current = dbs.mqttDB.get('mqtt');
+      if (current) {
+        dbs.mqttDB.put('mqtt', { ...current, legacySensorSweepDone: true }).catch(() => {});
+      }
+    }, 10_000).unref();
   }
 
   private get bus(): InternalEventBus {
@@ -208,6 +254,10 @@ export class MqttBridge {
 
   private get pluginManager(): PluginManager {
     return container.resolve<PluginManager>('pluginManager');
+  }
+
+  private get registry(): SensorRegistry {
+    return container.resolve<SensorRegistry>('sensorRegistry');
   }
 
   private onBus(event: InternalEvent, handler: (payload: InternalEventPayload) => void): void {
@@ -246,10 +296,6 @@ export class MqttBridge {
         this.publishRetained(cameraId, message.topic, message.payload);
       }
     }
-
-    for (const sensor of controller.sensorController.getAllSensors()) {
-      this.publishSensorState(controller, sensor.data);
-    }
   }
 
   private publishCameraMeta(controller: CameraController): void {
@@ -265,31 +311,38 @@ export class MqttBridge {
     this.publishRetained(controller.id, this.manager.topics.cameraMeta(controller.id), JSON.stringify(meta));
   }
 
-  private republishSensor(sensor: Pick<SensorLifecyclePayload, 'cameraId' | 'sensorId'>): void {
-    const controller = this.api.getCamera(sensor.cameraId);
-    const data = controller?.sensorController.getSensor(sensor.sensorId)?.data;
-    if (controller && data) this.publishSensorState(controller, data);
+  private republishSensor(sensorId: string): void {
+    const data = this.registry.getSensor(sensorId, { connectedOnly: true })?.data;
+    if (!data) return;
+    if (!data.exposed) {
+      this.clearRetained(sensorBucket(sensorId));
+      return;
+    }
+    this.publishSensorState(data);
   }
 
-  private publishSensorState(controller: CameraController, data: StoredSensorData): void {
-    const cameraId = controller.id;
+  private publishSensorState(data: StoredSensorData): void {
+    const bucket = sensorBucket(data.id);
     const meta = {
-      stableId: data.stableId,
+      id: data.id,
       type: data.type,
       name: data.name,
       displayName: data.displayName,
       pluginId: data.pluginId,
+      assignedCameraIds: data.assignedCameraIds,
     };
-    this.publishRetained(cameraId, this.manager.topics.sensorMeta(cameraId, data.stableId), JSON.stringify(meta));
+    this.publishRetained(bucket, this.manager.topics.sensorMeta(data.id), JSON.stringify(meta));
 
     for (const [property, value] of Object.entries(data.properties)) {
-      this.publishRetained(cameraId, this.manager.topics.sensorProperty(cameraId, data.stableId, property), JSON.stringify(value ?? null));
+      this.publishRetained(bucket, this.manager.topics.sensorProperty(data.id, property), JSON.stringify(value ?? null));
     }
 
     const ha = this.manager.haDiscovery;
     if (ha.enabled) {
-      for (const message of buildSensorDiscovery(this.manager.topics, ha.prefix, controller.camera, data)) {
-        this.publishRetained(cameraId, message.topic, message.payload);
+      // exactly one assigned camera parents the HA device via via_device
+      const viaCamera = data.assignedCameraIds.length === 1 ? this.api.getCamera(data.assignedCameraIds[0])?.camera : undefined;
+      for (const message of buildSensorDiscovery(this.manager.topics, ha.prefix, data, viaCamera)) {
+        this.publishRetained(bucket, message.topic, message.payload);
       }
     }
   }

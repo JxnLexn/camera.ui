@@ -134,10 +134,12 @@ export class PluginChild {
       }
 
       this.api.deviceManager.setPlugin(this.plugin);
+      this.api.sensorManager.setPlugin(this.plugin);
 
       await this.api.deviceManager.init();
       await this.api.coreManager.init();
       await this.configureCameras(this.api, pluginInfo, cameras);
+      await this.api.sensorManager.init();
 
       this.sendMessage({ type: PLUGIN_STATUS.STARTED });
 
@@ -157,6 +159,7 @@ export class PluginChild {
     this.stopped = true;
 
     await this.emitShutdownAndWait();
+    await this.api?.sensorManager.close();
     await this.api?.deviceManager.close();
     await this.api?.coreManager.close();
     await this.api?._storageController.close();
@@ -229,7 +232,7 @@ export class PluginChild {
   private async configureCameras(api: PluginAPI, pluginInfo: PluginInfo, cameras: Camera[]): Promise<void> {
     const cameraDevices = cameras.map((camera) => {
       const cameraLogger = this.logger.createLogger({ suffix: camera.name, targetId: camera._id, targetType: 'camera' });
-      return new CameraDeviceProxy(this.proxy, api._storageController, camera, pluginInfo, cameraLogger);
+      return new CameraDeviceProxy(this.proxy, api._storageController, api.sensorManager, camera, pluginInfo, cameraLogger);
     });
 
     await this.api?.deviceManager.configureCameras(cameraDevices);

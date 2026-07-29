@@ -118,7 +118,7 @@ function cameraEvents() {
     { label: t('components.automation_nodes.system_evt_fw_stopped'), value: 'camera:frameworker:stopped' },
     { label: t('components.automation_nodes.system_evt_property_changed'), value: 'camera:property:changed' },
     { label: t('components.automation_nodes.system_evt_sensor_added'), value: 'sensor:added' },
-    { label: t('components.automation_nodes.system_evt_sensor_removed'), value: 'sensor:removed' },
+    { label: t('components.automation_nodes.system_evt_sensor_deleted'), value: 'sensor:deleted' },
   ];
 }
 

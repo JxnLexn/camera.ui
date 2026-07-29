@@ -28,17 +28,13 @@ from _camera_ui_tools.camera_ui_sdk import (
     DetectionEventPayload,
     DetectionLine,
     DetectionZone,
-    Disposable,
     LoggerService,
     Observable,
-    PluginContract,
     ProbeConfig,
     ProbeStream,
     PtzAutotrackSettings,
     RTSPUrlOptions,
     Sensor,
-    SensorEventData,
-    SensorLike,
     SensorType,
     SnapshotSettings,
     SnapshotUrlOptions,
@@ -51,7 +47,6 @@ from _camera_ui_tools.camera_ui_sdk import (
     share,
 )
 from _camera_ui_tools.camera_ui_sdk import CameraDevice as CameraDeviceInterface
-from _camera_ui_tools.camera_ui_sdk.internal import SensorJSON
 from plugins.runtime.python.camera.utils import build_snapshot_url, build_target_url
 from plugins.runtime.python.namespaces import (
     CameraNamespaces,
@@ -59,25 +54,20 @@ from plugins.runtime.python.namespaces import (
     FrameWorkerNamespaces,
     NamespaceManager,
     PluginCameraNamespaces,
-    SensorControllerNamespaces,
+    SensorRegistryNamespaces,
 )
 from plugins.runtime.python.proxy.sensor import (
     DetectionCoordinatorRPC,
-    SensorControllerInterface,
-    SensorProxy,
+    SensorRegistryInterface,
 )
 from plugins.runtime.python.remote_urls import rewrite_source_urls_for_remote
 from plugins.runtime.python.typings import (
     CameraEventMessage,
     PluginInfo,
-    SensorAddedEvent,
-    SensorAssignmentChangedEvent,
-    SensorEventMessage,
-    SensorRemovedEvent,
-    StoredSensorData,
 )
 
 if TYPE_CHECKING:
+    from plugins.runtime.python.proxy.sensor_manager import SensorManagerProxy
     from plugins.runtime.python.storage_controller import StorageController
 
 
@@ -86,9 +76,11 @@ DETECTION_SENSOR_TYPES: frozenset[SensorType] = frozenset(
         SensorType.Motion,
         SensorType.Audio,
         SensorType.Object,
+        SensorType.ObjectAssist,
         SensorType.Face,
         SensorType.LicensePlate,
         SensorType.Classifier,
+        SensorType.Clip,
     }
 )
 
@@ -104,8 +96,6 @@ class CameraControllerInterface(Protocol):
         refresh: bool | None = False,
     ) -> ProbeStream | None: ...
     async def refreshStates(self) -> dict[str, Any]: ...
-    async def registerSensor(self, sensor: SensorJSON, plugin_id: str) -> bool: ...
-    async def unregisterSensor(self, sensor_id: str) -> None: ...
     async def streamUrl(self, source_id: str) -> str | None: ...
     async def getStreamStatus(self, source_id: str) -> str: ...
 
@@ -148,6 +138,7 @@ class CameraDeviceProxy(Subscribed, CameraDeviceInterface):
         self,
         proxy: RPCClient,
         storage_controller: StorageController,
+        sensor_manager: SensorManagerProxy,
         camera: Camera,
         plugin: PluginInfo,
         logger: LoggerService,
@@ -167,18 +158,14 @@ class CameraDeviceProxy(Subscribed, CameraDeviceInterface):
         self._logger = logger
         self._proxy = proxy
         self._plugin = plugin
-        self._contract: PluginContract = plugin["contract"]
         self._storage_controller: StorageController = storage_controller
+        self._sensor_manager = sensor_manager
 
-        self._sensor_added_subject: Subject[SensorEventData] = Subject()
-        self._sensor_removed_subject: Subject[SensorEventData] = Subject()
         self._detection_event_subject: Subject[DetectionEventPayload] = Subject()
 
         self._close_subscription: CloseHandler | None = None
-        self._close_sensor_subscription: CloseHandler | None = None
         self._close_detection_subscription: CloseHandler | None = None
 
-        self._sensors: dict[str, SensorProxy] = {}
         self._owned_sensors: dict[str, tuple[Sensor[Any, Any, Any], SensorType]] = {}
         self._sensor_cleanup_functions: dict[str, CloseHandler] = {}
 
@@ -190,13 +177,13 @@ class CameraDeviceProxy(Subscribed, CameraDeviceInterface):
             CameraNamespaces,
             FrameWorkerNamespaces,
             PluginCameraNamespaces,
-            SensorControllerNamespaces,
+            SensorRegistryNamespaces,
             FrameWorkerDetectionNamespaces,
         ] = (
             NamespaceManager.camera_namespaces(self.id),
             NamespaceManager.frame_worker_namespaces(self.id),
             NamespaceManager.plugin_camera_namespaces(self._plugin["id"], self.id),
-            NamespaceManager.sensor_controller_namespaces(self.id),
+            NamespaceManager.sensor_registry_namespaces(),
             NamespaceManager.frame_worker_detection_namespaces(self.id),
         )
 
@@ -340,8 +327,8 @@ class CameraDeviceProxy(Subscribed, CameraDeviceInterface):
         return self._proxy.create_proxy(self._namespaces[0].camera_controller_rpc)
 
     @property
-    def _sensor_controller_proxy(self) -> SensorControllerInterface:
-        return self._proxy.create_proxy(self._namespaces[3].sensor_rpc)
+    def _sensor_registry_proxy(self) -> SensorRegistryInterface:
+        return self._proxy.create_proxy(self._namespaces[3].sensors_rpc)
 
     @property
     def _detection_coordinator_proxy(self) -> DetectionCoordinatorRPC:
@@ -349,14 +336,6 @@ class CameraDeviceProxy(Subscribed, CameraDeviceInterface):
 
     def getSourceById(self, id: str) -> CameraDeviceSource | None:
         return next((s for s in self.sources if s._id == id), None)  # pyright: ignore[reportPrivateUsage]
-
-    def _can_access_sensor(self, sensor: StoredSensorData) -> bool:
-        # Own sensors are always accessible
-        if sensor.get("pluginId") == self._plugin["id"]:
-            return True
-
-        # Foreign sensors require consumes declaration
-        return "consumes" in self._contract and sensor["type"] in self._contract["consumes"]
 
     async def init(self) -> None:
         if self._initialized.value:
@@ -366,10 +345,6 @@ class CameraDeviceProxy(Subscribed, CameraDeviceInterface):
 
         self._close_subscription = await self._proxy.subscribe(
             self._namespaces[0].camera_subject, self._on_event_message
-        )
-
-        self._close_sensor_subscription = await self._proxy.subscribe(
-            self._namespaces[3].sensor_subject, self._on_global_sensor_event
         )
 
         ns = NamespaceManager.detection_event_namespaces(self.id)
@@ -382,7 +357,6 @@ class CameraDeviceProxy(Subscribed, CameraDeviceInterface):
         )
 
         await self._refresh_states()
-        await self._initialize_sensors()
 
     async def connect(self) -> None:
         if not self.pluginInfo or self.pluginInfo["id"] != self._plugin["id"]:
@@ -435,98 +409,81 @@ class CameraDeviceProxy(Subscribed, CameraDeviceInterface):
     def createStorage(self, schemas: list[Any]) -> Any:
         return self._storage_controller.createCameraStorage(self.id, schemas)
 
-    def getSensors(self) -> list[SensorLike]:
-        owned_sensors = [entry[0] for entry in self._owned_sensors.values()]
-        proxy_sensors = list(self._sensors.values())
-        return [*owned_sensors, *proxy_sensors]
-
-    def getSensor(self, sensorId: str) -> SensorLike | None:
-        # Check if we own this sensor - return the real sensor
-        owned = self._owned_sensors.get(sensorId)
-        if owned:
-            return owned[0]
-        # Return proxy for foreign sensors
-        return self._sensors.get(sensorId)
-
-    def getSensorsByType(self, sensorType: SensorType) -> list[SensorLike]:
-        return [s for s in self.getSensors() if s.type == sensorType]
-
     async def addSensor(self, sensor: Sensor[Any, Any, Any]) -> None:
-        plugin_id = self._plugin["id"]
+        # pre-standalone SDK: its toJSON reads the removed cameraId getter and throws
+        if not callable(getattr(sensor, "_setId", None)):
+            self._logger.warn(
+                f'Plugin "{self._plugin["id"]}" uses a pre-standalone SDK, sensor "{sensor.name}" stays unavailable. Update the plugin.'
+            )
+            return
 
-        sensor._setCameraId(self.id)  # pyright: ignore[reportPrivateUsage]
+        plugin_id = self._plugin["id"]
         sensor._setPluginId(plugin_id)  # pyright: ignore[reportPrivateUsage]
+
+        sensor_json = sensor.toJSON()
+        sensor_json["requiresFrames"] = getattr(sensor, "_requires_frames", False) is True
+        model_spec = getattr(sensor, "modelSpec", None)
+        if model_spec:
+            sensor_json["modelSpec"] = model_spec
+        # derived nativeId keeps per-camera instances of same-named sensors distinct
+        if not sensor_json.get("nativeId"):
+            sensor_json["nativeId"] = f"{self.id}:{sensor.type}:{sensor.name}"
+
+        # register first: the host reconciles against the persisted entity and
+        # hands back the durable id every namespace binds to
+        registration = await self._sensor_registry_proxy.registerSensor(
+            sensor_json, plugin_id, {"assignCameraId": self.id}
+        )
+        sensor._setId(registration["id"])  # pyright: ignore[reportPrivateUsage]
+        sensor._setAssignedCameras(registration["assignedCameraIds"])  # pyright: ignore[reportPrivateUsage]
+
+        # assignment changes arrive on the global stream the sensor manager owns
+        await self._sensor_manager.track_camera_sensor(sensor)
+
+        sensor_namespace = NamespaceManager.sensor_provider_namespaces(plugin_id, sensor.id).sensor_rpc
 
         sensor_type = sensor.type
         sensor._init(  # pyright: ignore[reportPrivateUsage]
             lambda properties: self._on_sensor_state_write(sensor.id, sensor_type, properties)
         )
-
         sensor._initCapabilities(lambda caps: self._on_sensor_capabilities_changed(sensor.id, caps))  # pyright: ignore[reportPrivateUsage]
 
-        schemas = sensor.storage_schema
-        storage = self._storage_controller.createSensorStorage(
-            self.id,
-            sensor.type,
-            plugin_id,
-            sensor.name,
-            sensor.id,
-            schemas,
-        )
+        storage = self._storage_controller.createSensorStorage(plugin_id, sensor.id, sensor.storage_schema)
         await storage.register_storage()
-
-        saved_display_name = storage.values.get("_displayName")
-        sensor.displayName = saved_display_name if saved_display_name else sensor.name
-
         sensor._setStorage(storage)  # pyright: ignore[reportPrivateUsage]
 
-        sensor_namespace = NamespaceManager.sensor_provider_namespaces(
-            plugin_id, self.id, sensor.id
-        ).sensor_rpc
+        rpc_cleanup = await self._proxy.register_handler(sensor_namespace, sensor, without_decorators=True)
 
-        requires_frames = getattr(sensor, "_requires_frames", False)
-        model_spec = getattr(sensor, "modelSpec", None)
-
-        cleanup = await self._proxy.register_handler(sensor_namespace, sensor, without_decorators=True)
-        self._sensor_cleanup_functions[sensor.id] = cleanup
-
-        sensor_json = sensor.toJSON()
-        sensor_json["requiresFrames"] = requires_frames
-        if model_spec:
-            sensor_json["modelSpec"] = model_spec
-
-        is_assigned = await self._camera_controller_proxy.registerSensor(sensor_json, plugin_id)
-        sensor._setAssigned(is_assigned)  # pyright: ignore[reportPrivateUsage]
         self._owned_sensors[sensor.id] = (sensor, sensor.type)
 
-        sensor_event_ns = NamespaceManager.sensor_event_namespaces(self.id, sensor.id)
+        # Subscribe to backend-initiated property changes for the owned sensor so that
+        # backend updates (e.g., motion dwell timer) sync into the local sensor state.
+        sensor_event_ns = NamespaceManager.sensor_event_namespaces(sensor.id)
 
         async def handle_backend_event(event: dict[str, Any]) -> None:
             if event.get("type") == "property:changed":
                 change_data = event.get("data", {})
                 prop = change_data.get("property")
-                value = change_data.get("value")
-                timestamp = change_data.get("timestamp")
                 if prop is not None:
-                    sensor._onBackendPropertyChanged(prop, value, timestamp)  # pyright: ignore[reportPrivateUsage]
+                    sensor._onBackendPropertyChanged(  # pyright: ignore[reportPrivateUsage]
+                        prop, change_data.get("value"), change_data.get("timestamp")
+                    )
 
         unsubscribe_backend = await self._proxy.subscribe(
             sensor_event_ns.sensor_subject, handle_backend_event
         )
 
-        existing_cleanup = self._sensor_cleanup_functions.get(sensor.id)
-        if existing_cleanup:
+        async def combined_cleanup() -> None:
+            await unsubscribe_backend()
+            await rpc_cleanup()
 
-            async def combined_cleanup() -> None:
-                await unsubscribe_backend()
-                await existing_cleanup()
+        self._sensor_cleanup_functions[sensor.id] = combined_cleanup
 
-            self._sensor_cleanup_functions[sensor.id] = combined_cleanup
-        else:
-            self._sensor_cleanup_functions[sensor.id] = unsubscribe_backend
+        sensor._setActive(True)  # pyright: ignore[reportPrivateUsage]
 
     async def removeSensor(self, sensorId: str) -> None:
-        await self._camera_controller_proxy.unregisterSensor(sensorId)
+        self._sensor_manager.untrack_camera_sensor(sensorId)
+        await self._sensor_registry_proxy.unregisterSensor(sensorId)
 
         cleanup = self._sensor_cleanup_functions.pop(sensorId, None)
         if cleanup:
@@ -535,64 +492,6 @@ class CameraDeviceProxy(Subscribed, CameraDeviceInterface):
         owned = self._owned_sensors.pop(sensorId, None)
         if owned:
             owned[0]._cleanup()  # pyright: ignore[reportPrivateUsage]
-
-        proxy = self._sensors.get(sensorId)
-        if proxy:
-            await proxy._unsubscribe_from_events()  # pyright: ignore[reportPrivateUsage]
-            self._sensors.pop(sensorId, None)
-
-    @property
-    def onSensorAdded(self) -> Observable[SensorEventData]:
-        return self._sensor_added_subject.as_observable()
-
-    @property
-    def onSensorRemoved(self) -> Observable[SensorEventData]:
-        return self._sensor_removed_subject.as_observable()
-
-    def onSensorProperty(
-        self,
-        sensor_type: SensorType,
-        property: str,
-        callback: Any,
-    ) -> Disposable:
-        property_sub: Disposable | None = None
-
-        def subscribe_to(sensor: SensorLike) -> None:
-            nonlocal property_sub
-            if property_sub is not None:
-                property_sub.dispose()
-            property_sub = sensor.onPropertyChanged.subscribe(
-                lambda e: callback(e["value"], e["timestamp"], sensor) if e["property"] == property else None
-            )
-
-        existing = self.getSensorsByType(sensor_type)
-        if existing:
-            subscribe_to(existing[0])
-
-        added_sub = self.onSensorAdded.subscribe(
-            lambda e: (
-                subscribe_to(self.getSensorsByType(sensor_type)[0])
-                if e["sensorType"] == sensor_type and self.getSensorsByType(sensor_type)
-                else None
-            )
-        )
-
-        def on_removed(e: SensorEventData) -> None:
-            nonlocal property_sub
-            if e["sensorType"] == sensor_type and property_sub is not None:
-                property_sub.dispose()
-                property_sub = None
-
-        removed_sub = self.onSensorRemoved.subscribe(on_removed)
-
-        def teardown() -> None:
-            nonlocal property_sub
-            if property_sub is not None:
-                property_sub.dispose()
-            added_sub.dispose()
-            removed_sub.dispose()
-
-        return Disposable(teardown)
 
     @property
     def onDetectionEvent(self) -> Observable[DetectionEventPayload]:
@@ -636,10 +535,6 @@ class CameraDeviceProxy(Subscribed, CameraDeviceInterface):
             await self._close_subscription()
             self._close_subscription = None
 
-        if self._close_sensor_subscription:
-            await self._close_sensor_subscription()
-            self._close_sensor_subscription = None
-
         if self._close_detection_subscription:
             await self._close_detection_subscription()
             self._close_detection_subscription = None
@@ -654,21 +549,16 @@ class CameraDeviceProxy(Subscribed, CameraDeviceInterface):
                 await cleanup()
         self._sensor_cleanup_functions.clear()
 
-        for sensor_proxy in list(self._sensors.values()):
-            await sensor_proxy._unsubscribe_from_events()  # pyright: ignore[reportPrivateUsage]
-
         for owned_sensor, _ in list(self._owned_sensors.values()):
+            self._sensor_manager.untrack_camera_sensor(owned_sensor.id)
             owned_sensor._cleanup()  # pyright: ignore[reportPrivateUsage]
 
-        self._sensors.clear()
         self._owned_sensors.clear()
 
         self._camera_subject.complete()
         self._camera_state.complete()
         self._frame_worker_state.complete()
         self._initialized.complete()
-        self._sensor_added_subject.complete()
-        self._sensor_removed_subject.complete()
         self._detection_event_subject.complete()
 
     async def _refresh_states(self) -> None:
@@ -677,54 +567,6 @@ class CameraDeviceProxy(Subscribed, CameraDeviceInterface):
         self._camera_subject.next(response["camera"])
         self._camera_state.next(response["cameraState"])
         self._frame_worker_state.next(response["frameWorkerState"])
-
-    async def _initialize_sensors(self) -> None:
-        try:
-            sensors = await self._sensor_controller_proxy.getSensors(self._plugin["id"])
-            newly_added: list[SensorProxy] = []
-
-            for sensor_data in sensors:
-                if sensor_data["id"] in self._sensors:
-                    continue
-
-                if sensor_data["id"] in self._owned_sensors:
-                    continue
-
-                plugin_id = sensor_data.get("pluginId", self._plugin["id"])
-                owner_ns = NamespaceManager.sensor_provider_namespaces(
-                    plugin_id, self.id, sensor_data["id"]
-                ).sensor_rpc
-                proxy = SensorProxy(sensor_data, self._proxy, owner_ns, self.id)
-                self._sensors[sensor_data["id"]] = proxy
-                newly_added.append(proxy)
-
-            current_ids = {s["id"] for s in sensors}
-            for sensor_id in list(self._sensors.keys()):
-                if sensor_id not in current_ids:
-                    sensor = self._sensors.get(sensor_id)
-                    if sensor:
-                        await sensor._unsubscribe_from_events()  # pyright: ignore[reportPrivateUsage]
-                    self._sensors.pop(sensor_id, None)
-
-            if newly_added:
-                await self._get_sensor_states(newly_added)
-                # Subscribe each sensor to its own per-sensor namespace
-                for sensor in newly_added:
-                    await sensor._subscribe_to_events()  # pyright: ignore[reportPrivateUsage]
-
-        except Exception:
-            # SensorController not available yet
-            pass
-
-    async def _get_sensor_states(self, sensors: list[SensorProxy]) -> None:
-        try:
-            states = await self._sensor_controller_proxy.getSensorStates()
-            for sensor in sensors:
-                state = states.get(sensor.id)
-                if state:
-                    sensor._apply_refreshed_state(state)  # pyright: ignore[reportPrivateUsage]
-        except Exception:
-            pass
 
     async def _on_event_message(self, event: CameraEventMessage) -> None:
         if not self._initialized.value:
@@ -741,56 +583,6 @@ class CameraDeviceProxy(Subscribed, CameraDeviceInterface):
             self._camera_state.next(cast(bool, data))
         elif event_type == "frameWorkerState" and data is not None:
             self._frame_worker_state.next(cast(bool, data))
-
-    async def _on_global_sensor_event(self, event: SensorEventMessage) -> None:
-        if not self._initialized.value:
-            return
-
-        event_type = event.get("type")
-
-        if event_type == "sensor:added":
-            added_data = cast(SensorAddedEvent, event.get("data"))
-            sensor_data = added_data["sensor"]
-            # Only add if not already in cache and not our own sensor
-            if sensor_data["id"] not in self._sensors and sensor_data["id"] not in self._owned_sensors:
-                # Check if plugin can access this sensor based on contract.consumes
-                if not self._can_access_sensor(sensor_data):
-                    return  # Skip - sensor type not in contract.consumes
-                plugin_id = sensor_data.get("pluginId", self._plugin["id"])
-                owner_ns = NamespaceManager.sensor_provider_namespaces(
-                    plugin_id, self.id, sensor_data["id"]
-                ).sensor_rpc
-                proxy = SensorProxy(sensor_data, self._proxy, owner_ns, self.id)
-                await proxy._subscribe_to_events()  # pyright: ignore[reportPrivateUsage]
-                self._sensors[sensor_data["id"]] = proxy
-
-            self._sensor_added_subject.next(
-                {"sensorId": sensor_data["id"], "sensorType": sensor_data["type"]}
-            )
-
-        elif event_type == "sensor:removed":
-            removed_data = cast(SensorRemovedEvent, event.get("data"))
-            sensor = self._sensors.get(removed_data["sensorId"])
-            if sensor:
-                await sensor._unsubscribe_from_events()  # pyright: ignore[reportPrivateUsage]
-            self._sensors.pop(removed_data["sensorId"], None)
-
-            self._sensor_removed_subject.next(
-                {
-                    "sensorId": removed_data["sensorId"],
-                    "sensorType": removed_data["sensorType"],
-                }
-            )
-
-        elif event_type == "sensor:assignment:changed":
-            assign_data = cast(SensorAssignmentChangedEvent, event.get("data"))
-            sensor_type = assign_data["sensorType"]
-            is_assigned = assign_data["assigned"]
-
-            if assign_data["pluginId"] == self._plugin["id"]:
-                for _, (owned_sensor, s_type) in self._owned_sensors.items():
-                    if s_type == sensor_type:
-                        owned_sensor._setAssigned(is_assigned)  # pyright: ignore[reportPrivateUsage]
 
     def _on_sensor_state_write(
         self, sensor_id: str, sensor_type: SensorType, properties: dict[str, Any]
@@ -810,16 +602,16 @@ class CameraDeviceProxy(Subscribed, CameraDeviceInterface):
             self._tasks.add(notify_coordinator())
             return
 
-        async def notify_controller() -> None:
+        async def notify_registry() -> None:
             with contextlib.suppress(Exception):
-                await self._sensor_controller_proxy.updatePropertyValues(sensor_id, properties)
+                await self._sensor_registry_proxy.updatePropertyValues(sensor_id, properties)
 
-        self._tasks.add(notify_controller())
+        self._tasks.add(notify_registry())
 
     def _on_sensor_capabilities_changed(self, sensor_id: str, capabilities: list[str]) -> None:
         async def notify() -> None:
             with contextlib.suppress(Exception):
-                await self._sensor_controller_proxy.updateCapabilities(sensor_id, capabilities)
+                await self._sensor_registry_proxy.updateCapabilities(sensor_id, capabilities)
 
         self._tasks.add(notify())
 

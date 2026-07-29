@@ -114,7 +114,7 @@ export class PtzAutotracker {
       // ignore
     }
 
-    const subject = NamespaceManager.sensorEventNamespaces(this.deps.cameraId, info.sensorId).sensorSubject;
+    const subject = NamespaceManager.sensorEventNamespaces(info.sensorId).sensorSubject;
     this.watcherUnsubscribe = await this.deps.proxy.subscribe<{ type: string; data: PropertyChangedEvent }>(subject, (msg) => {
       if (msg.type !== 'property:changed') return;
       if (msg.data.sensorId !== this.sensorInfo?.sensorId) return;
@@ -591,7 +591,7 @@ export class PtzAutotracker {
   }
 
   private getPtzRpc(ptz: PtzSensorInfo): Promisify<SensorLike> {
-    const ns = NamespaceManager.sensorProviderNamespaces(ptz.pluginId, this.deps.cameraId, ptz.sensorId).sensorRpc;
+    const ns = NamespaceManager.sensorProviderNamespaces(ptz.pluginId, ptz.sensorId).sensorRpc;
     return this.deps.proxy.createProxy<SensorLike>(ns);
   }
 }

@@ -1,5 +1,5 @@
 import { isEqual, structuredClone, Subscribed } from '@camera.ui/common/utils';
-import { BehaviorSubject, Disposable, distinctUntilChanged, filter, mergeMap, pairwise, ReplaySubject, share } from '@camera.ui/sdk';
+import { BehaviorSubject, distinctUntilChanged, filter, mergeMap, pairwise, ReplaySubject, share } from '@camera.ui/sdk';
 import { TTLCache } from '@isaacs/ttlcache';
 
 import type {
@@ -25,8 +25,6 @@ import type {
   LoggerService,
   Observable,
   Sensor,
-  SensorLike,
-  SensorType,
   SnapshotSettings,
 } from '@camera.ui/sdk';
 
@@ -43,8 +41,6 @@ export abstract class CameraDevice extends Subscribed implements CameraDeviceInt
   public readonly onConnected = this.#createStateObservable(this.cameraState);
   public readonly onFrameWorkerConnected = this.#createStateObservable(this.frameWorkerState);
 
-  public abstract readonly onSensorAdded: Observable<{ sensorId: string; sensorType: SensorType }>;
-  public abstract readonly onSensorRemoved: Observable<{ sensorId: string; sensorType: SensorType }>;
   public abstract readonly onDetectionEvent: Observable<{ type: DetectionEventType; event: DetectionEvent }>;
 
   protected snapshotCache: TTLCache<string, CachedSnapshot>;
@@ -178,48 +174,10 @@ export abstract class CameraDevice extends Subscribed implements CameraDeviceInt
   public abstract connect(): Promise<void>;
   public abstract disconnect(): Promise<void>;
 
-  public abstract getSensors(): SensorLike[];
-  public abstract getSensor(sensorId: string): SensorLike | undefined;
-  public abstract getSensorsByType(type: SensorType): SensorLike[];
-
   public abstract addSensor<T extends object>(sensor: Sensor<T>): Promise<void>;
   public abstract removeSensor(sensorId: string): Promise<void>;
 
   public abstract implement(impl: CameraImplementation): Promise<void>;
-
-  public onSensorProperty<T = unknown>(sensorType: SensorType, property: string, callback: (value: T, timestamp: number, sensor: SensorLike) => void): Disposable {
-    let propertySub: Disposable | undefined;
-
-    const subscribeTo = (sensor: SensorLike) => {
-      propertySub?.dispose();
-      propertySub = sensor.onPropertyChanged.subscribe(({ property: p, value, timestamp }) => {
-        if (p === property) callback(value as T, timestamp, sensor);
-      });
-    };
-
-    const existing = this.getSensorsByType(sensorType)[0];
-    if (existing) subscribeTo(existing);
-
-    const addedSub = this.onSensorAdded.subscribe(({ sensorType: type }) => {
-      if (type === sensorType) {
-        const sensor = this.getSensorsByType(sensorType)[0];
-        if (sensor) subscribeTo(sensor);
-      }
-    });
-
-    const removedSub = this.onSensorRemoved.subscribe(({ sensorType: type }) => {
-      if (type === sensorType) {
-        propertySub?.dispose();
-        propertySub = undefined;
-      }
-    });
-
-    return new Disposable(() => {
-      propertySub?.dispose();
-      addedSub.dispose();
-      removedSub.dispose();
-    });
-  }
 
   public onPropertyChange<T extends keyof Camera>(property: T | T[]): Observable<{ property: T; oldData: Camera[T]; newData: Camera[T] }> {
     return this.cameraSubject.pipe(

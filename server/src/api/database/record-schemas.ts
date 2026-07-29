@@ -30,10 +30,8 @@ const dbCameraShortcutSchema = zod.object({
 const dbSensorShortcutSchema = zod.object({
   _id: zod.string(),
   type: zod.literal('sensor'),
+  sensorId: zod.string(),
   sensorType: sensorShortcutTypeSchema,
-  sensorName: zod.string(),
-  sensorPluginId: zod.string(),
-  sensorCameraId: zod.string(),
   points: pointsSchema,
 });
 
@@ -182,6 +180,7 @@ export const dbMqttSchema = zod.object({
       prefix: zod.string().default('homeassistant'),
     })
     .default({ enabled: false, prefix: 'homeassistant' }),
+  legacySensorSweepDone: zod.boolean().default(false),
 });
 
 export const dbCloudSchema = zod.object({

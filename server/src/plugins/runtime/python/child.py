@@ -155,10 +155,12 @@ class PluginChild:
                 await self.file_server.register()
 
             self.api.device_manager.set_plugin(self.plugin)
+            self.api.sensor_manager.set_plugin(self.plugin)
 
             await self.api.device_manager.init()
             await self.api.core_manager.init()
             await self.configure_cameras(self.api, plugin_info, cameras)
+            await self.api.sensor_manager.init()
 
             await self.send_message({"type": PLUGIN_STATUS.STARTED.value})
 
@@ -185,6 +187,7 @@ class PluginChild:
                     f"Shutdown listeners still pending after {SHUTDOWN_LISTENER_TIMEOUT}s, continuing teardown"
                 )
 
+            await self.api.sensor_manager.close()
             await self.api.device_manager.close()
             await self.api.core_manager.close()
             await self.api.storage_controller.close()
@@ -268,6 +271,7 @@ class PluginChild:
                 CameraDeviceProxy(
                     self.proxy,
                     api.storage_controller,
+                    api.sensor_manager,
                     camera,
                     plugin_info,
                     camera_logger,

@@ -137,6 +137,8 @@ export interface DBMqtt {
     enabled: boolean;
     prefix: string;
   };
+  // one-time broker cleanup of pre-standalone camera-scoped sensor topics
+  legacySensorSweepDone: boolean;
 }
 
 export interface ServerOAuthCredentials {
@@ -180,10 +182,8 @@ export interface DBCameraShortcut extends DBShortcutBase {
 
 export interface DBSensorShortcut extends DBShortcutBase {
   type: 'sensor';
+  sensorId: string;
   sensorType: SensorShortcutType;
-  sensorName: string;
-  sensorPluginId: string;
-  sensorCameraId: string;
 }
 
 export type DBShortcut = DBCameraShortcut | DBSensorShortcut;
@@ -331,6 +331,28 @@ export interface DBAutomation {
   updatedAt: number;
 }
 
+export interface DBSensor {
+  readonly _id: string;
+  nativeId?: string;
+  pluginInfo: { id: string; name: string };
+  type: SensorType;
+  name: string;
+  displayName?: string;
+  assignedCameraIds: string[];
+  exposed: boolean;
+  state?: Record<string, unknown>;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface DBSensorHistoryEntry {
+  sensorId: string;
+  property: string;
+  value: string | number | boolean | null;
+  timestamp: number;
+}
+
+/** @deprecated pre-standalone shape, read only by the v2.1.0 migration, remove with it */
 export interface DBVirtualSensor {
   readonly _id: string;
   cameraId: string;

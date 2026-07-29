@@ -17,7 +17,7 @@
         <span class="cui-light-control__brightness-value">{{ brightnessValue }}%</span>
       </div>
 
-      <Slider v-model="brightnessValue" :min="0" :max="100" :step="1" :disabled="disabled" class="cui-light-control__slider" />
+      <Slider v-model="brightnessValue" :min="0" :max="100" :step="1" :disabled="disabled" class="cui-light-control__slider" @slideend="flushBrightness" />
     </div>
   </div>
 </template>
@@ -32,7 +32,10 @@ const emit = defineEmits<CuiLightControlEmits>();
 
 const { on, brightness, hasBrightness } = toRefs(props);
 
+const localBrightness = ref<number | undefined>(undefined);
 const lastBrightness = ref(brightness.value > 0 ? brightness.value : 100);
+
+const emitBrightness = useThrottleFn((value: number) => emit('update:brightness', value), 250, true);
 
 const isOn = computed({
   get: () => on.value,
@@ -45,13 +48,14 @@ const isOn = computed({
 });
 
 const brightnessValue = computed({
-  get: () => brightness.value,
+  get: () => localBrightness.value ?? brightness.value,
   set: (value: number) => {
     if (value > 0) {
       lastBrightness.value = value;
     }
 
-    emit('update:brightness', value);
+    localBrightness.value = value;
+    emitBrightness(value);
 
     if (value === 0 && on.value) {
       emit('update:on', false);
@@ -73,6 +77,11 @@ const iconGlowStyle = computed<Record<string, string | number>>(() => {
     opacity: 0.4 + glowIntensity * 0.6,
   };
 });
+
+function flushBrightness() {
+  if (localBrightness.value !== undefined) emit('update:brightness', localBrightness.value);
+  localBrightness.value = undefined;
+}
 </script>
 
 <style scoped>

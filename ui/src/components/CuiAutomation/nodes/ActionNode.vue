@@ -27,8 +27,9 @@
 </template>
 
 <script setup lang="ts">
-import { useCameraNames } from '../config/useCameraOptions.js';
+import { useAllSensors } from '@camera.ui/browser';
 import { useNodeIssues } from '../config/flowValidation.js';
+import { useCameraNames } from '../config/useCameraOptions.js';
 import { getNodeDefinition } from '../nodeDefinitions.js';
 import { getNodeSummary } from '../utils.js';
 import BaseNode from './BaseNode.vue';
@@ -48,10 +49,12 @@ const nodeWarning = useNodeIssues(() => props.id);
 const definition = computed(() => getNodeDefinition(props.type));
 const label = computed(() => (definition.value ? t(definition.value.labelKey) : props.type));
 const { cameraName } = useCameraNames();
+const { sensors: allSensors } = useAllSensors();
+
 const subtitle = computed(() => {
   const data = props.data as unknown as Record<string, unknown>;
   const alias = data.alias as string | undefined;
-  let text = getNodeSummary(props.data, cameraName);
+  let text = getNodeSummary(props.data, cameraName, sensorLabel);
   if (data.type === 'action-plugin' && data.repeat && (data.repeat as number) > 1) text = text ? `${text} (${data.repeat}x)` : `${data.repeat}x`;
 
   if (alias && text) return `[${alias}] ${text}`;
@@ -63,4 +66,9 @@ const outputEntries = computed(() => {
   if (props.type !== 'action-output' || !lastOutput.value) return [];
   return Object.entries(lastOutput.value);
 });
+
+function sensorLabel(id: string): string | undefined {
+  const sensor = allSensors.value.find((s) => s.id === id);
+  return sensor ? sensor.displayName.value || sensor.name : undefined;
+}
 </script>

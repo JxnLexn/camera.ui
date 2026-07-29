@@ -3,12 +3,14 @@ import type { PropertyChangedEvent, SensorJSON } from '@camera.ui/sdk/internal';
 
 export interface StoredSensorData {
   id: string;
-  stableId: string;
-  globalId: string;
   type: SensorType;
   name: string;
   displayName: string;
+  nativeId?: string;
   pluginId: string;
+  assignedCameraIds: string[];
+  exposed: boolean;
+  connected: boolean;
   properties: Record<string, unknown>;
   capabilities: string[];
   requiresFrames?: boolean;
@@ -22,8 +24,18 @@ export interface SensorRefreshedState {
   displayName?: string;
 }
 
-export interface SensorControllerInterface {
-  registerSensor(sensor: SensorJSON, pluginId: string): boolean;
+export interface SensorRegistration {
+  id: string;
+  assignedCameraIds: string[];
+  active: boolean;
+}
+
+export interface RegisterSensorOptions {
+  assignCameraId?: string;
+}
+
+export interface SensorRegistryInterface {
+  registerSensor(sensor: SensorJSON, pluginId: string, options?: RegisterSensorOptions): SensorRegistration;
   unregisterSensor(sensorId: string): void;
   updatePropertyValues(sensorId: string, properties: Record<string, unknown>): void;
   updateCapabilities(sensorId: string, capabilities: string[]): void;
@@ -32,8 +44,7 @@ export interface SensorControllerInterface {
   getSensorState(sensorId: string): SensorRefreshedState;
   getSensorStates(): Record<string, SensorRefreshedState>;
   getSensors(pluginId?: string): StoredSensorData[];
-  getSensor(sensorId: string, pluginId?: string): StoredSensorData | undefined;
-  getSensorByType(sensorType: SensorType, pluginId?: string): StoredSensorData | undefined;
+  getSensorRpc(sensorId: string, pluginId?: string): StoredSensorData | undefined;
   setDisplayName(sensorId: string, displayName: string): void;
 }
 
@@ -48,39 +59,63 @@ export interface SensorEventHandlerInterface {
 }
 
 export interface SensorAddedEvent {
-  cameraId: string;
   sensor: StoredSensorData;
   state: SensorRefreshedState;
 }
 
-export interface SensorRemovedEvent {
-  cameraId: string;
+export interface SensorDeletedEvent {
   sensorId: string;
   sensorType: SensorType;
 }
 
+export interface SensorConnectedChangedEvent {
+  sensorId: string;
+  sensorType: SensorType;
+  connected: boolean;
+}
+
 export interface SensorCapabilitiesChangedEvent {
-  cameraId: string;
   sensorId: string;
   capabilities: string[];
 }
 
 export interface SensorDisplayNameChangedEvent {
-  cameraId: string;
   sensorId: string;
   displayName: string;
 }
 
-export interface SensorAssignmentChangedEvent {
-  cameraId: string;
-  pluginId: string;
+export interface SensorExposedChangedEvent {
+  sensorId: string;
   sensorType: SensorType;
+  exposed: boolean;
+}
+
+export interface SensorAssignmentChangedEvent {
+  sensorId: string;
+  sensorType: SensorType;
+  cameraId: string;
   assigned: boolean;
 }
 
 export interface SensorEventMessage {
-  type: 'property:changed' | 'sensor:added' | 'sensor:removed' | 'sensor:displayName:changed' | 'sensor:capabilities:changed' | 'sensor:assignment:changed';
-  data: PropertyChangedEvent | SensorAddedEvent | SensorRemovedEvent | SensorDisplayNameChangedEvent | SensorCapabilitiesChangedEvent | SensorAssignmentChangedEvent;
+  type:
+    | 'property:changed'
+    | 'sensor:added'
+    | 'sensor:deleted'
+    | 'sensor:connected:changed'
+    | 'sensor:displayName:changed'
+    | 'sensor:capabilities:changed'
+    | 'sensor:assignment:changed'
+    | 'sensor:exposed:changed';
+  data:
+    | PropertyChangedEvent
+    | SensorAddedEvent
+    | SensorDeletedEvent
+    | SensorConnectedChangedEvent
+    | SensorDisplayNameChangedEvent
+    | SensorCapabilitiesChangedEvent
+    | SensorAssignmentChangedEvent
+    | SensorExposedChangedEvent;
 }
 
 export interface CameraEventMessage {

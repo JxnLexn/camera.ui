@@ -18,7 +18,7 @@ export interface PluginMethodDef {
   settingsMethod?: string;
 }
 
-export type PluginMethodArg = { param: string } | { fixed: unknown } | { frame: string };
+export type PluginMethodArg = { param: string } | { fixed: unknown } | { frame: string } | { audioFrame: string };
 
 const IMAGE_METADATA: PluginMethodArg = { fixed: { width: 0, height: 0 } };
 const AUDIO_METADATA: PluginMethodArg = { fixed: { mimeType: 'audio/wav' } };
@@ -113,6 +113,13 @@ export const PLUGIN_METHOD_REGISTRY: Partial<Record<PluginInterface, PluginMetho
       args: [{ param: 'audioData' }, AUDIO_METADATA, CONFIG_PARAM],
       settingsMethod: 'audioDetectionSettings',
     },
+    {
+      id: 'detectAudio',
+      labelKey: 'components.automation_nodes.method_detect_audio',
+      params: [{ name: 'audioFrame', labelKey: 'components.automation_nodes.param_audio', type: 'audio', placeholder: '', binary: true }],
+      args: [{ audioFrame: 'audioFrame' }, CONFIG_PARAM],
+      settingsMethod: 'audioDetectionSettings',
+    },
   ],
   [PluginInterface.ClipDetection]: [
     {
@@ -158,6 +165,13 @@ export function buildArgsFromRegistry(methodId: string, resolvedParams: Record<s
       const height = Number(resolvedParams[`${arg.frame}.height`] ?? resolvedParams['image.height'] ?? 0);
       const format = (resolvedParams[`${arg.frame}.format`] ?? resolvedParams['image.format'] ?? 'rgb') as string;
       return { id: 'automation', data, width, height, format };
+    }
+    if ('audioFrame' in arg) {
+      const data = resolvedParams[arg.audioFrame] as Buffer;
+      const sampleRate = Number(resolvedParams[`${arg.audioFrame}.sampleRate`] ?? resolvedParams['audio.sampleRate'] ?? 16_000);
+      const channels = Number(resolvedParams[`${arg.audioFrame}.channels`] ?? resolvedParams['audio.channels'] ?? 1);
+      const format = (resolvedParams[`${arg.audioFrame}.format`] ?? resolvedParams['audio.format'] ?? 'pcm16') as string;
+      return { data, sampleRate, channels, format };
     }
     return resolvedParams[arg.param];
   });

@@ -9,6 +9,7 @@ from _camera_ui_tools.camera_ui_sdk import (
     DeviceManager,
     DownloadManager,
     NotificationManager,
+    SensorManager,
 )
 from _camera_ui_tools.camera_ui_sdk import PluginAPI as PluginAPIInterface
 from _camera_ui_tools.camera_ui_sdk.internal import AsyncEventEmitter
@@ -17,6 +18,7 @@ from plugins.runtime.python.proxy.core_manager import CoreManagerProxy
 from plugins.runtime.python.proxy.device_manager import DeviceManagerProxy
 from plugins.runtime.python.proxy.download_manager import DownloadManagerProxy
 from plugins.runtime.python.proxy.notification_manager import NotificationManagerProxy
+from plugins.runtime.python.proxy.sensor_manager import SensorManagerProxy
 from plugins.runtime.python.storage_controller import StorageController
 from plugins.runtime.python.typings import PluginInfo
 
@@ -36,7 +38,10 @@ class PluginAPI(AsyncEventEmitter, PluginAPIInterface):
         self.storage_path = storage_path
         self.storage_controller = StorageController(self, proxy, plugin, plugin_db)
         self.core_manager = CoreManagerProxy(proxy, logger, plugin)
-        self.device_manager = DeviceManagerProxy(proxy, self.storage_controller, logger, plugin)
+        self.sensor_manager = SensorManagerProxy(proxy, self.storage_controller, plugin, logger)
+        self.device_manager = DeviceManagerProxy(
+            proxy, self.storage_controller, self.sensor_manager, logger, plugin
+        )
         self.download_manager = DownloadManagerProxy(proxy)
         self.notification_manager = NotificationManagerProxy(proxy, plugin)
 
@@ -47,6 +52,10 @@ class PluginAPI(AsyncEventEmitter, PluginAPIInterface):
     @property
     def deviceManager(self) -> DeviceManager:
         return cast(DeviceManager, self.device_manager)
+
+    @property
+    def sensorManager(self) -> SensorManager:
+        return cast(SensorManager, self.sensor_manager)
 
     @property
     def downloadManager(self) -> DownloadManager:

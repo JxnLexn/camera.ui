@@ -36,9 +36,12 @@ export interface PluginSensorNamespaces {
   sensorStorageRpc: string;
 }
 
-export interface SensorControllerNamespaces {
-  sensorSubject: string;
-  sensorRpc: string;
+export interface SensorRegistryNamespaces {
+  sensorsSubject: string;
+  sensorsRpc: string;
+}
+
+export interface SensorCameraViewNamespaces {
   sensorWriteSubject: string;
 }
 
@@ -47,6 +50,12 @@ export interface SensorEventNamespaces {
 }
 
 export interface SensorProviderNamespaces {
+  sensorRpc: string;
+}
+
+/** @deprecated stub window for pre-standalone plugins, remove in the first minor after the standalone-sensors release */
+export interface LegacySensorNamespaces {
+  sensorSubject: string;
   sensorRpc: string;
 }
 
@@ -134,29 +143,42 @@ export class NamespaceManager {
     };
   }
 
-  static pluginSensorNamespaces(pluginId: string, cameraId: string, sensorId: string): PluginSensorNamespaces {
+  static pluginSensorNamespaces(pluginId: string, sensorId: string): PluginSensorNamespaces {
     return {
-      sensorStorageRpc: `plugin.${pluginId}.camera.${cameraId}.sensor.${sensorId}.storage.rpc`,
+      sensorStorageRpc: `plugin.${pluginId}.sensor.${sensorId}.storage.rpc`,
     };
   }
 
-  static sensorControllerNamespaces(cameraId: string): SensorControllerNamespaces {
+  static sensorRegistryNamespaces(): SensorRegistryNamespaces {
     return {
-      sensorSubject: `camera.${cameraId}.sensors.subject`,
-      sensorRpc: `camera.${cameraId}.sensors.rpc`,
+      sensorsSubject: 'sensors.subject',
+      sensorsRpc: 'sensors.rpc',
+    };
+  }
+
+  static sensorCameraViewNamespaces(cameraId: string): SensorCameraViewNamespaces {
+    return {
       sensorWriteSubject: `camera.${cameraId}.sensors.writes`,
     };
   }
 
-  static sensorEventNamespaces(cameraId: string, sensorId: string): SensorEventNamespaces {
+  static sensorEventNamespaces(sensorId: string): SensorEventNamespaces {
     return {
-      sensorSubject: `camera.${cameraId}.sensor.${sensorId}.subject`,
+      sensorSubject: `sensor.${sensorId}.subject`,
     };
   }
 
-  static sensorProviderNamespaces(pluginId: string, cameraId: string, sensorId: string): SensorProviderNamespaces {
+  static sensorProviderNamespaces(pluginId: string, sensorId: string): SensorProviderNamespaces {
     return {
-      sensorRpc: `plugin.${pluginId}.camera.${cameraId}.sensor.${sensorId}.rpc`,
+      sensorRpc: `plugin.${pluginId}.sensor.${sensorId}.rpc`,
+    };
+  }
+
+  /** @deprecated stub window for pre-standalone plugins, remove in the first minor after the standalone-sensors release */
+  static legacySensorNamespaces(cameraId: string): LegacySensorNamespaces {
+    return {
+      sensorSubject: `camera.${cameraId}.sensors.subject`,
+      sensorRpc: `camera.${cameraId}.sensors.rpc`,
     };
   }
 
@@ -170,10 +192,6 @@ export class NamespaceManager {
     return {
       detectionEventSubject: `camera.${cameraId}.events.subject`,
     };
-  }
-
-  static sensorControllerRpc(cameraId: string): string {
-    return `camera.${cameraId}.sensors.controller.rpc`;
   }
 
   static terminalManagerNamespaces(): TerminalManagerNamespaces {

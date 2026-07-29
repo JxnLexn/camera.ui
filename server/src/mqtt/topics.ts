@@ -12,11 +12,12 @@
 //   <p>/camera/<id>/motion                        ON|OFF (retained)
 //   <p>/camera/<id>/detection/<label>             ON|OFF (retained)
 //   <p>/camera/<id>/snapshot                      JPEG (retained)
-//   <p>/camera/<id>/sensor/<stableId>/meta        JSON (retained)
-//   <p>/camera/<id>/sensor/<stableId>/<property>  JSON value (retained)
+//   <p>/sensor/<id>/meta                          JSON (retained)
+//   <p>/sensor/<id>/<property>                    JSON value (retained)
+//   <p>/sensor/<id>/<property>/set                inbound command
 //
-// States are retained, events are not. Sensor topics use the stable id, never
-// the per-instance runtime UUID.
+// States are retained, events are not. Sensors are standalone entities keyed
+// by their persistent id, they live outside the camera tree.
 export class MqttTopics {
   constructor(public readonly prefix: string) {}
 
@@ -72,16 +73,16 @@ export class MqttTopics {
     return `${this.cameraPrefix(cameraId)}/snapshot`;
   }
 
-  sensorPrefix(cameraId: string, sensorStableId: string): string {
-    return `${this.cameraPrefix(cameraId)}/sensor/${sanitizeTopicSegment(sensorStableId)}`;
+  sensorPrefix(sensorId: string): string {
+    return `${this.prefix}/sensor/${sanitizeTopicSegment(sensorId)}`;
   }
 
-  sensorMeta(cameraId: string, sensorStableId: string): string {
-    return `${this.sensorPrefix(cameraId, sensorStableId)}/meta`;
+  sensorMeta(sensorId: string): string {
+    return `${this.sensorPrefix(sensorId)}/meta`;
   }
 
-  sensorProperty(cameraId: string, sensorStableId: string, property: string): string {
-    return `${this.sensorPrefix(cameraId, sensorStableId)}/${sanitizeTopicSegment(property)}`;
+  sensorProperty(sensorId: string, property: string): string {
+    return `${this.sensorPrefix(sensorId)}/${sanitizeTopicSegment(property)}`;
   }
 }
 

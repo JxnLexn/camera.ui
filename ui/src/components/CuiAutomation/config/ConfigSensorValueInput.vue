@@ -66,7 +66,7 @@
 </template>
 
 <script setup lang="ts">
-import { useSensorsByType } from '@camera.ui/browser';
+import { useAllSensors } from '@camera.ui/browser';
 import { SensorType } from '@camera.ui/sdk';
 
 import { getSensorPropertyInput } from './sensorPropertyInputs.js';
@@ -79,9 +79,7 @@ const props = defineProps<{
   variableMode?: boolean;
   nodeId?: string;
   disabled?: boolean;
-  cameraId?: string;
-  sensorName?: string;
-  sensorPluginId?: string;
+  sensorId?: string;
 }>();
 
 const emit = defineEmits<{
@@ -103,14 +101,11 @@ const enumOptions = computed(() => (meta.value.options ?? []).map((option) => ({
 
 const isPresetProperty = computed(() => props.sensorType === SensorType.PTZ && props.property === 'targetPreset');
 
-const { sensors } = useSensorsByType(
-  () => (isPresetProperty.value ? props.cameraId || undefined : undefined),
-  () => SensorType.PTZ,
-);
+const { sensors } = useAllSensors();
 
 const presetOptions = computed(() => {
   if (!isPresetProperty.value) return [];
-  const sensor = sensors.value.find((s) => s.name === props.sensorName && s.pluginId === props.sensorPluginId) ?? sensors.value[0];
+  const sensor = sensors.value.find((s) => s.id === props.sensorId);
   const presets = sensor?.getProperty('presets');
   return Array.isArray(presets) ? presets.filter((p): p is string => typeof p === 'string') : [];
 });

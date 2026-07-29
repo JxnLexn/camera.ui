@@ -6,7 +6,7 @@ import { NamespaceManager } from '../../rpc/namespaces.js';
 import { EVENT_THUMB_MAX_WIDTH } from './event-thumbnailer.js';
 import { MIN_PLATE_LENGTH, normalizePlateText } from './plate-vote.js';
 import { hasSecondaryModelSpec, isVideoInputSpec } from './plugin-registry.js';
-import { DETECT_TIMEOUT_MS } from './types.js';
+import { DETECT_TIMEOUT_MS, ensureDetectionBoxes, FULL_FRAME_BOX } from './types.js';
 
 import type { Logger } from '@camera.ui/common/logger';
 import type { Promisify, RPCClient } from '@camera.ui/rpc';
@@ -284,7 +284,7 @@ export class SecondaryStage {
     const fullFrameDetection: Detection = {
       label: 'person',
       confidence: 1.0,
-      box: { x: 0, y: 0, width: 1, height: 1 },
+      box: { ...FULL_FRAME_BOX },
     };
 
     for (const consumer of consumers) {
@@ -353,7 +353,7 @@ export class SecondaryStage {
     for (let i = 0; i < batchResults.length; i++) {
       const parentTrackId = 'trackId' in croppedRegions[i].detection ? (croppedRegions[i].detection as TrackedDetection).trackId : undefined;
 
-      for (const face of batchResults[i].detections) {
+      for (const face of ensureDetectionBoxes(batchResults[i].detections)) {
         const transformed = this.transformBoxToOriginal(face.box, croppedRegions[i]);
         allFaces.push({ ...face, box: transformed, parentTrackId });
       }
@@ -379,7 +379,7 @@ export class SecondaryStage {
 
     for (let i = 0; i < batchResults.length; i++) {
       const parentTrackId = 'trackId' in croppedRegions[i].detection ? (croppedRegions[i].detection as TrackedDetection).trackId : undefined;
-      for (const plate of batchResults[i].detections) {
+      for (const plate of ensureDetectionBoxes(batchResults[i].detections)) {
         allPlates.push({ ...plate, box: this.transformBoxToOriginal(plate.box, croppedRegions[i]), parentTrackId });
       }
     }
@@ -411,7 +411,7 @@ export class SecondaryStage {
 
         for (let i = 0; i < batchResults.length; i++) {
           const parentTrackId = 'trackId' in croppedRegions[i].detection ? (croppedRegions[i].detection as TrackedDetection).trackId : undefined;
-          for (const detection of batchResults[i].detections) {
+          for (const detection of ensureDetectionBoxes(batchResults[i].detections)) {
             allDetections.push({ ...detection, box: this.transformBoxToOriginal(detection.box, croppedRegions[i]), parentTrackId });
           }
         }
@@ -444,7 +444,7 @@ export class SecondaryStage {
     for (let i = 0; i < batchResults.length; i++) {
       if (batchResults[i].embeddings && batchResults[i].embeddings.length > 0) {
         const parentTrackId = 'trackId' in croppedRegions[i].detection ? (croppedRegions[i].detection as TrackedDetection).trackId : undefined;
-        for (const emb of batchResults[i].embeddings) {
+        for (const emb of ensureDetectionBoxes(batchResults[i].embeddings)) {
           const transformed = this.transformBoxToOriginal(emb.box, croppedRegions[i]);
           allEmbeddings.push({ ...emb, box: transformed, parentTrackId });
         }

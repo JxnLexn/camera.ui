@@ -263,9 +263,7 @@ class CameraLocation:
 
 @dataclass(frozen=True)
 class SensorLocation:
-    camera_id: str
-    sensor_type: str
-    sensor_name: str
+    sensor_id: str
 
 
 StoreLocation = PluginLocation | CameraLocation | SensorLocation
@@ -276,8 +274,7 @@ def read_location(config: dict[str, Any], location: StoreLocation) -> dict[str, 
         return config.get("plugin")
     if isinstance(location, CameraLocation):
         return (config.get("cameras") or {}).get(location.camera_id)
-    by_camera = (config.get("sensors") or {}).get(location.camera_id) or {}
-    return (by_camera.get(location.sensor_type) or {}).get(location.sensor_name)
+    return (config.get("sensors") or {}).get(location.sensor_id)
 
 
 def write_location(config: dict[str, Any], location: StoreLocation, values: dict[str, Any]) -> None:
@@ -287,8 +284,7 @@ def write_location(config: dict[str, Any], location: StoreLocation, values: dict
     if isinstance(location, CameraLocation):
         config.setdefault("cameras", {})[location.camera_id] = values
         return
-    by_camera = config.setdefault("sensors", {}).setdefault(location.camera_id, {})
-    by_camera.setdefault(location.sensor_type, {})[location.sensor_name] = values
+    config.setdefault("sensors", {})[location.sensor_id] = values
 
 
 def delete_location(config: dict[str, Any], location: StoreLocation) -> None:
@@ -304,18 +300,8 @@ def delete_location(config: dict[str, Any], location: StoreLocation) -> None:
         return
 
     sensors = config.get("sensors")
-    if not isinstance(sensors, dict):
-        return
-    by_camera = sensors.get(location.camera_id)
-    if not isinstance(by_camera, dict):
-        return
-    by_type = by_camera.get(location.sensor_type)
-    if not isinstance(by_type, dict):
-        return
-
-    by_type.pop(location.sensor_name, None)
-    _prune_if_empty(by_camera, location.sensor_type)
-    _prune_if_empty(sensors, location.camera_id)
+    if isinstance(sensors, dict):
+        sensors.pop(location.sensor_id, None)
     _prune_if_empty(config, "sensors")
 
 
@@ -327,10 +313,13 @@ def _prune_if_empty(parent: dict[str, Any], key: str) -> None:
 
 _CANONICAL_SECTIONS = ("plugin", "cameras", "sensors")
 _LEGACY_SENSOR_MARKER = ":sensor:"
+_LAYOUT_VERSION_KEY = "__v"
+# v2: sensors keyed by persistent sensor id, old camera-keyed trees are unmappable
+_LAYOUT_VERSION = 2
 
 
 def is_canonical_layout(payload: dict[str, Any]) -> bool:
-    return all(key in _CANONICAL_SECTIONS for key in payload)
+    return all(key == _LAYOUT_VERSION_KEY or key in _CANONICAL_SECTIONS for key in payload)
 
 
 # Go-SDK legacy blobs ('<pluginId>.plugin', ...) are remapped by the Go SDK
@@ -343,59 +332,49 @@ def _is_go_legacy_layout(payload: dict[str, Any], plugin_id: str) -> bool:
 def remap_legacy_layout(
     payload: dict[str, Any], plugin_id: str, log: StoreLogger | None = None
 ) -> dict[str, Any]:
-    if is_canonical_layout(payload) or _is_go_legacy_layout(payload, plugin_id):
+    if _is_go_legacy_layout(payload, plugin_id):
         return payload
 
-    canonical: dict[str, Any] = {
-        section: payload[section] for section in _CANONICAL_SECTIONS if section in payload
-    }
+    if is_canonical_layout(payload):
+        canonical = payload
+    else:
+        canonical = {section: payload[section] for section in _CANONICAL_SECTIONS if section in payload}
 
-    for key, values in payload.items():
-        if key in _CANONICAL_SECTIONS:
-            continue
-
-        if key == "storage":
-            # In a mixed legacy+canonical document the canonical section is the
-            # newer write - the legacy duplicate is stale and must never win.
-            if "plugin" in canonical:
-                if log:
-                    log.warn(
-                        f"store: legacy key 'storage' dropped — canonical 'plugin' already present ({plugin_id})"
-                    )
+        for key, values in payload.items():
+            if key in _CANONICAL_SECTIONS or key == _LAYOUT_VERSION_KEY:
                 continue
-            canonical["plugin"] = values
-            continue
 
-        sensor_idx = key.find(_LEGACY_SENSOR_MARKER)
-        if sensor_idx != -1:
-            # <camId>:sensor:<type>:<pluginId>:<name> - type and pluginId contain
-            # no colons; the name keeps everything after them verbatim.
-            camera_id = key[:sensor_idx]
-            rest = key[sensor_idx + len(_LEGACY_SENSOR_MARKER) :]
-            type_end = rest.find(":")
-            plugin_end = rest.find(":", type_end + 1)
-            if type_end != -1 and plugin_end != -1:
-                sensor_type = rest[:type_end]
-                sensor_name = rest[plugin_end + 1 :]
-                by_camera = canonical.setdefault("sensors", {}).setdefault(camera_id, {})
-                if sensor_name in by_camera.get(sensor_type, {}):
+            if key == "storage":
+                # In a mixed legacy+canonical document the canonical section is the
+                # newer write - the legacy duplicate is stale and must never win.
+                if "plugin" in canonical:
                     if log:
                         log.warn(
-                            f"store: legacy sensor key '{key}' dropped — canonical target already present ({plugin_id})"
+                            f"store: legacy key 'storage' dropped — canonical 'plugin' already present ({plugin_id})"
                         )
                     continue
-                by_camera.setdefault(sensor_type, {})[sensor_name] = values
+                canonical["plugin"] = values
                 continue
-            if log:
-                log.warn(f"store: unparsable legacy sensor key '{key}' kept under cameras ({plugin_id})")
 
-        if key in (canonical.get("cameras") or {}):
-            if log:
-                log.warn(
-                    f"store: legacy key '{key}' dropped — canonical 'cameras.{key}' already present ({plugin_id})"
-                )
-            continue
-        canonical.setdefault("cameras", {})[key] = values
+            # <camId>:sensor:<type>:<pluginId>:<name> - pre-entity sensor storage,
+            # no entity id to map onto, dropped below with the rest
+            if _LEGACY_SENSOR_MARKER in key:
+                continue
+
+            if key in (canonical.get("cameras") or {}):
+                if log:
+                    log.warn(
+                        f"store: legacy key '{key}' dropped — canonical 'cameras.{key}' already present ({plugin_id})"
+                    )
+                continue
+            canonical.setdefault("cameras", {})[key] = values
+
+    if canonical.get(_LAYOUT_VERSION_KEY) != _LAYOUT_VERSION:
+        if canonical is payload:
+            canonical = dict(payload)
+        # camera-keyed sensor storage cannot be mapped to persistent sensor ids
+        canonical.pop("sensors", None)
+        canonical[_LAYOUT_VERSION_KEY] = _LAYOUT_VERSION
 
     return canonical
 

@@ -3,8 +3,8 @@ import { createReadStream, truncate } from 'node:fs';
 import { Readable } from 'node:stream';
 import { container } from 'tsyringe';
 
-import { resolveSensorSemantics } from '../../camera/sensors/semantics.js';
-import { SENSOR_TYPE_CONFIG } from '../../camera/sensors/types.js';
+import { resolveSensorSemantics } from '../../sensors/semantics.js';
+import { isWritableSensor } from '../../sensors/types.js';
 import { createSourceName } from '../../utils/camera.js';
 import { CamerasService } from '../services/cameras.service.js';
 import { PluginsService } from '../services/plugins.service.js';
@@ -523,6 +523,7 @@ export class CamerasController {
     }
   }
 
+  /** @deprecated stub window for the pre-standalone HA integration, superseded by /api/sensors, remove in the first minor after the standalone-sensors release */
   public getSensorsByName(req: FastifyRequest<AuthLoginRequest & CamerasParamsRequest>, reply: FastifyReply): FastifyReply {
     try {
       const camera = this.service.findByName(req.params.cameraname) ?? this.service.findById(req.params.cameraname);
@@ -535,15 +536,16 @@ export class CamerasController {
         });
       }
 
-      const sensors = cameraController.sensorController.getSensors().map((sensor) => ({
+      const sensors = cameraController.sensorController.getAllSensors().map((sensor) => ({
         id: sensor.id,
-        stableId: sensor.stableId,
-        globalId: sensor.globalId,
         type: sensor.type,
+        name: sensor.name,
         displayName: sensor.displayName,
-        properties: sensor.properties,
+        assignedCameraIds: sensor.data.assignedCameraIds,
+        exposed: sensor.data.exposed,
+        properties: sensor.data.properties,
         capabilities: sensor.capabilities,
-        semantics: resolveSensorSemantics(sensor),
+        semantics: resolveSensorSemantics(sensor.data),
       }));
 
       return reply.code(200).send({ sensors });
@@ -555,6 +557,7 @@ export class CamerasController {
     }
   }
 
+  /** @deprecated stub window for the pre-standalone HA integration, superseded by /api/sensors, remove in the first minor after the standalone-sensors release */
   public getRegisteredSensorsByName(req: FastifyRequest<AuthLoginRequest & CamerasParamsRequest>, reply: FastifyReply): FastifyReply {
     try {
       const camera = this.service.findByName(req.params.cameraname) ?? this.service.findById(req.params.cameraname);
@@ -567,7 +570,7 @@ export class CamerasController {
         });
       }
 
-      const sensors = cameraController.sensorController.getAllSensors({ activatedOnly: false }).map((sensor) => ({
+      const sensors = cameraController.sensorController.getAllSensors().map((sensor) => ({
         type: sensor.type,
         pluginId: sensor.pluginId,
         requiresFrames: sensor.data.requiresFrames,
@@ -582,6 +585,10 @@ export class CamerasController {
     }
   }
 
+  /**
+   * @deprecated stub window for the pre-standalone HA integration, superseded by
+   * POST /api/sensors/:id/command, remove in the first minor after the standalone-sensors release
+   */
   public async commandSensorByName(
     req: FastifyRequest<AuthLoginRequest & CameraSensorCommandParamsRequest & CameraSensorCommandRequest>,
     reply: FastifyReply,
@@ -597,8 +604,8 @@ export class CamerasController {
         });
       }
 
-      // stableId survives restarts, unlike the runtime sensor id: same key MQTT commands use
-      const sensor = cameraController.sensorController.getAllSensors().find((s) => s.data.stableId === req.params.stableId);
+      // sensor ids are persistent entity ids now, the route param keeps its old name for the stub window
+      const sensor = cameraController.sensorController.getAllSensors().find((s) => s.id === req.params.stableId);
 
       if (!sensor) {
         return reply.code(404).send({
@@ -607,7 +614,7 @@ export class CamerasController {
         });
       }
 
-      if (SENSOR_TYPE_CONFIG[sensor.type]?.isDetectionType) {
+      if (!isWritableSensor(sensor.type, sensor.pluginId)) {
         return reply.code(400).send({
           statusCode: 400,
           message: 'Sensor is read-only',

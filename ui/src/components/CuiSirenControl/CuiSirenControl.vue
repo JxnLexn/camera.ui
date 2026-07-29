@@ -17,7 +17,7 @@
         <span class="cui-siren-control__volume-value">{{ volumeValue }}%</span>
       </div>
 
-      <Slider v-model="volumeValue" :min="0" :max="100" :step="1" :disabled="disabled" class="cui-siren-control__slider" />
+      <Slider v-model="volumeValue" :min="0" :max="100" :step="1" :disabled="disabled" class="cui-siren-control__slider" @slideend="flushVolume" />
     </div>
   </div>
 </template>
@@ -32,14 +32,21 @@ const emit = defineEmits<CuiSirenControlEmits>();
 
 const { active, volume, hasVolume } = toRefs(props);
 
+const localVolume = ref<number | undefined>(undefined);
+
+const emitVolume = useThrottleFn((value: number) => emit('update:volume', value), 250, true);
+
 const isActive = computed({
   get: () => active.value,
   set: (value: boolean) => emit('update:active', value),
 });
 
 const volumeValue = computed({
-  get: () => volume.value,
-  set: (value: number) => emit('update:volume', value),
+  get: () => localVolume.value ?? volume.value,
+  set: (value: number) => {
+    localVolume.value = value;
+    emitVolume(value);
+  },
 });
 
 const iconGlowStyle = computed<Record<string, string | number>>(() => {
@@ -54,6 +61,11 @@ const iconGlowStyle = computed<Record<string, string | number>>(() => {
     opacity: 0.4 + glowIntensity * 0.6,
   };
 });
+
+function flushVolume() {
+  if (localVolume.value !== undefined) emit('update:volume', localVolume.value);
+  localVolume.value = undefined;
+}
 </script>
 
 <style scoped>

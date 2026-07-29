@@ -1,6 +1,6 @@
 import { OBJECT_DETECTION_LABELS, SensorDomain } from '@camera.ui/sdk';
 
-import { resolveSensorSemantics } from '../camera/sensors/semantics.js';
+import { resolveSensorSemantics } from '../sensors/semantics.js';
 import { ConfigService } from '../services/config/index.js';
 import { sanitizeTopicSegment } from './topics.js';
 
@@ -94,18 +94,33 @@ const DOMAIN_COMPONENT: Record<SensorDomain, string> = {
   [SensorDomain.Alarm]: 'alarm_control_panel',
 };
 
-export function buildSensorDiscovery(topics: MqttTopics, haPrefix: string, camera: Camera, sensor: StoredSensorData): DiscoveryMessage[] {
+export function buildSensorDiscovery(topics: MqttTopics, haPrefix: string, sensor: StoredSensorData, viaCamera?: Camera): DiscoveryMessage[] {
   const semantics = resolveSensorSemantics(sensor);
   if (!semantics) return [];
 
-  const cameraId = camera._id;
-  const objectId = sanitizeTopicSegment(sensor.stableId);
-
-  const state = (property: string) => topics.sensorProperty(cameraId, sensor.stableId, property);
+  const state = (property: string) => topics.sensorProperty(sensor.id, property);
   const command = (property: string) => `${state(property)}/set`;
 
+  const displayName = sensor.displayName || sensor.name;
+  const shared = {
+    availability: [{ topic: topics.availability }],
+    availability_mode: 'all',
+    device: {
+      identifiers: [`cameraui_sensor_${sensor.id}`],
+      name: displayName,
+      manufacturer: 'camera.ui',
+      ...(viaCamera ? { via_device: `cameraui_${viaCamera._id}` } : {}),
+    },
+    origin: {
+      name: 'camera.ui',
+      sw_version: ConfigService.VERSION,
+    },
+  };
+
   const config = {
-    ...baseConfig(topics, camera, sensor.globalId, sensor.displayName || sensor.name),
+    name: displayName,
+    unique_id: `cameraui_sensor_${sensor.id}`,
+    ...shared,
     ...(semantics.deviceClass ? { device_class: semantics.deviceClass } : {}),
     ...(semantics.icon ? { icon: semantics.icon } : {}),
     ...(semantics.diagnostic ? { entity_category: 'diagnostic' } : {}),
@@ -113,7 +128,30 @@ export function buildSensorDiscovery(topics: MqttTopics, haPrefix: string, camer
     ...domainConfig(semantics, state, command),
   };
 
-  return [{ topic: configTopic(haPrefix, DOMAIN_COMPONENT[semantics.domain], cameraId, objectId), payload: JSON.stringify(config) }];
+  const messages = [{ topic: configTopic(haPrefix, DOMAIN_COMPONENT[semantics.domain], `sensor_${sensor.id}`, 'state'), payload: JSON.stringify(config) }];
+
+  // HA's siren carries volume inside the on/off command payload, which the
+  // per-property topics can't express, so volume ships as its own number entity
+  if (semantics.volume) {
+    messages.push({
+      topic: configTopic(haPrefix, 'number', `sensor_${sensor.id}`, 'volume'),
+      payload: JSON.stringify({
+        name: `${displayName} Volume`,
+        unique_id: `cameraui_sensor_${sensor.id}_volume`,
+        ...shared,
+        icon: 'mdi:volume-high',
+        state_topic: state(semantics.volume.property),
+        command_topic: command(semantics.volume.property),
+        min: 0,
+        max: semantics.volume.scale,
+        step: 1,
+        unit_of_measurement: '%',
+        mode: 'slider',
+      }),
+    });
+  }
+
+  return messages;
 }
 
 function domainConfig(semantics: SensorSemantics, state: (property: string) => string, command: (property: string) => string): Record<string, unknown> {
@@ -128,8 +166,18 @@ function domainConfig(semantics: SensorSemantics, state: (property: string) => s
       return { unit_of_measurement: semantics.unit, state_class: 'measurement' };
 
     case SensorDomain.Switch:
-    case SensorDomain.Siren:
       return { command_topic: commandTopic, state_on: 'true', state_off: 'false', payload_on: 'true', payload_off: 'false' };
+
+    case SensorDomain.Siren:
+      return {
+        command_topic: commandTopic,
+        state_on: 'true',
+        state_off: 'false',
+        payload_on: 'true',
+        payload_off: 'false',
+        support_duration: false,
+        support_volume_set: false,
+      };
 
     case SensorDomain.Light:
       return {

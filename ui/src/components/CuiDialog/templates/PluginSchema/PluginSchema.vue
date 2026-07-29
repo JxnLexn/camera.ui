@@ -23,7 +23,7 @@ const { schemaConfig, pluginName, cameraName, buttonKey, sensorId, pluginId } = 
 
 const pluginStorage = usePluginStorage(pluginName);
 const cameraStorage = useCameraStorage(cameraName, pluginName);
-const sensorStorage = useSensorStorage(cameraName, sensorId, pluginId);
+const sensorStorage = useSensorStorage(sensorId, pluginId);
 
 const schema = ref<SchemaConfig>({ schema: [], config: {} });
 

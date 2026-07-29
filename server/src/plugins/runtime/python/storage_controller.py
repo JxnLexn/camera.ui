@@ -7,15 +7,14 @@ from plugins.runtime.python.store import CameraLocation, PluginLocation, SensorL
 
 if TYPE_CHECKING:
     from _camera_ui_tools.camera_ui_rpc import RPCClient
-    from _camera_ui_tools.camera_ui_sdk import JsonSchema, SensorType
+    from _camera_ui_tools.camera_ui_sdk import JsonSchema
     from plugins.runtime.python.config_db import PluginConfigDb
     from plugins.runtime.python.plugin_api import PluginAPI
     from plugins.runtime.python.typings import PluginInfo
 
 
-# Stable storage key for sensor instance storage.
-def sensor_storage_key(camera_id: str, sensor_type: str, plugin_id: str, sensor_name: str) -> str:
-    return f"{camera_id}:sensor:{sensor_type}:{plugin_id}:{sensor_name}"
+def sensor_storage_key(sensor_id: str) -> str:
+    return f"sensor:{sensor_id}"
 
 
 class StorageController:
@@ -32,7 +31,9 @@ class StorageController:
         self.__storages: dict[str, DeviceStorage] = {}
         self.__plugin_db = plugin_db
 
-    def createCameraStorage(self, cameraId: str, schemas: list[JsonSchema] | None = []) -> DeviceStorage:
+    def createCameraStorage(
+        self, cameraId: str, schemas: list[JsonSchema] | None = []
+    ) -> DeviceStorage:
         if schemas is None:
             schemas = []
 
@@ -53,7 +54,9 @@ class StorageController:
 
         return camera_storage
 
-    def createPluginStorage(self, schemas: list[JsonSchema] | None = []) -> DeviceStorage:
+    def createPluginStorage(
+        self, schemas: list[JsonSchema] | None = []
+    ) -> DeviceStorage:
         if schemas is None:
             schemas = []
 
@@ -82,67 +85,51 @@ class StorageController:
 
     def createSensorStorage(
         self,
-        camera_id: str,
-        sensor_type: SensorType,
         plugin_id: str,
-        sensor_name: str,
         sensor_id: str,
         schemas: list[JsonSchema] = [],
     ) -> DeviceStorage:
-        storage_key = sensor_storage_key(camera_id, sensor_type.value, plugin_id, sensor_name)
+        storage_key = sensor_storage_key(sensor_id)
         storage = self.__storages.get(storage_key)
 
         if not storage:
-            # storage_key is only the in-memory registry key; persistence addresses
-            # the canonical sensors.<camId>.<type>.<name> path. sensor_id is the
-            # runtime UUID for the RPC namespace.
             storage = DeviceStorage(
                 self.__api,
                 self.__proxy,
                 self.__plugin,
                 self.__plugin_db,
-                SensorLocation(
-                    camera_id=camera_id,
-                    sensor_type=sensor_type.value,
-                    sensor_name=sensor_name,
-                ),
+                SensorLocation(sensor_id=sensor_id),
                 schemas,
                 sensor_id,
             )
             self.__storages[storage_key] = storage
-            storage.update_schema(schemas)
-        else:
-            storage.update_schema(schemas)
+
+        storage.update_schema(schemas)
 
         return storage
 
-    def getSensorStorage(
-        self, camera_id: str, sensor_type: SensorType, plugin_id: str, sensor_name: str
-    ) -> DeviceStorage | None:
-        storage_key = sensor_storage_key(camera_id, sensor_type.value, plugin_id, sensor_name)
-        return self.__storages.get(storage_key)
+    def getSensorStorage(self, sensor_id: str) -> DeviceStorage | None:
+        return self.__storages.get(sensor_storage_key(sensor_id))
 
     @overload
-    async def createStorage(self, type_: Literal["camera"], device_id: str) -> DeviceStorage: ...
+    async def createStorage(
+        self, type_: Literal["camera"], device_id: str
+    ) -> DeviceStorage: ...
     @overload
-    async def createStorage(self, type_: Literal["plugin"], device_id: None = None) -> DeviceStorage: ...
+    async def createStorage(
+        self, type_: Literal["plugin"], device_id: None = None
+    ) -> DeviceStorage: ...
     @overload
     async def createStorage(
         self,
         type_: Literal["sensor"],
-        device_id: str,
-        sensor_type: SensorType,
-        plugin_id: str,
-        sensor_name: str,
-        sensor_id: str,
+        device_id: str,  # plugin_id
+        sensor_id: str = ...,
     ) -> DeviceStorage: ...
     async def createStorage(
         self,
         type_: Literal["camera", "plugin", "sensor"],
-        device_id: str | None = None,  # camera_id
-        sensor_type: SensorType | None = None,
-        plugin_id: str | None = None,
-        sensor_name: str | None = None,
+        device_id: str | None = None,  # camera_id or plugin_id
         sensor_id: str | None = None,
     ) -> DeviceStorage:
         storage: DeviceStorage | None = None
@@ -153,12 +140,12 @@ class StorageController:
 
             storage = self.createCameraStorage(device_id)
         elif type_ == "sensor":
-            if not device_id or not sensor_type or not plugin_id or not sensor_name or not sensor_id:
+            if not device_id or not sensor_id:
                 raise ValueError(
-                    "cameraId, sensorType, pluginId, sensorName and sensorId are required for sensor storage creation"
+                    "pluginId and sensorId are required for sensor storage creation"
                 )
 
-            storage = self.createSensorStorage(device_id, sensor_type, plugin_id, sensor_name, sensor_id)
+            storage = self.createSensorStorage(device_id, sensor_id)
         else:
             storage = self.createPluginStorage()
 
@@ -168,33 +155,27 @@ class StorageController:
     @overload
     async def removeStorage(self, type_: Literal["camera"], device_id: str) -> None: ...
     @overload
-    async def removeStorage(self, type_: Literal["plugin"], device_id: None) -> None: ...
+    async def removeStorage(
+        self, type_: Literal["plugin"], device_id: None
+    ) -> None: ...
     @overload
     async def removeStorage(
         self,
         type_: Literal["sensor"],
-        device_id: str | None = None,
-        sensor_type: SensorType | None = None,
-        plugin_id: str | None = None,
-        sensor_name: str | None = None,
+        device_id: str,  # sensor_id
     ) -> None: ...
     async def removeStorage(
         self,
         type_: Literal["camera", "plugin", "sensor"],
         device_id: str | None = None,
-        sensor_type: SensorType | None = None,
-        plugin_id: str | None = None,
-        sensor_name: str | None = None,
     ) -> None:
         storage_key: str
 
         if type_ == "sensor":
-            if not device_id or not sensor_type or not plugin_id or not sensor_name:
-                raise ValueError(
-                    "cameraId, sensorType, pluginId and sensorName are required for sensor storage removal"
-                )
+            if not device_id:
+                raise ValueError("sensorId is required for sensor storage removal")
 
-            storage_key = sensor_storage_key(device_id, sensor_type.value, plugin_id, sensor_name)
+            storage_key = sensor_storage_key(device_id)
         elif type_ == "camera":
             if not device_id:
                 raise ValueError("ID is required for storage removal")

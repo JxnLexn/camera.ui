@@ -49,7 +49,7 @@ export const NODE_DEFINITIONS: NodeDefinition[] = [
     descriptionKey: 'components.automation_nodes.trigger_sensor_desc',
     icon: SensorIcon,
     color: '#22c55e',
-    defaults: { type: 'trigger-sensor', cameraId: '', sensorType: '', sensorName: '', sensorPluginId: '', properties: [] },
+    defaults: { type: 'trigger-sensor', sensorId: '', sensorType: '', properties: [] },
   },
   {
     type: 'trigger-schedule',
@@ -130,7 +130,7 @@ export const NODE_DEFINITIONS: NodeDefinition[] = [
     descriptionKey: 'components.automation_nodes.condition_sensorstate_desc',
     icon: SensorIcon,
     color: '#f59e0b',
-    defaults: { type: 'condition-sensorstate', cameraId: '', sensorType: '', sensorName: '', sensorPluginId: '', conditions: [], logic: 'AND' },
+    defaults: { type: 'condition-sensorstate', sensorId: '', sensorType: '', conditions: [], logic: 'AND' },
   },
   {
     type: 'condition-time',
@@ -158,7 +158,7 @@ export const NODE_DEFINITIONS: NodeDefinition[] = [
     descriptionKey: 'components.automation_nodes.action_sensor_desc',
     icon: LightbulbIcon,
     color: '#3b82f6',
-    defaults: { type: 'action-sensor', cameraId: '', sensorType: '', sensorName: '', sensorPluginId: '', properties: [] },
+    defaults: { type: 'action-sensor', sensorId: '', sensorType: '', properties: [] },
   },
   {
     type: 'action-notification',

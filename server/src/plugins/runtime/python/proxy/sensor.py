@@ -9,26 +9,34 @@ from _camera_ui_tools.camera_ui_sdk import (
     SensorType,
     Subject,
 )
+from _camera_ui_tools.camera_ui_sdk.internal import SensorJSON
 from plugins.runtime.python.namespaces import NamespaceManager
-from plugins.runtime.python.typings import SensorRefreshedState, StoredSensorData
+from plugins.runtime.python.typings import (
+    SensorRefreshedState,
+    SensorRegistration,
+    StoredSensorData,
+)
 
 
+# Cross-process consumer proxy: caches sensor state from broadcasts, forwards Control writes via RPC.
 class SensorProxy(SensorLike):
-    def __init__(
-        self, data: StoredSensorData, proxy: RPCClient, owner_namespace: str, camera_id: str
-    ) -> None:
+    def __init__(self, data: StoredSensorData, proxy: RPCClient, owner_namespace: str) -> None:
         self._id = data["id"]
         self._type = data["type"]
         self._name = data["name"]
         self._display_name = data.get("displayName", data["name"])
+        self._native_id = data.get("nativeId")
         self._owner_id = data["pluginId"]
-        self._camera_id = camera_id
+        self._assigned_camera_ids: list[str] = list(data.get("assignedCameraIds", []))
+        self._exposed = data.get("exposed", False)
+        self._connected = data.get("connected", False)
         self._proxy = proxy
         self._properties: dict[str, Any] = dict(data.get("properties", {}))
         self._capabilities: list[str] = list(data.get("capabilities", []))
         self._rpc_proxy = proxy.create_proxy(owner_namespace)
         self._property_changed_subject: Subject[SensorPropertyChangeData] = Subject()
         self._capabilities_changed_subject: Subject[list[str]] = Subject()
+        self._connected_changed_subject: Subject[bool] = Subject()
         self._event_subscription: CloseHandler | None = None
 
     @property
@@ -52,8 +60,24 @@ class SensorProxy(SensorLike):
         self._display_name = value
 
     @property
+    def nativeId(self) -> str | None:
+        return self._native_id
+
+    @property
     def pluginId(self) -> str:
         return self._owner_id
+
+    @property
+    def assignedCameraIds(self) -> list[str]:
+        return self._assigned_camera_ids.copy()
+
+    @property
+    def connected(self) -> bool:
+        return self._connected
+
+    @property
+    def exposed(self) -> bool:
+        return self._exposed
 
     @property
     def capabilities(self) -> list[str]:
@@ -79,6 +103,10 @@ class SensorProxy(SensorLike):
     def onCapabilitiesChanged(self) -> Observable[list[str]]:
         return self._capabilities_changed_subject.as_observable()
 
+    @property
+    def onConnectedChanged(self) -> Observable[bool]:
+        return self._connected_changed_subject.as_observable()
+
     def _update_cached_value(self, property: str, value: Any, timestamp: int | None = None) -> None:
         self._properties[property] = value
         self._property_changed_subject.next(
@@ -92,6 +120,18 @@ class SensorProxy(SensorLike):
         self._capabilities = capabilities
         self._capabilities_changed_subject.next(capabilities)
 
+    def _set_connected(self, connected: bool) -> None:
+        if self._connected == connected:
+            return
+        self._connected = connected
+        self._connected_changed_subject.next(connected)
+
+    def _set_assigned_cameras(self, camera_ids: list[str]) -> None:
+        self._assigned_camera_ids = list(camera_ids)
+
+    def _set_exposed(self, exposed: bool) -> None:
+        self._exposed = exposed
+
     def _apply_refreshed_state(self, state: SensorRefreshedState) -> None:
         self._capabilities = list(state["capabilities"])
         if "displayName" in state:
@@ -103,7 +143,7 @@ class SensorProxy(SensorLike):
         if self._event_subscription is not None:
             return  # Already subscribed
 
-        namespace = NamespaceManager.sensor_event_namespaces(self._camera_id, self._id)
+        namespace = NamespaceManager.sensor_event_namespaces(self._id)
         self._event_subscription = await self._proxy.subscribe(
             namespace.sensor_subject, self._handle_sensor_event
         )
@@ -133,9 +173,14 @@ class SensorProxy(SensorLike):
             "name": self._name,
             "displayName": self._display_name,
             "pluginId": self._owner_id,
+            "assignedCameraIds": self.assignedCameraIds,
+            "exposed": self._exposed,
+            "connected": self._connected,
             "properties": self.getValues(),
             "capabilities": self._capabilities,
         }
+        if self._native_id:
+            data["nativeId"] = self._native_id
 
         return data
 
@@ -144,8 +189,10 @@ class SensorProxy(SensorLike):
         return self._id != ""
 
 
-class SensorControllerInterface(Protocol):
-    async def registerSensor(self, sensor: dict[str, Any], plugin_id: str) -> bool: ...
+class SensorRegistryInterface(Protocol):
+    async def registerSensor(
+        self, sensor: SensorJSON, plugin_id: str, options: dict[str, Any] | None = None
+    ) -> SensorRegistration: ...
     async def unregisterSensor(self, sensor_id: str) -> None: ...
     async def updatePropertyValues(self, sensor_id: str, properties: dict[str, Any]) -> None: ...
     async def updateCapabilities(self, sensor_id: str, capabilities: list[str]) -> None: ...
@@ -154,10 +201,7 @@ class SensorControllerInterface(Protocol):
     async def getSensorState(self, sensor_id: str) -> SensorRefreshedState: ...
     async def getSensorStates(self) -> dict[str, SensorRefreshedState]: ...
     async def getSensors(self, plugin_id: str | None = None) -> list[StoredSensorData]: ...
-    async def getSensor(self, sensor_id: str, plugin_id: str | None = None) -> StoredSensorData | None: ...
-    async def getSensorByType(
-        self, sensor_type: SensorType, plugin_id: str | None = None
-    ) -> StoredSensorData | None: ...
+    async def getSensorRpc(self, sensor_id: str, plugin_id: str | None = None) -> StoredSensorData | None: ...
     async def setDisplayName(self, sensor_id: str, display_name: str) -> None: ...
 
 
@@ -165,5 +209,3 @@ class DetectionCoordinatorRPC(Protocol):
     async def reportSensorWrite(
         self, sensor_id: str, sensor_type: SensorType, properties: dict[str, Any]
     ) -> None: ...
-
-    async def unregisterSensor(self, sensor_id: str) -> None: ...

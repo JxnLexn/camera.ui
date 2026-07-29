@@ -71,7 +71,7 @@ function isInputBound(input: WizardInput, value: BindingValue): boolean {
       return Array.isArray(value) && value.length > 0;
     case 'sensor': {
       const binding = value as SensorBinding | undefined;
-      return Boolean(binding?.sensorType && binding.sensorName && binding.sensorPluginId);
+      return Boolean(binding?.sensorId);
     }
     default:
       return typeof value === 'string' && value.length > 0;

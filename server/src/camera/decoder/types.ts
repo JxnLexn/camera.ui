@@ -1,6 +1,12 @@
-import type { MotionResolution, StreamingRole } from '@camera.ui/sdk';
+import type { BoundingBox, MotionResolution, StreamingRole } from '@camera.ui/sdk';
 
 export type PixelFormat = 'yuv420p' | 'rgb24' | 'nv12';
+
+export const FULL_FRAME_BOX: BoundingBox = { x: 0, y: 0, width: 1, height: 1 };
+
+export function ensureDetectionBoxes<T extends { box?: BoundingBox }>(detections: readonly T[]): (T & { box: BoundingBox })[] {
+  return detections.map((detection) => (detection.box ? (detection as T & { box: BoundingBox }) : { ...detection, box: { ...FULL_FRAME_BOX } }));
+}
 
 export interface CoordinatorSourceUrl {
   role: StreamingRole;

@@ -206,17 +206,17 @@ export class UsersService {
     for (const { value: user } of this.dbs.usersDB.getRange()) {
       let mutated = false;
 
+      // the deleted camera's own view dies with it, shortcuts included
+      if (user.preferences.cameras[cameraId]) {
+        delete user.preferences.cameras[cameraId];
+        mutated = true;
+      }
+
       for (const cameraPreference of Object.values(user.preferences.cameras)) {
         if (!cameraPreference) continue;
 
         const before = cameraPreference.shortcuts.length;
-        cameraPreference.shortcuts = cameraPreference.shortcuts.filter((shortcut) => {
-          // Remove camera shortcuts pointing to the deleted camera
-          if (shortcut.type === 'camera') return shortcut.cameraId !== cameraId;
-          // Remove sensor shortcuts belonging to the deleted camera
-          if (shortcut.type === 'sensor') return shortcut.sensorCameraId !== cameraId;
-          return true;
-        });
+        cameraPreference.shortcuts = cameraPreference.shortcuts.filter((shortcut) => shortcut.type !== 'camera' || shortcut.cameraId !== cameraId);
 
         if (cameraPreference.shortcuts.length !== before) mutated = true;
       }

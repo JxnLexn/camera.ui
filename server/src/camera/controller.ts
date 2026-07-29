@@ -11,7 +11,6 @@ import { getSourceCodecInfo, setSourceCodecInfo } from './codecCache.js';
 import { FrameWorker } from './decoder/worker.js';
 import { CameraDevice } from './index.js';
 import { SensorController } from './sensors/controller.js';
-import { getMultiProviderTypes, SENSOR_TYPE_CONFIG } from './sensors/types.js';
 import { Fmp4Session } from './streaming/fmp4-session.js';
 import { RtpSession } from './streaming/rtp-session.js';
 import { generateAudioStreamInfo, generateVideoStreamInfo } from './utils.js';
@@ -29,7 +28,6 @@ import type {
   DeviceStorage,
   Disposable,
   Observable,
-  PluginAssignments,
   ProbeConfig,
   ProbeStream,
   RTSPUrlOptions,
@@ -46,6 +44,7 @@ import type { ProxyServer } from '../rpc/index.js';
 import type { CameraDeviceInterface, CameraDeviceListenerMessagePayload, RefreshedStates, SnapshotUpdatedEvent, SnapshotWithMeta } from '../rpc/interfaces/device.js';
 import type { StoredSensorData } from '../rpc/interfaces/sensor.js';
 import type { CameraNamespaces, FrameWorkerDetectionNamespaces } from '../rpc/namespaces.js';
+import type { SensorRegistry } from '../sensors/registry.js';
 import type { LoggerService } from '../services/logger/index.js';
 
 @RPCClass
@@ -177,11 +176,11 @@ export class CameraController extends CameraDevice implements CameraDeviceInterf
   }
 
   public removePluginSensors(pluginId: string): void {
-    this.sensorController.removePluginSensors(pluginId);
+    this.sensorController.unassignPluginSensors(pluginId);
   }
 
   public getSensorByType(sensorType: SensorType): StoredSensorData | undefined {
-    return this.sensorController.getSensorByType(sensorType);
+    return this.sensorController.getSensorByTypeInternal(sensorType)?.data;
   }
 
   public createStorage<T extends Record<string, any> = Record<string, any>>(): DeviceStorage<T> {
@@ -348,7 +347,7 @@ export class CameraController extends CameraDevice implements CameraDeviceInterf
       camera: this.camera,
       cameraState: this.connected,
       frameWorkerState: this.frameWorker.status === PLUGIN_STATUS.STARTED,
-      sensorStates: this.sensorController.getSensorStates(),
+      sensorStates: this.sensorController.getStatesForCamera(),
     };
   }
 
@@ -365,18 +364,19 @@ export class CameraController extends CameraDevice implements CameraDeviceInterf
   }
 
   public async addSensor<T extends object>(sensor: Sensor<T>): Promise<void> {
+    const registry = container.resolve<SensorRegistry>('sensorRegistry');
     const sensorJSON = sensor.toJSON();
-    this.sensorController.registerSensor(sensorJSON, sensor.pluginId ?? '');
+    sensorJSON.nativeId ??= `${this.id}:${sensor.type}:${sensor.name}`;
+    registry.registerSensor(sensorJSON, sensor.pluginId ?? '', { assignCameraId: this.id });
   }
 
   public async removeSensor(sensorId: string): Promise<void> {
-    this.sensorController.unregisterSensor(sensorId);
+    const registry = container.resolve<SensorRegistry>('sensorRegistry');
+    registry.unregisterSensor(sensorId);
   }
 
   public updateCamera(updatedCamera: Camera): void {
-    const oldAssignments = this.camera.assignments;
     super.updateCamera(updatedCamera);
-    this.detectAndNotifyAssignmentChanges(oldAssignments, updatedCamera.assignments);
   }
 
   public updateFrameWorkerState(state: boolean): void {
@@ -414,52 +414,8 @@ export class CameraController extends CameraDevice implements CameraDeviceInterf
   }
 
   public sensorStorageProxy(pluginId: string, sensorId: string): Promisify<DeviceStorage> {
-    const namespaces = NamespaceManager.pluginSensorNamespaces(pluginId, this.id, sensorId);
+    const namespaces = NamespaceManager.pluginSensorNamespaces(pluginId, sensorId);
     return this.proxy.createProxy<DeviceStorage>(namespaces.sensorStorageRpc);
-  }
-
-  private detectAndNotifyAssignmentChanges(oldAssignments: PluginAssignments, newAssignments: PluginAssignments): void {
-    const multiProviderSet = new Set(getMultiProviderTypes());
-
-    for (const [sensorTypeStr, config] of Object.entries(SENSOR_TYPE_CONFIG)) {
-      const sensorType = sensorTypeStr as SensorType;
-      const key = config.assignmentKey as keyof PluginAssignments;
-
-      if (multiProviderSet.has(sensorType)) {
-        const oldPlugins = (oldAssignments[key] as { id: string }[] | undefined) ?? [];
-        const newPlugins = (newAssignments[key] as { id: string }[] | undefined) ?? [];
-
-        const oldIds = new Set(oldPlugins.map((p) => p.id));
-        const newIds = new Set(newPlugins.map((p) => p.id));
-
-        for (const oldId of oldIds) {
-          if (!newIds.has(oldId)) {
-            this.sensorController.onAssignmentChanged(oldId, sensorType, false);
-          }
-        }
-
-        for (const newId of newIds) {
-          if (!oldIds.has(newId)) {
-            this.sensorController.onAssignmentChanged(newId, sensorType, true);
-          }
-        }
-      } else {
-        const oldPlugin = oldAssignments[key] as { id: string } | undefined;
-        const newPlugin = newAssignments[key] as { id: string } | undefined;
-
-        const oldId = oldPlugin?.id;
-        const newId = newPlugin?.id;
-
-        if (oldId !== newId) {
-          if (oldId) {
-            this.sensorController.onAssignmentChanged(oldId, sensorType, false);
-          }
-          if (newId) {
-            this.sensorController.onAssignmentChanged(newId, sensorType, true);
-          }
-        }
-      }
-    }
   }
 
   private async onDisabled(): Promise<void> {

@@ -52,11 +52,21 @@ class StoredSensorData(TypedDict):
     type: SensorType
     name: str
     displayName: str
+    nativeId: NotRequired[str]
     pluginId: str
+    assignedCameraIds: list[str]
+    exposed: bool
+    connected: bool
     properties: dict[str, Any]
     capabilities: NotRequired[list[str]]
     requiresFrames: NotRequired[bool]
     modelSpec: NotRequired[ModelSpec]
+
+
+class SensorRegistration(TypedDict):
+    id: str
+    assignedCameraIds: list[str]
+    active: bool
 
 
 class SensorRefreshedState(TypedDict):
@@ -67,33 +77,41 @@ class SensorRefreshedState(TypedDict):
 
 
 class SensorAddedEvent(TypedDict):
-    cameraId: str
     sensor: StoredSensorData
     state: SensorRefreshedState
 
 
-class SensorRemovedEvent(TypedDict):
-    cameraId: str
+class SensorDeletedEvent(TypedDict):
     sensorId: str
     sensorType: SensorType
 
 
+class SensorConnectedChangedEvent(TypedDict):
+    sensorId: str
+    sensorType: SensorType
+    connected: bool
+
+
 class SensorCapabilitiesChangedEvent(TypedDict):
-    cameraId: str
     sensorId: str
     capabilities: list[str]
 
 
 class SensorDisplayNameChangedEvent(TypedDict):
-    cameraId: str
     sensorId: str
     displayName: str
 
 
-class SensorAssignmentChangedEvent(TypedDict):
-    cameraId: str
-    pluginId: str
+class SensorExposedChangedEvent(TypedDict):
+    sensorId: str
     sensorType: SensorType
+    exposed: bool
+
+
+class SensorAssignmentChangedEvent(TypedDict):
+    sensorId: str
+    sensorType: SensorType
+    cameraId: str
     assigned: bool
 
 
@@ -101,18 +119,22 @@ class SensorEventMessage(TypedDict):
     type: Literal[
         "property:changed",
         "sensor:added",
-        "sensor:removed",
+        "sensor:deleted",
+        "sensor:connected:changed",
         "sensor:displayName:changed",
         "sensor:capabilities:changed",
         "sensor:assignment:changed",
+        "sensor:exposed:changed",
     ]
     data: (
         PropertyChangedEvent
         | SensorAddedEvent
-        | SensorRemovedEvent
+        | SensorDeletedEvent
+        | SensorConnectedChangedEvent
         | SensorDisplayNameChangedEvent
         | SensorCapabilitiesChangedEvent
         | SensorAssignmentChangedEvent
+        | SensorExposedChangedEvent
     )
 
 

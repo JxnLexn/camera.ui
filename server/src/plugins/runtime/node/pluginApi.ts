@@ -4,6 +4,7 @@ import { CoreManagerProxy } from './proxy/coreManager.js';
 import { DeviceManagerProxy } from './proxy/deviceManager.js';
 import { DownloadManagerProxy } from './proxy/downloadManager.js';
 import { NotificationManagerProxy } from './proxy/notificationManager.js';
+import { SensorManagerProxy } from './proxy/sensorManager.js';
 import { StorageController } from './storageController.js';
 
 import type { Logger } from '@camera.ui/common';
@@ -14,6 +15,7 @@ import type { PluginConfigDb } from './configDb.js';
 export class PluginAPI extends EventEmitter implements PluginAPIInterface {
   readonly coreManager: CoreManagerProxy;
   readonly deviceManager: DeviceManagerProxy;
+  readonly sensorManager: SensorManagerProxy;
   readonly downloadManager: DownloadManagerProxy;
   readonly notificationManager: NotificationManagerProxy;
 
@@ -30,7 +32,8 @@ export class PluginAPI extends EventEmitter implements PluginAPIInterface {
 
     this._storageController = new StorageController(this, this.proxy, this.plugin, this.pluginDb);
     this.coreManager = new CoreManagerProxy(this.proxy, this.plugin);
-    this.deviceManager = new DeviceManagerProxy(this.proxy, this._storageController, this.plugin, this.logger);
+    this.sensorManager = new SensorManagerProxy(this.proxy, this._storageController, this.plugin, this.logger);
+    this.deviceManager = new DeviceManagerProxy(this.proxy, this._storageController, this.sensorManager, this.plugin, this.logger);
     this.downloadManager = new DownloadManagerProxy(this.proxy);
     this.notificationManager = new NotificationManagerProxy(this.proxy, this.plugin);
   }

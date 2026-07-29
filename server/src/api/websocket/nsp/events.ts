@@ -34,16 +34,15 @@ interface DetectionEventMessage {
 
 interface SensorMessage {
   type: 'added' | 'removed' | 'changed' | 'meta';
-  cameraId: string;
   sensorId: string;
-  stableId: string;
-  globalId: string;
   sensorType: string;
+  assignedCameraIds: string[];
   property?: string;
   value?: unknown;
   sensorName?: string;
   displayName?: string;
   capabilities?: string[];
+  connected?: boolean;
 }
 
 const FORWARDED_TYPES: ReadonlySet<DetectionEventType> = new Set(['start', 'update', 'end', 'segment-start', 'segment-end']);
@@ -108,11 +107,9 @@ export class EventsNamespace {
       const p = payload as SensorPropertyChangedPayload;
       this.emitSensor({
         type: 'changed',
-        cameraId: p.cameraId,
         sensorId: p.sensorId,
-        stableId: p.sensorStableId,
-        globalId: p.sensorGlobalId,
         sensorType: p.sensorType,
+        assignedCameraIds: p.assignedCameraIds,
         property: p.property,
         value: p.value,
       });
@@ -122,29 +119,30 @@ export class EventsNamespace {
       const p = payload as SensorLifecyclePayload;
       this.emitSensor({
         type: 'added',
-        cameraId: p.cameraId,
         sensorId: p.sensorId,
-        stableId: p.sensorStableId,
-        globalId: p.sensorGlobalId,
         sensorType: p.sensorType,
+        assignedCameraIds: p.assignedCameraIds,
         sensorName: p.sensorName,
       });
     });
 
-    this.onBus(bus, 'sensor:removed', (payload) => {
+    this.onBus(bus, 'sensor:deleted', (payload) => {
       const p = payload as SensorLifecyclePayload;
-      this.emitSensor({ type: 'removed', cameraId: p.cameraId, sensorId: p.sensorId, stableId: p.sensorStableId, globalId: p.sensorGlobalId, sensorType: p.sensorType });
+      this.emitSensor({ type: 'removed', sensorId: p.sensorId, sensorType: p.sensorType, assignedCameraIds: p.assignedCameraIds });
+    });
+
+    this.onBus(bus, 'sensor:connected:changed', (payload) => {
+      const p = payload as SensorLifecyclePayload;
+      this.emitSensor({ type: 'meta', sensorId: p.sensorId, sensorType: p.sensorType, assignedCameraIds: p.assignedCameraIds, connected: p.connected });
     });
 
     this.onBus(bus, 'sensor:displayName:changed', (payload) => {
       const p = payload as SensorDisplayNameChangedPayload;
       this.emitSensor({
         type: 'meta',
-        cameraId: p.cameraId,
         sensorId: p.sensorId,
-        stableId: p.sensorStableId,
-        globalId: p.sensorGlobalId,
         sensorType: p.sensorType,
+        assignedCameraIds: p.assignedCameraIds,
         displayName: p.displayName,
       });
     });
@@ -153,18 +151,19 @@ export class EventsNamespace {
       const p = payload as SensorCapabilitiesChangedPayload;
       this.emitSensor({
         type: 'meta',
-        cameraId: p.cameraId,
         sensorId: p.sensorId,
-        stableId: p.sensorStableId,
-        globalId: p.sensorGlobalId,
         sensorType: p.sensorType,
+        assignedCameraIds: p.assignedCameraIds,
         capabilities: p.capabilities,
       });
     });
   }
 
   private emitSensor(message: SensorMessage): void {
-    this.nsp.to('all').to(`camera:${message.cameraId}`).emit('sensor', message);
+    // fan out into each assigned camera's room, 'all' subscribers see everything once
+    const rooms = this.nsp.to('all');
+    for (const cameraId of message.assignedCameraIds) rooms.to(`camera:${cameraId}`);
+    rooms.emit('sensor', message);
   }
 
   private onBus(bus: InternalEventBus, event: InternalEvent, handler: (payload: InternalEventPayload) => void): void {

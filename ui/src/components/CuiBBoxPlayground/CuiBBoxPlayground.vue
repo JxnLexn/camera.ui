@@ -203,15 +203,15 @@ const isLabelOnRight = computed(() => (detection: AnyDetection): boolean => {
 });
 
 function isFaceDetection(d: AnyDetection): d is FaceDetection {
-  return 'attribute' in d && d.attribute === 'face';
+  return d.attribute === 'face';
 }
 
 function isLicensePlateDetection(d: AnyDetection): d is LicensePlateDetection {
-  return 'attribute' in d && d.attribute === 'license_plate';
+  return d.attribute === 'license_plate';
 }
 
 function isClassifierDetection(d: AnyDetection): d is ClassifierDetection {
-  return 'attribute' in d && d.attribute !== 'face' && d.attribute !== 'license_plate' && 'subAttribute' in d;
+  return d.attribute !== 'face' && d.attribute !== 'license_plate' && 'subAttribute' in d;
 }
 
 function resolveStyleKey(detection: AnyDetection): string {

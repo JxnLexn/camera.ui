@@ -43,7 +43,7 @@ import type {
   UserLanguage,
   UsernameParamsInput,
 } from '../schemas/users.schema.js';
-import type { CreateVirtualSensorInput, PatchVirtualSensorInput } from '../schemas/virtualsensors.schema.js';
+import type { CreateVirtualSensorInput, PatchSensorInput, SensorCommandInput } from '../schemas/sensors.schema.js';
 import type { RegisterDeviceInput } from '../services/notifications.service.js';
 
 export interface BusboyFileStream extends Readable {
@@ -1004,16 +1004,28 @@ export interface AutomationsStoreParamsRequest {
   Params: { id: string };
 }
 
-export interface VirtualSensorsParamsRequest {
+export interface SensorsParamsRequest {
   Params: { id: string };
 }
 
-export interface VirtualSensorsCreateRequest {
+export interface SensorsListRequest {
+  Querystring: { camera?: string };
+}
+
+export interface SensorsCreateVirtualRequest {
   Body: CreateVirtualSensorInput;
 }
 
-export interface VirtualSensorsPatchRequest {
-  Body: PatchVirtualSensorInput;
+export interface SensorsPatchRequest {
+  Body: PatchSensorInput;
+}
+
+export interface SensorsCommandRequest {
+  Body: SensorCommandInput;
+}
+
+export interface SensorsHistoryRequest {
+  Querystring: { limit?: number };
 }
 
 export interface DownloadParamsRequest {

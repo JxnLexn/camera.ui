@@ -27,6 +27,7 @@ import { CloudApi } from './remote/api/index.js';
 import { RemoteAccessManager } from './remote/index.js';
 import { TunnelClient } from './remote/tunnel/client.js';
 import { ProxyServer } from './rpc/index.js';
+import { SensorRegistry } from './sensors/registry.js';
 import { ConfigService } from './services/config/index.js';
 import { LoggerService } from './services/logger/index.js';
 import { markShuttingDown, resetShuttingDown } from './shutdown-state.js';
@@ -55,6 +56,7 @@ class CameraUi {
   private workerManager: WorkerManager;
   private backupScheduler: BackupSchedulerService;
   private mqttManager: MqttManager;
+  private sensorRegistry?: SensorRegistry;
   private signalHandler: SignalHandler;
 
   private homePath: string | undefined;
@@ -131,6 +133,10 @@ class CameraUi {
     await this.proxy.initialize();
     await this.workerManager.start();
 
+    // hydrate sensor entities before MQTT, plugins and cameras come up
+    this.sensorRegistry = new SensorRegistry(this.proxy.proxy, this.logger);
+    await this.sensorRegistry.init();
+
     this.logger.log('---');
 
     sendIPCMessage({
@@ -201,6 +207,9 @@ class CameraUi {
     }
 
     await Promise.allSettled(Array.from(this.pluginManager.plugins).map(([, plugin]) => plugin.worker.teardown(true)));
+
+    await this.sensorRegistry?.destroy().catch(() => {});
+    this.sensorRegistry = undefined;
 
     await sleep(500);
 

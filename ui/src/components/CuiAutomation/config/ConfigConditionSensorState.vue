@@ -1,43 +1,17 @@
 <template>
   <div class="flex flex-col gap-4">
     <div class="flex flex-col field-gap">
-      <label class="cui-label">{{ t('components.automation_nodes.camera') }}</label>
+      <label class="cui-label">{{ t('components.automation_nodes.sensor_label') }}</label>
       <Select
-        :model-value="data.cameraId"
-        :options="cameraOptions"
-        option-label="label"
-        option-value="value"
-        :placeholder="t('components.automation_nodes.camera_placeholder')"
-        class="w-full"
-        @update:model-value="onCameraChange"
-      />
-    </div>
-
-    <div class="flex flex-col field-gap">
-      <label class="cui-label">{{ t('components.automation_nodes.sensor_type_label') }}</label>
-      <Select
-        :model-value="data.sensorType"
+        :model-value="data.sensorId"
         :options="sensorOptions"
         option-label="label"
         option-value="value"
-        :placeholder="t('components.automation_nodes.sensor_type_placeholder')"
+        :placeholder="t('components.automation_nodes.sensor_placeholder')"
         class="w-full"
-        :disabled="!data.cameraId"
-        @update:model-value="onSensorTypeChange"
-      />
-    </div>
-
-    <div v-if="data.sensorType" class="flex flex-col field-gap">
-      <label class="cui-label">{{ t('components.automation_nodes.sensor_instance') }}</label>
-      <Select
-        :model-value="selectedInstanceKey"
-        :options="instanceSelectOptions"
-        option-label="label"
-        option-value="value"
-        :placeholder="t('components.automation_nodes.sensor_instance_placeholder')"
-        class="w-full"
-        :loading="instancesLoading"
-        @update:model-value="onInstanceChange"
+        :loading="isLoading"
+        filter
+        @update:model-value="onSensorChange"
       />
     </div>
 
@@ -54,7 +28,7 @@
       />
     </div>
 
-    <div v-if="data.sensorName" class="flex flex-col gap-3">
+    <div v-if="data.sensorId" class="flex flex-col gap-3">
       <div v-for="(cond, idx) in conditions" :key="idx" class="flex flex-col gap-1.5 p-2 rounded-md border-color">
         <div class="flex items-center gap-2">
           <Select
@@ -93,9 +67,7 @@
           :variable-mode="isVariableMode(idx)"
           :node-id="nodeId"
           :disabled="!cond.property"
-          :camera-id="data.cameraId"
-          :sensor-name="data.sensorName"
-          :sensor-plugin-id="data.sensorPluginId"
+          :sensor-id="data.sensorId"
           @update:model-value="(value) => updateCondition(idx, 'expectedValue', value)"
         />
       </div>
@@ -106,10 +78,10 @@
 </template>
 
 <script setup lang="ts">
-import { SensorType } from '@camera.ui/sdk';
 import EqualIcon from '~icons/mdi/equal';
 import VariableIcon from '~icons/mdi/variable';
 
+import { SENSOR_TYPE_CONFIG } from '@shared/types';
 import ConfigSensorValueInput from './ConfigSensorValueInput.vue';
 import { getSensorPropertyDefaultValue } from './sensorPropertyInputs.js';
 import { useCameraOptions } from './useCameraOptions.js';
@@ -121,7 +93,7 @@ const props = defineProps<ConfigConditionSensorStateProps>();
 const emit = defineEmits<ConfigNodeUpdateEmits>();
 
 const { t } = useI18n();
-const { cameraOptions, getSensorTypes, useSensorInstances, getPropertiesForSensor } = useCameraOptions();
+const { useSensorOptions, getPropertiesForSensor } = useCameraOptions();
 
 const logicOptions = [
   { label: t('components.automation_nodes.logic_and'), value: 'AND' },
@@ -146,29 +118,7 @@ function setVariableMode(idx: number, enabled: boolean) {
   }
 }
 
-const sensorOptions = computed(() => {
-  if (!props.data.cameraId) return [];
-  return getSensorTypes(props.data.cameraId).map((s) => ({
-    label: t(`components.camera_options.sensor_type_${s.value}`),
-    value: s.value,
-  }));
-});
-
-const cameraIdRef = computed(() => props.data.cameraId || undefined);
-const sensorTypeRef = computed(() => (props.data.sensorType as SensorType) || SensorType.Contact);
-const { instanceOptions, isLoading: instancesLoading } = useSensorInstances(cameraIdRef, sensorTypeRef);
-
-const selectedInstanceKey = computed(() => {
-  if (!props.data.sensorName || !props.data.sensorPluginId) return '';
-  return `${props.data.sensorName}::${props.data.sensorPluginId}`;
-});
-
-const instanceSelectOptions = computed(() =>
-  instanceOptions.value.map((inst) => ({
-    label: inst.label,
-    value: `${inst.sensorName}::${inst.pluginId}`,
-  })),
-);
+const { sensorOptions, sensorById, isLoading } = useSensorOptions((sensor) => !SENSOR_TYPE_CONFIG[sensor.type].isDetectionType);
 
 const propertyOptions = computed(() => {
   if (!props.data.sensorType) return [];
@@ -206,17 +156,9 @@ function updateCondition(idx: number, field: 'property' | 'expectedValue', value
   emit('update:data', { conditions: current });
 }
 
-function onCameraChange(value: unknown) {
-  emit('update:data', { cameraId: value, sensorType: '', sensorName: '', sensorPluginId: '', conditions: [], logic: 'AND' });
-}
-
-function onSensorTypeChange(value: unknown) {
-  emit('update:data', { sensorType: value, sensorName: '', sensorPluginId: '', conditions: [], logic: 'AND' });
-}
-
-function onInstanceChange(key: unknown) {
-  const [sensorName, sensorPluginId] = String(key).split('::');
-  emit('update:data', { sensorName, sensorPluginId, conditions: [{ property: '', expectedValue: '' }] });
+function onSensorChange(value: unknown) {
+  const sensor = sensorById(String(value ?? ''));
+  emit('update:data', { sensorId: value, sensorType: sensor ? String(sensor.type) : '', conditions: [{ property: '', expectedValue: '' }], logic: 'AND' });
 }
 
 function update(key: string, value: unknown) {

@@ -12,8 +12,9 @@
 </template>
 
 <script setup lang="ts">
-import { useCameraNames } from '../config/useCameraOptions.js';
+import { useAllSensors } from '@camera.ui/browser';
 import { useNodeIssues } from '../config/flowValidation.js';
+import { useCameraNames } from '../config/useCameraOptions.js';
 import { getNodeDefinition } from '../nodeDefinitions.js';
 import { getNodeSummary } from '../utils.js';
 import BaseNode from './BaseNode.vue';
@@ -25,10 +26,16 @@ const props = defineProps<NodeProps<AutomationNodeData>>();
 
 const { t } = useI18n();
 const { cameraName } = useCameraNames();
+const { sensors: allSensors } = useAllSensors();
 
 const nodeWarning = useNodeIssues(() => props.id);
 
 const definition = computed(() => getNodeDefinition(props.type));
 const label = computed(() => (definition.value ? t(definition.value.labelKey) : props.type));
-const subtitle = computed(() => getNodeSummary(props.data, cameraName));
+const subtitle = computed(() => getNodeSummary(props.data, cameraName, sensorLabel));
+
+function sensorLabel(id: string): string | undefined {
+  const sensor = allSensors.value.find((s) => s.id === id);
+  return sensor ? sensor.displayName.value || sensor.name : undefined;
+}
 </script>

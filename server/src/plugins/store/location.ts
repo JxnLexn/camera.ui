@@ -1,4 +1,4 @@
-export type StoreLocation = { kind: 'plugin' } | { kind: 'camera'; cameraId: string } | { kind: 'sensor'; cameraId: string; sensorType: string; sensorName: string };
+export type StoreLocation = { kind: 'plugin' } | { kind: 'camera'; cameraId: string } | { kind: 'sensor'; pluginId: string; sensorId: string };
 
 export function readLocation(config: Record<string, any>, location: StoreLocation): Record<string, any> | undefined {
   switch (location.kind) {
@@ -7,7 +7,7 @@ export function readLocation(config: Record<string, any>, location: StoreLocatio
     case 'camera':
       return config.cameras?.[location.cameraId];
     case 'sensor':
-      return config.sensors?.[location.cameraId]?.[location.sensorType]?.[location.sensorName];
+      return config.sensors?.[location.sensorId];
   }
 }
 
@@ -22,9 +22,7 @@ export function writeLocation(config: Record<string, any>, location: StoreLocati
       return;
     case 'sensor':
       config.sensors ??= {};
-      config.sensors[location.cameraId] ??= {};
-      config.sensors[location.cameraId][location.sensorType] ??= {};
-      config.sensors[location.cameraId][location.sensorType][location.sensorName] = values;
+      config.sensors[location.sensorId] = values;
       return;
   }
 }
@@ -38,16 +36,10 @@ export function deleteLocation(config: Record<string, any>, location: StoreLocat
       delete config.cameras?.[location.cameraId];
       pruneIfEmpty(config, 'cameras');
       return;
-    case 'sensor': {
-      const byType = config.sensors?.[location.cameraId]?.[location.sensorType];
-      if (byType) {
-        delete byType[location.sensorName];
-        pruneIfEmpty(config.sensors[location.cameraId], location.sensorType);
-        pruneIfEmpty(config.sensors, location.cameraId);
-        pruneIfEmpty(config, 'sensors');
-      }
+    case 'sensor':
+      delete config.sensors?.[location.sensorId];
+      pruneIfEmpty(config, 'sensors');
       return;
-    }
   }
 }
 

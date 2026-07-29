@@ -1,13 +1,12 @@
 import { DeviceStorage } from './storage.js';
 
 import type { RPCClient } from '@camera.ui/rpc';
-import type { JsonSchema, PluginInfo, SensorType } from '@camera.ui/sdk';
+import type { JsonSchema, PluginInfo } from '@camera.ui/sdk';
 import type { PluginConfigDb } from './configDb.js';
 import type { PluginAPI } from './pluginApi.js';
 
-// Stable storage key for sensor instance storage.
-function sensorStorageKey(cameraId: string, sensorType: SensorType, pluginId: string, sensorName: string): string {
-  return `${cameraId}:sensor:${sensorType}:${pluginId}:${sensorName}`;
+function sensorStorageKey(sensorId: string): string {
+  return `sensor:${sensorId}`;
 }
 
 export class StorageController {
@@ -58,71 +57,39 @@ export class StorageController {
     return this.#storages.get('storage') as DeviceStorage<T> | undefined;
   }
 
-  public createSensorStorage<T extends Record<string, any> = Record<string, any>>(
-    cameraId: string,
-    sensorType: SensorType,
-    pluginId: string,
-    sensorName: string,
-    sensorId: string,
-    schemas: JsonSchema[] = [],
-  ): DeviceStorage<T> {
-    const storageKey = sensorStorageKey(cameraId, sensorType, pluginId, sensorName);
+  public createSensorStorage<T extends Record<string, any> = Record<string, any>>(pluginId: string, sensorId: string, schemas: JsonSchema[] = []): DeviceStorage<T> {
+    const storageKey = sensorStorageKey(sensorId);
     let storage = this.#storages.get(storageKey);
 
     if (!storage) {
-      // storageKey is only the in-memory registry key; persistence addresses
-      // the canonical sensors.<camId>.<type>.<name> path. sensorId is the
-      // runtime UUID for the RPC namespace.
-      storage = new DeviceStorage<T>(this.#api, this.#proxy, this.#plugin, this.#pluginDb, { kind: 'sensor', cameraId, sensorType, sensorName }, schemas, sensorId);
+      storage = new DeviceStorage<T>(this.#api, this.#proxy, this.#plugin, this.#pluginDb, { kind: 'sensor', pluginId, sensorId }, schemas, sensorId);
       this.#storages.set(storageKey, storage);
-      storage.updateSchema(schemas);
-    } else {
-      storage.updateSchema(schemas);
     }
+    storage.updateSchema(schemas);
 
     return storage as DeviceStorage<T>;
   }
 
-  public getSensorStorage<T extends Record<string, any> = Record<string, any>>(
-    cameraId: string,
-    sensorType: SensorType,
-    pluginId: string,
-    sensorName: string,
-  ): DeviceStorage<T> | undefined {
-    const storageKey = sensorStorageKey(cameraId, sensorType, pluginId, sensorName);
-    return this.#storages.get(storageKey) as DeviceStorage<T> | undefined;
+  public getSensorStorage<T extends Record<string, any> = Record<string, any>>(sensorId: string): DeviceStorage<T> | undefined {
+    return this.#storages.get(sensorStorageKey(sensorId)) as DeviceStorage<T> | undefined;
   }
 
   public async createStorage(type: 'camera', deviceId: string): Promise<DeviceStorage<any>>;
   public async createStorage(type: 'plugin'): Promise<DeviceStorage<any>>;
-  public async createStorage(
-    type: 'sensor',
-    cameraId: string,
-    sensorType: SensorType,
-    pluginId: string,
-    sensorName: string,
-    sensorId: string,
-  ): Promise<DeviceStorage<any>>;
-  public async createStorage(
-    type: 'camera' | 'plugin' | 'sensor',
-    deviceIdOrCameraId?: string,
-    sensorTypeOrUndefined?: SensorType,
-    pluginId?: string,
-    sensorName?: string,
-    sensorId?: string,
-  ): Promise<DeviceStorage<any>> {
+  public async createStorage(type: 'sensor', pluginId: string, sensorId: string): Promise<DeviceStorage<any>>;
+  public async createStorage(type: 'camera' | 'plugin' | 'sensor', deviceIdOrPluginId?: string, sensorId?: string): Promise<DeviceStorage<any>> {
     let storage: DeviceStorage<any> | undefined;
 
     if (type === 'camera') {
-      if (!deviceIdOrCameraId) {
+      if (!deviceIdOrPluginId) {
         throw new Error('deviceId is required for camera storage creation');
       }
-      storage = this.createCameraStorage(deviceIdOrCameraId);
+      storage = this.createCameraStorage(deviceIdOrPluginId);
     } else if (type === 'sensor') {
-      if (!deviceIdOrCameraId || !sensorTypeOrUndefined || !pluginId || !sensorName || !sensorId) {
-        throw new Error('cameraId, sensorType, pluginId, sensorName and sensorId are required for sensor storage creation');
+      if (!deviceIdOrPluginId || !sensorId) {
+        throw new Error('pluginId and sensorId are required for sensor storage creation');
       }
-      storage = this.createSensorStorage(deviceIdOrCameraId, sensorTypeOrUndefined, pluginId, sensorName, sensorId);
+      storage = this.createSensorStorage(deviceIdOrPluginId, sensorId);
     } else {
       storage = this.createPluginStorage();
     }
@@ -133,26 +100,20 @@ export class StorageController {
 
   public async removeStorage(type: 'camera', deviceId: string): Promise<void>;
   public async removeStorage(type: 'plugin'): Promise<void>;
-  public async removeStorage(type: 'sensor', cameraId: string, sensorType: SensorType, pluginId: string, sensorName: string): Promise<void>;
-  public async removeStorage(
-    type: 'camera' | 'plugin' | 'sensor',
-    deviceIdOrCameraId?: string,
-    sensorTypeOrUndefined?: SensorType,
-    pluginId?: string,
-    sensorName?: string,
-  ): Promise<void> {
+  public async removeStorage(type: 'sensor', sensorId: string): Promise<void>;
+  public async removeStorage(type: 'camera' | 'plugin' | 'sensor', deviceIdOrSensorId?: string): Promise<void> {
     let storageKey: string;
 
     if (type === 'sensor') {
-      if (!deviceIdOrCameraId || !sensorTypeOrUndefined || !pluginId || !sensorName) {
-        throw new Error('cameraId, sensorType, pluginId and sensorName are required for sensor storage removal');
+      if (!deviceIdOrSensorId) {
+        throw new Error('sensorId is required for sensor storage removal');
       }
-      storageKey = sensorStorageKey(deviceIdOrCameraId, sensorTypeOrUndefined, pluginId, sensorName);
+      storageKey = sensorStorageKey(deviceIdOrSensorId);
     } else if (type === 'camera') {
-      if (!deviceIdOrCameraId) {
+      if (!deviceIdOrSensorId) {
         throw new Error('deviceId is required for camera storage removal');
       }
-      storageKey = deviceIdOrCameraId;
+      storageKey = deviceIdOrSensorId;
     } else {
       storageKey = 'storage';
     }

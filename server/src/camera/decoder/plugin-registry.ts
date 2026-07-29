@@ -1,6 +1,6 @@
 import { SensorType } from '@camera.ui/sdk';
 
-import { SENSOR_TYPE_CONFIG } from '../sensors/types.js';
+import { SENSOR_TYPE_CONFIG } from '../../sensors/types.js';
 
 import type { Promisify } from '@camera.ui/rpc';
 import type { AudioModelSpec, ModelSpec, ObjectModelSpec, VideoInputSpec } from '@camera.ui/sdk';

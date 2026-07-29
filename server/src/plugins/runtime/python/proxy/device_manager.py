@@ -27,6 +27,7 @@ from plugins.runtime.python.storage_controller import StorageController
 from plugins.runtime.python.typings import PluginInfo
 
 from .camera_device import CameraDeviceProxy
+from .sensor_manager import SensorManagerProxy
 
 
 class DeviceManagerProxy(DeviceManager):
@@ -34,6 +35,7 @@ class DeviceManagerProxy(DeviceManager):
         self,
         proxy: RPCClient,
         storage_controller: StorageController,
+        sensor_manager: SensorManagerProxy,
         logger: LoggerService,
         plugin: PluginInfo,
     ):
@@ -42,6 +44,7 @@ class DeviceManagerProxy(DeviceManager):
 
         self.__proxy = proxy
         self.__storage_controller = storage_controller
+        self.__sensor_manager = sensor_manager
         self.__logger = logger
         self.__plugin = plugin
         self.__close_request: CloseHandler | None = None
@@ -170,6 +173,7 @@ class DeviceManagerProxy(DeviceManager):
                 camera_device = CameraDeviceProxy(
                     self.__proxy,
                     self.__storage_controller,
+                    self.__sensor_manager,
                     camera,
                     self.__plugin,
                     camera_logger,

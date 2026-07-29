@@ -90,9 +90,7 @@ class DeviceStorage(DeviceStorageInterface):
         if isinstance(location, SensorLocation):
             if not self.__sensor_id:
                 raise ValueError(f"sensor storage for {plugin['id']} requires a sensor_id")
-            sensor_ns = NamespaceManager.plugin_sensor_namespaces(
-                plugin["id"], location.camera_id, self.__sensor_id
-            )
+            sensor_ns = NamespaceManager.plugin_sensor_namespaces(plugin["id"], self.__sensor_id)
             self.__storage_namespace = sensor_ns.sensor_storage_rpc
         elif isinstance(location, PluginLocation):
             plugin_ns = NamespaceManager.plugin_namespaces(plugin["id"])

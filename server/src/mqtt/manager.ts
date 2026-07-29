@@ -222,7 +222,7 @@ export class MqttManager {
 
       this.publish(this.topics.availability, 'online', { retain: true, qos: 1 });
 
-      client.subscribe(`${this.topics.prefix}/camera/+/sensor/+/+/set`, { qos: 0 }, (error) => {
+      client.subscribe(`${this.topics.prefix}/sensor/+/+/set`, { qos: 0 }, (error) => {
         if (error) {
           this.logger.debug(`MQTT command subscription failed: ${error.message}`);
         }

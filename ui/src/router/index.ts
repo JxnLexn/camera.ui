@@ -1,6 +1,8 @@
 import { sleep } from '@camera.ui/common/utils';
 import { startViewTransition } from 'vue-view-transitions';
 import CctvIcon from '~icons/bx/cctv';
+import SensorsIcon from '~icons/material-symbols/home-iot-device-outline';
+import SensorsIconActive from '~icons/material-symbols/home-iot-device';
 import InstancesIcon from '~icons/bx/server';
 import CctvIconActive from '~icons/bxs/cctv';
 import InstancesIconActive from '~icons/bxs/server';
@@ -57,6 +59,7 @@ import Login from '@/views/Login.vue';
 const NotFound = () => import('@/views/404.vue');
 const FirstSteps = () => import('@/views/FirstSteps.vue');
 const Cameras = () => import('@/views/Cameras.vue');
+const Sensors = () => import('@/views/Sensors.vue');
 const Camera = () => import('@/views/Camera.vue');
 const Camview = () => import('@/views/Camview.vue');
 const Recordings = () => import('@/views/Recordings.vue');
@@ -200,6 +203,41 @@ export const routes: RouteRecordRaw[] = [
         icon: {
           default: CctvIcon,
           active: CctvIconActive,
+        },
+      },
+    },
+  },
+  {
+    name: 'Sensors',
+    path: '/sensors',
+    component: Sensors,
+    meta: {
+      name: 'sensors',
+      auth: {
+        requiresAuth: true,
+        role: 'admin',
+      },
+      ui: {
+        containerSettings: {
+          showTitle: true,
+          padding: true,
+        },
+        showNavbar: true,
+        showTopbar: true,
+        showBottombar: true,
+        showRouterLoading: true,
+      },
+      navbar: {
+        position: 'top',
+        icon: {
+          default: SensorsIcon,
+          active: SensorsIconActive,
+        },
+      },
+      bottombar: {
+        icon: {
+          default: SensorsIcon,
+          active: SensorsIconActive,
         },
       },
     },

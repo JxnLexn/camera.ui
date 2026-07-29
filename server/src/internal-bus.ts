@@ -7,7 +7,14 @@ export type PluginEvent = 'plugin:started' | 'plugin:stopped' | 'plugin:error' |
 
 export type CameraEvent = 'camera:connected' | 'camera:disconnected' | 'camera:frameworker:started' | 'camera:frameworker:stopped' | 'camera:property:changed';
 
-export type SensorEvent = 'sensor:property:changed' | 'sensor:added' | 'sensor:removed' | 'sensor:displayName:changed' | 'sensor:capabilities:changed';
+export type SensorEvent =
+  | 'sensor:property:changed'
+  | 'sensor:added'
+  | 'sensor:deleted'
+  | 'sensor:connected:changed'
+  | 'sensor:displayName:changed'
+  | 'sensor:capabilities:changed'
+  | 'sensor:exposed:changed';
 
 export type InternalEvent = SystemEvent | PluginEvent | CameraEvent | SensorEvent;
 
@@ -37,40 +44,33 @@ export interface CameraEventPayload {
 }
 
 export interface SensorPropertyChangedPayload {
-  cameraId: string;
   sensorId: string;
-  sensorStableId: string;
-  sensorGlobalId: string;
   sensorType: string;
+  assignedCameraIds: string[];
   property: string;
   value: unknown;
   previousValue: unknown;
 }
 
 export interface SensorLifecyclePayload {
-  cameraId: string;
   sensorId: string;
-  sensorStableId: string;
-  sensorGlobalId: string;
   sensorType: string;
   sensorName?: string;
+  assignedCameraIds: string[];
+  connected?: boolean;
 }
 
 export interface SensorDisplayNameChangedPayload {
-  cameraId: string;
   sensorId: string;
-  sensorStableId: string;
-  sensorGlobalId: string;
   sensorType: string;
+  assignedCameraIds: string[];
   displayName: string;
 }
 
 export interface SensorCapabilitiesChangedPayload {
-  cameraId: string;
   sensorId: string;
-  sensorStableId: string;
-  sensorGlobalId: string;
   sensorType: string;
+  assignedCameraIds: string[];
   capabilities: string[];
 }
 

@@ -40,8 +40,7 @@
 </template>
 
 <script setup lang="ts">
-import { useSensorsByType } from '@camera.ui/browser';
-import { SensorType } from '@camera.ui/sdk';
+import { useAllSensors } from '@camera.ui/browser';
 
 import { getObservableSensorProperties } from '@shared/types';
 import { getNodeDefinition } from '../nodeDefinitions.js';
@@ -52,10 +51,8 @@ import type { AutomationFlow, ConfigConditionSwitchProps, ConfigNodeUpdateEmits 
 import type { FlowVariableOption } from './flowSchema.js';
 
 interface SensorTriggerData {
-  cameraId?: string;
+  sensorId?: string;
   sensorType?: string;
-  sensorName?: string;
-  sensorPluginId?: string;
   properties?: string[];
 }
 
@@ -88,10 +85,7 @@ const sensorTrigger = computed<SensorTriggerData | undefined>(() => {
   return undefined;
 });
 
-const { sensors } = useSensorsByType(
-  () => sensorTrigger.value?.cameraId || undefined,
-  () => (sensorTrigger.value?.sensorType as SensorType) || SensorType.Contact,
-);
+const { sensors } = useAllSensors();
 
 const watchedProperties = computed(() => {
   const trigger = sensorTrigger.value;
@@ -102,9 +96,9 @@ const watchedProperties = computed(() => {
 const liveSensorValues = computed(() => {
   if (selectedVariable.value?.template !== '{{sensor.value}}') return [];
   const trigger = sensorTrigger.value;
-  if (!trigger?.sensorName) return [];
+  if (!trigger?.sensorId) return [];
 
-  const sensor = sensors.value.find((s) => s.name === trigger.sensorName && s.pluginId === trigger.sensorPluginId);
+  const sensor = sensors.value.find((s) => s.id === trigger.sensorId);
   if (!sensor) return [];
 
   const watched = trigger.properties?.length ? trigger.properties : Object.keys(sensor.properties);

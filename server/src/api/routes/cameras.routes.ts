@@ -15,9 +15,9 @@ import {
   probeQuerySchema,
   scopedPluginParamsSchema,
   scopedSensorParamsSchema,
-  sensorCommandParamsSchema,
-  sensorCommandSchema,
-  sensorParamsSchema,
+  cameraSensorConfigParamsSchema,
+  legacyCameraSensorCommandParamsSchema,
+  legacyCameraSensorCommandSchema,
   snapshotQuerySchema,
   streamParamsSchema,
 } from '../schemas/cameras.schema.js';
@@ -157,6 +157,8 @@ export const CamerasRoute: FastifyPluginAsync = async (app: FastifyInstance): Pr
     schema: {
       tags: ['Cameras'],
       summary: 'Get the current sensor states for a camera',
+      deprecated: true,
+      description: 'Superseded by /api/sensors. Kept one release for pre-standalone clients, then removed.',
       params: cameraParamsSchema,
     },
   });
@@ -169,6 +171,8 @@ export const CamerasRoute: FastifyPluginAsync = async (app: FastifyInstance): Pr
     schema: {
       tags: ['Cameras'],
       summary: 'Get all registered sensor types for a camera, including currently unassigned providers',
+      deprecated: true,
+      description: 'Superseded by /api/sensors. Kept one release for pre-standalone clients, then removed.',
       params: cameraParamsSchema,
     },
   });
@@ -181,8 +185,10 @@ export const CamerasRoute: FastifyPluginAsync = async (app: FastifyInstance): Pr
     schema: {
       tags: ['Cameras'],
       summary: 'Send a control command to a camera sensor',
-      params: sensorCommandParamsSchema,
-      body: sensorCommandSchema,
+      deprecated: true,
+      description: 'Superseded by POST /api/sensors/:id/command. Kept one release for pre-standalone clients, then removed.',
+      params: legacyCameraSensorCommandParamsSchema,
+      body: legacyCameraSensorCommandSchema,
     },
   });
 
@@ -408,7 +414,7 @@ export const CamerasRoute: FastifyPluginAsync = async (app: FastifyInstance): Pr
     schema: {
       tags: ['Cameras'],
       summary: 'Get the sensor config for a camera plugin',
-      params: sensorParamsSchema,
+      params: cameraSensorConfigParamsSchema,
     },
   });
 
@@ -432,7 +438,7 @@ export const CamerasRoute: FastifyPluginAsync = async (app: FastifyInstance): Pr
     schema: {
       tags: ['Cameras'],
       summary: 'Update the sensor config for a camera plugin',
-      params: sensorParamsSchema,
+      params: cameraSensorConfigParamsSchema,
       body: patchStorageSchema,
     },
   });
@@ -458,7 +464,7 @@ export const CamerasRoute: FastifyPluginAsync = async (app: FastifyInstance): Pr
     schema: {
       tags: ['Cameras'],
       summary: 'Submit a sensor config action for a camera plugin',
-      params: sensorParamsSchema,
+      params: cameraSensorConfigParamsSchema,
       body: submitStorageSchema,
     },
   });
@@ -484,7 +490,7 @@ export const CamerasRoute: FastifyPluginAsync = async (app: FastifyInstance): Pr
     schema: {
       tags: ['Cameras'],
       summary: 'Reset a sensor config key for a camera plugin',
-      params: sensorParamsSchema,
+      params: cameraSensorConfigParamsSchema,
       body: setStorageSchema,
     },
   });

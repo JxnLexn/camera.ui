@@ -8,6 +8,7 @@ import { CLOUD_SERVICE_URL } from '../../services/config/constants.js';
 
 import type { LogEntry } from '@camera.ui/common/logger';
 import type { ChildProcess } from 'node:child_process';
+import type { SensorRegistry } from '../../sensors/registry.js';
 import type { CameraUiAPI } from '../../api.js';
 import type { ProcInfo } from '../../api/database/checks.js';
 import type { ProxyServer } from '../../rpc/index.js';
@@ -147,11 +148,14 @@ export abstract class BasePluginRuntime extends EventEmitter {
   protected onExit(): void {
     this.logger.log(`Plugin ${this.plugin.displayName} exited`);
 
-    // Remove all sensors from this plugin when it exits so clients receive
-    // sensor:removed events and re-registration on restart stays clean.
+    // Disconnect the plugin's sensors so clients receive sensor:removed —
+    // entities and their assignments stay, re-registration rebinds them.
     // (Master-only — on a remote worker the master handles sensor cleanup.)
-    const cameras = this.api?.getCameras() ?? [];
-    cameras.forEach((camera) => camera.removePluginSensors(this.plugin.id));
+    try {
+      container.resolve<SensorRegistry>('sensorRegistry').removePluginSensors(this.plugin.id);
+    } catch {
+      // registry not initialized (worker mode)
+    }
 
     this.configService.removeProcessByPID(this.processInfo?.pid);
     this.worker = undefined;

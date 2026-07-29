@@ -1,11 +1,11 @@
 import type { VirtualSensorType } from '@shared/types';
 
 export interface VirtualSensorCreateProps {
-  cameraId: string;
+  cameraId?: string;
 }
 
 export interface VirtualSensorCreateResult {
-  cameraId: string;
+  cameraId?: string;
   type: VirtualSensorType;
   name: string;
 }

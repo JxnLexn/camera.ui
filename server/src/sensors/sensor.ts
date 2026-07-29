@@ -1,12 +1,29 @@
 import { isEqual } from '@camera.ui/common/utils';
 import { Disposable, Observable } from '@camera.ui/sdk';
 
-import { DETECTION_SENSOR_TYPES, PROPERTY_CAPABILITY_MAP, SENSOR_TYPE_CONFIG } from './types.js';
+import { DETECTION_SENSOR_TYPES, PROPERTY_CAPABILITY_MAP, SENSOR_TYPE_CONFIG, VIRTUAL_SENSOR_OWNER_ID } from './types.js';
 
-import type { ModelSpec, SensorLike, SensorPropertyType, SensorType } from '@camera.ui/sdk';
+import type { Logger } from '@camera.ui/common/logger';
+import type { Promisify } from '@camera.ui/rpc';
+import type { ModelSpec, SensorLike, SensorPropertyType, SensorTriggerSettings, SensorType } from '@camera.ui/sdk';
 import type { PropertyChangedEvent } from '@camera.ui/sdk/internal';
-import type { SensorCapabilitiesChangedEvent, SensorRefreshedState, StoredSensorData } from '../../rpc/interfaces/sensor.js';
-import type { SensorContext } from './controller.js';
+import type { InternalEvent, InternalEventPayload } from '../internal-bus.js';
+import type { DetectionCoordinatorInterface } from '../rpc/interfaces/detection.js';
+import type { SensorCapabilitiesChangedEvent, SensorRefreshedState, StoredSensorData } from '../rpc/interfaces/sensor.js';
+
+export interface SensorContext {
+  readonly logger: Logger;
+  readonly propertyValues: Map<string, unknown>;
+  readonly assignedCameraIds: (sensorId: string) => string[];
+  readonly cameraDetectionSettings: (cameraId: string) => SensorTriggerSettings | undefined;
+  readonly getCoordinator: (cameraId: string) => Promisify<DetectionCoordinatorInterface>;
+  readonly publishSensorEvent: (sensorId: string, event: { type: string; data: unknown }) => void;
+  readonly emitBus: <T extends InternalEventPayload>(event: InternalEvent, payload: T) => void;
+  readonly createPluginSensorRpc: (pluginId: string, sensorId: string) => Promisify<SensorLike>;
+  readonly persistDisplayName: (sensorId: string, displayName: string) => void;
+  readonly persistState: (sensorId: string, delta: Record<string, unknown>) => void;
+  readonly appendHistory: (sensorId: string, delta: Record<string, unknown>) => void;
+}
 
 export class ServerSensor implements SensorLike {
   public readonly id: string;
@@ -16,6 +33,7 @@ export class ServerSensor implements SensorLike {
 
   public readonly onPropertyChanged = new Observable<{ property: string; value: unknown; timestamp: number }>(() => new Disposable(() => {}));
   public readonly onCapabilitiesChanged = new Observable<string[]>(() => new Disposable(() => {}));
+  public readonly onConnectedChanged = new Observable<boolean>(() => new Disposable(() => {}));
 
   private readonly ctx: SensorContext;
 
@@ -36,6 +54,14 @@ export class ServerSensor implements SensorLike {
 
   public get capabilities(): string[] {
     return this.data.capabilities;
+  }
+
+  public get assignedCameraIds(): string[] {
+    return this.ctx.assignedCameraIds(this.id);
+  }
+
+  public get connected(): boolean {
+    return this.data.connected;
   }
 
   public setDisplayName(value: string): void {
@@ -69,7 +95,7 @@ export class ServerSensor implements SensorLike {
   }
 
   public async updateValue(property: string, value: unknown): Promise<void> {
-    if (!this.pluginId) {
+    if (!this.pluginId || this.pluginId === VIRTUAL_SENSOR_OWNER_ID) {
       this.applyPropertyWrites({ [property]: value });
       return;
     }
@@ -83,22 +109,18 @@ export class ServerSensor implements SensorLike {
   }
 
   public async setDisplayNameAsync(displayName: string): Promise<void> {
-    if (!this.pluginId) throw new Error(`Cannot persist display name for sensor ${this.id} without owner plugin`);
-
-    await this.ctx.sensorStorageProxy(this.pluginId, this.id).setInternalValue('_displayName', displayName);
+    this.ctx.persistDisplayName(this.id, displayName);
     this.data.displayName = displayName;
 
     this.ctx.publishSensorEvent(this.id, {
       type: 'sensor:displayName:changed',
-      data: { cameraId: this.ctx.cameraId, sensorId: this.id, displayName },
+      data: { sensorId: this.id, displayName },
     });
 
     this.ctx.emitBus('sensor:displayName:changed', {
-      cameraId: this.ctx.cameraId,
       sensorId: this.id,
-      sensorStableId: this.data.stableId,
-      sensorGlobalId: this.data.globalId,
       sensorType: String(this.type),
+      assignedCameraIds: this.assignedCameraIds,
       displayName,
     });
   }
@@ -108,7 +130,6 @@ export class ServerSensor implements SensorLike {
     this.data.capabilities = unique;
 
     const event: SensorCapabilitiesChangedEvent = {
-      cameraId: this.ctx.cameraId,
       sensorId: this.id,
       capabilities: unique,
     };
@@ -116,11 +137,9 @@ export class ServerSensor implements SensorLike {
     this.ctx.publishSensorEvent(this.id, { type: 'sensor:capabilities:changed', data: event });
 
     this.ctx.emitBus('sensor:capabilities:changed', {
-      cameraId: this.ctx.cameraId,
       sensorId: this.id,
-      sensorStableId: this.data.stableId,
-      sensorGlobalId: this.data.globalId,
       sensorType: String(this.type),
+      assignedCameraIds: this.assignedCameraIds,
       capabilities: unique,
     });
   }
@@ -133,6 +152,7 @@ export class ServerSensor implements SensorLike {
 
     this.maybeReportCascadeTrigger(properties);
 
+    const persisted: Record<string, unknown> = {};
     for (const [property, value] of Object.entries(properties)) {
       this.validateCapability(property);
 
@@ -141,7 +161,12 @@ export class ServerSensor implements SensorLike {
         continue;
       }
 
-      this.writeProperty(property, value);
+      if (this.writeProperty(property, value)) persisted[property] = value;
+    }
+
+    if (Object.keys(persisted).length > 0) {
+      this.ctx.persistState(this.id, persisted);
+      this.ctx.appendHistory(this.id, persisted);
     }
   }
 
@@ -151,16 +176,15 @@ export class ServerSensor implements SensorLike {
     }
   }
 
-  private writeProperty(property: string, value: unknown): void {
+  private writeProperty(property: string, value: unknown): boolean {
     const storeKey = `${this.id}:${property}`;
     const previousValue = this.ctx.propertyValues.get(storeKey);
-    if (isEqual(previousValue, value, true)) return;
+    if (isEqual(previousValue, value, true)) return false;
 
     this.ctx.propertyValues.set(storeKey, value);
     this.data.properties[property] = value;
 
     const event: PropertyChangedEvent = {
-      cameraId: this.ctx.cameraId,
       sensorId: this.id,
       sensorType: this.type,
       property: property as SensorPropertyType,
@@ -171,36 +195,39 @@ export class ServerSensor implements SensorLike {
 
     this.ctx.publishSensorEvent(this.id, { type: 'property:changed', data: event });
     this.ctx.emitBus('sensor:property:changed', {
-      cameraId: this.ctx.cameraId,
       sensorId: this.id,
-      sensorStableId: this.data.stableId,
-      sensorGlobalId: this.data.globalId,
       sensorType: String(this.type),
+      assignedCameraIds: this.assignedCameraIds,
       property: String(property),
       value,
       previousValue,
     });
+
+    return true;
   }
 
+  // fan out to every assigned camera that opted this sensor into its cascade
   private maybeReportCascadeTrigger(properties: Record<string, unknown>): void {
-    const isTrigger = this.ctx.sensorTriggers().some((ref) => ref.sensorType === this.type && ref.sensorName === this.name && ref.pluginId === this.pluginId);
-    if (!isTrigger) return;
-
     const config = SENSOR_TYPE_CONFIG[this.type]?.cascadeTrigger;
     if (!config || !(config.property in properties)) return;
 
     const triggerType = SENSOR_TYPE_CONFIG[this.type].assignmentKey;
     const value = properties[config.property];
-    const timeout = this.ctx.sensorTimeout();
 
-    if (value === config.value) {
-      this.ctx.detectionCoordinator
-        .reportSensorTrigger(this.id, triggerType, 'activate', config.sustained, timeout)
-        .catch((error: unknown) => this.ctx.logger.warn('Failed to report sensor trigger activate:', error));
-    } else if (config.sustained) {
-      this.ctx.detectionCoordinator
-        .reportSensorTrigger(this.id, triggerType, 'deactivate', true, timeout)
-        .catch((error: unknown) => this.ctx.logger.warn('Failed to report sensor trigger deactivate:', error));
+    for (const cameraId of this.assignedCameraIds) {
+      const settings = this.ctx.cameraDetectionSettings(cameraId);
+      if (!settings?.triggers.includes(this.id)) continue;
+
+      const coordinator = this.ctx.getCoordinator(cameraId);
+      if (value === config.value) {
+        coordinator
+          .reportSensorTrigger(this.id, triggerType, 'activate', config.sustained, settings.timeout)
+          .catch((error: unknown) => this.ctx.logger.warn('Failed to report sensor trigger activate:', error));
+      } else if (config.sustained) {
+        coordinator
+          .reportSensorTrigger(this.id, triggerType, 'deactivate', true, settings.timeout)
+          .catch((error: unknown) => this.ctx.logger.warn('Failed to report sensor trigger deactivate:', error));
+      }
     }
   }
 

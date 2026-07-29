@@ -1,24 +1,16 @@
-import { useSensorsByType } from '@camera.ui/browser';
+import { useAllSensors } from '@camera.ui/browser';
 import { SensorType } from '@camera.ui/sdk';
 
 import { CamerasQuery } from '@/api/routes/cameras.js';
-import { getAssignmentKey, getObservableSensorProperties, getWritableSensorProperties, SENSOR_TYPE_CONFIG, VIRTUAL_SENSOR_OWNER_ID } from '@shared/types';
+import { getObservableSensorProperties, getWritableSensorProperties } from '@shared/types';
 
 import type { ReactiveSensor } from '@camera.ui/browser';
-import type { PluginAssignments } from '@camera.ui/sdk';
 import type { DBCamera } from '@shared/types';
 
-export interface SensorTypeOption {
+export interface SensorOption {
   label: string;
   value: string;
-  meta: (typeof SENSOR_TYPE_CONFIG)[SensorType];
-  hasVirtual: boolean;
-}
-
-export interface SensorInstanceOption {
-  label: string;
-  sensorName: string;
-  pluginId: string;
+  type: SensorType;
 }
 
 export function useCameraNames() {
@@ -46,42 +38,31 @@ export function useCameraOptions() {
     })),
   );
 
-  function getSensorTypes(cameraId: string): SensorTypeOption[] {
-    const camera = cameras.value.find((c) => c._id === cameraId);
-    if (!camera?.assignments) return [];
+  function useSensorOptions(filter?: (sensor: ReactiveSensor) => boolean) {
+    const { sensors, isLoading } = useAllSensors();
 
-    return Object.values(SensorType)
-      .filter((type) => {
-        const key = getAssignmentKey(type) as keyof PluginAssignments;
-        const assignment = camera.assignments[key];
-        if (!assignment) return false;
-        if (Array.isArray(assignment)) return assignment.length > 0;
-        return true;
-      })
-      .map((type) => {
-        const key = getAssignmentKey(type) as keyof PluginAssignments;
-        const assignment = camera.assignments[key];
-        return {
-          label: type,
-          value: type,
-          meta: SENSOR_TYPE_CONFIG[type],
-          hasVirtual: Array.isArray(assignment) && assignment.some((p) => p.id === VIRTUAL_SENSOR_OWNER_ID),
-        };
-      });
-  }
-
-  function useSensorInstances(cameraId: MaybeRefOrGetter<string | undefined>, sensorType: MaybeRefOrGetter<SensorType>) {
-    const { sensors, isLoading } = useSensorsByType(cameraId, sensorType);
-
-    const instanceOptions = computed<SensorInstanceOption[]>(() =>
-      sensors.value.map((s: ReactiveSensor) => ({
-        label: s.displayName.value || s.name,
-        sensorName: s.name,
-        pluginId: s.pluginId,
-      })),
+    const sensorOptions = computed<SensorOption[]>(() =>
+      sensors.value
+        .filter((s) => filter?.(s) ?? true)
+        .map((s) => {
+          const typeLabel = t(`components.camera_options.sensor_type_${s.type}`);
+          const cameraNames = s.assignedCameraIds.value
+            .map((id) => cameras.value.find((c) => c._id === id)?.name)
+            .filter(Boolean)
+            .join(', ');
+          return {
+            label: `${s.displayName.value || s.name} (${typeLabel}${cameraNames ? ` · ${cameraNames}` : ''})`,
+            value: s.id,
+            type: s.type,
+          };
+        }),
     );
 
-    return { instanceOptions, isLoading };
+    function sensorById(id: string | undefined): ReactiveSensor | undefined {
+      return id ? sensors.value.find((s) => s.id === id) : undefined;
+    }
+
+    return { sensorOptions, sensorById, isLoading };
   }
 
   function getPropertiesForSensor(sensorType: string, mode: 'observable' | 'writable' = 'observable') {
@@ -95,8 +76,7 @@ export function useCameraOptions() {
   return {
     cameras,
     cameraOptions,
-    getSensorTypes,
-    useSensorInstances,
+    useSensorOptions,
     getPropertiesForSensor,
   };
 }

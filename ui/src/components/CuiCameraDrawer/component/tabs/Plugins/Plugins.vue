@@ -640,7 +640,7 @@ const extensionStorage = useCameraStorage(cameraDevice, selectedPlugin);
 const extensionConfig = extensionStorage.config;
 const extensionConfigLoading = extensionStorage.isLoading;
 
-const sensorStorage = useSensorStorage(cameraDevice, selectedAccessorySensorId, selectedAccessoryPluginId);
+const sensorStorage = useSensorStorage(selectedAccessorySensorId, selectedAccessoryPluginId);
 const sensorConfig = sensorStorage.config;
 const sensorConfigLoading = sensorStorage.isLoading;
 
@@ -813,7 +813,7 @@ const detectionExtensionStorage = useCameraStorage(cameraDevice, selectedDetecti
 const detectionExtensionConfig = detectionExtensionStorage.config;
 const detectionExtensionConfigLoading = detectionExtensionStorage.isLoading;
 
-const detectionSensorStorage = useSensorStorage(cameraDevice, selectedDetectionSensorId, selectedDetectionSensorPluginId);
+const detectionSensorStorage = useSensorStorage(selectedDetectionSensorId, selectedDetectionSensorPluginId);
 const detectionSensorConfig = detectionSensorStorage.config;
 const detectionSensorConfigLoading = detectionSensorStorage.isLoading;
 
@@ -826,7 +826,7 @@ const objectAssistSensor = computed<ReactiveSensor | undefined>(() => {
 const objectAssistSensorId = computed(() => objectAssistSensor.value?.id ?? '');
 const objectAssistSensorPluginId = computed(() => objectAssistSensor.value?.pluginId ?? '');
 
-const objectAssistSensorStorage = useSensorStorage(cameraDevice, objectAssistSensorId, objectAssistSensorPluginId);
+const objectAssistSensorStorage = useSensorStorage(objectAssistSensorId, objectAssistSensorPluginId);
 const objectAssistSensorConfig = objectAssistSensorStorage.config;
 const objectAssistSensorConfigLoading = objectAssistSensorStorage.isLoading;
 
@@ -835,7 +835,7 @@ const coreExtensionStorage = useCameraStorage(cameraDevice, selectedCorePluginNa
 const coreExtensionConfig = coreExtensionStorage.config;
 const coreExtensionConfigLoading = coreExtensionStorage.isLoading;
 
-const coreSensorStorage = useSensorStorage(cameraDevice, selectedCoreSensorId, selectedCoreSensorPluginId);
+const coreSensorStorage = useSensorStorage(selectedCoreSensorId, selectedCoreSensorPluginId);
 const coreSensorConfig = coreSensorStorage.config;
 const coreSensorConfigLoading = coreSensorStorage.isLoading;
 
