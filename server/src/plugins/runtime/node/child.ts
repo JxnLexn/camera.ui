@@ -224,7 +224,7 @@ export class PluginChild {
       return remoteDb;
     }
 
-    const store = new PluginStoreFile(`${storagePath}/volume`, pluginId);
+    const store = new PluginStoreFile(`${storagePath}/volume`);
     await store.open();
     return new LocalPluginConfigDb(store);
   }

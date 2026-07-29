@@ -2,8 +2,7 @@ import { mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 
 import { CoalescingWriter } from './coalescingWriter.js';
-import { remapLegacyLayout } from './layout.js';
-import { migrateLmdbToStoreFile } from './migrate.js';
+import { upgradeStoreLayout } from './layout.js';
 import { backupStoreFile, readStoreFile, removeOrphanedTmpFiles, writeStoreFile } from './storeFile.js';
 
 export const STORE_FILE_NAME = 'store.cui';
@@ -14,10 +13,7 @@ export class PluginStoreFile {
   private payload: Record<string, any> = {};
   private closed = true;
 
-  constructor(
-    private readonly volumeDir: string,
-    private readonly pluginId: string,
-  ) {
+  constructor(private readonly volumeDir: string) {
     this.path = join(volumeDir, STORE_FILE_NAME);
     this.writer = new CoalescingWriter((snapshot) => writeStoreFile(this.path, snapshot));
   }
@@ -28,20 +24,16 @@ export class PluginStoreFile {
 
     let payload = await readStoreFile(this.path);
     if (payload === undefined) {
-      const migrated = await migrateLmdbToStoreFile(this.volumeDir, this.path);
-      payload = migrated ? await readStoreFile(this.path) : undefined;
-      if (payload === undefined) {
-        payload = {};
-        await writeStoreFile(this.path, payload);
-      }
+      payload = {};
+      await writeStoreFile(this.path, payload);
     }
 
-    const remapped = remapLegacyLayout(payload, this.pluginId);
-    if (remapped !== payload) {
-      await writeStoreFile(this.path, remapped);
+    const upgraded = upgradeStoreLayout(payload);
+    if (upgraded !== payload) {
+      await writeStoreFile(this.path, upgraded);
     }
 
-    this.payload = remapped;
+    this.payload = upgraded;
     await backupStoreFile(this.path);
     this.closed = false;
   }

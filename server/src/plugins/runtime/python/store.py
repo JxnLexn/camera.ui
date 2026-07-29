@@ -311,72 +311,19 @@ def _prune_if_empty(parent: dict[str, Any], key: str) -> None:
         del parent[key]
 
 
-_CANONICAL_SECTIONS = ("plugin", "cameras", "sensors")
-_LEGACY_SENSOR_MARKER = ":sensor:"
 _LAYOUT_VERSION_KEY = "__v"
-# v2: sensors keyed by persistent sensor id, old camera-keyed trees are unmappable
+# v2: sensors keyed by persistent sensor id, pre-entity camera-keyed trees are unmappable
 _LAYOUT_VERSION = 2
 
 
-def is_canonical_layout(payload: dict[str, Any]) -> bool:
-    return all(key == _LAYOUT_VERSION_KEY or key in _CANONICAL_SECTIONS for key in payload)
-
-
-# Go-SDK legacy blobs ('<pluginId>.plugin', ...) are remapped by the Go SDK
-# itself, not here: server and plugin update independently, and a plugin on
-# an old SDK must keep finding its keys untouched.
-def _is_go_legacy_layout(payload: dict[str, Any], plugin_id: str) -> bool:
-    return len(payload) > 0 and all(key.startswith(f"{plugin_id}.") for key in payload)
-
-
-def remap_legacy_layout(
-    payload: dict[str, Any], plugin_id: str, log: StoreLogger | None = None
-) -> dict[str, Any]:
-    if _is_go_legacy_layout(payload, plugin_id):
+def upgrade_layout(payload: dict[str, Any]) -> dict[str, Any]:
+    if payload.get(_LAYOUT_VERSION_KEY) == _LAYOUT_VERSION:
         return payload
 
-    if is_canonical_layout(payload):
-        canonical = payload
-    else:
-        canonical = {section: payload[section] for section in _CANONICAL_SECTIONS if section in payload}
-
-        for key, values in payload.items():
-            if key in _CANONICAL_SECTIONS or key == _LAYOUT_VERSION_KEY:
-                continue
-
-            if key == "storage":
-                # In a mixed legacy+canonical document the canonical section is the
-                # newer write - the legacy duplicate is stale and must never win.
-                if "plugin" in canonical:
-                    if log:
-                        log.warn(
-                            f"store: legacy key 'storage' dropped — canonical 'plugin' already present ({plugin_id})"
-                        )
-                    continue
-                canonical["plugin"] = values
-                continue
-
-            # <camId>:sensor:<type>:<pluginId>:<name> - pre-entity sensor storage,
-            # no entity id to map onto, dropped below with the rest
-            if _LEGACY_SENSOR_MARKER in key:
-                continue
-
-            if key in (canonical.get("cameras") or {}):
-                if log:
-                    log.warn(
-                        f"store: legacy key '{key}' dropped — canonical 'cameras.{key}' already present ({plugin_id})"
-                    )
-                continue
-            canonical.setdefault("cameras", {})[key] = values
-
-    if canonical.get(_LAYOUT_VERSION_KEY) != _LAYOUT_VERSION:
-        if canonical is payload:
-            canonical = dict(payload)
-        # camera-keyed sensor storage cannot be mapped to persistent sensor ids
-        canonical.pop("sensors", None)
-        canonical[_LAYOUT_VERSION_KEY] = _LAYOUT_VERSION
-
-    return canonical
+    upgraded = dict(payload)
+    upgraded.pop("sensors", None)
+    upgraded[_LAYOUT_VERSION_KEY] = _LAYOUT_VERSION
+    return upgraded
 
 
 # Values must round-trip identically through all three runtimes' msgpack
@@ -432,9 +379,8 @@ def _walk_value(value: Any, path: str, depth: int) -> None:
 
 
 class PluginStoreFile:
-    def __init__(self, volume_dir: str, plugin_id: str, log: StoreLogger | None = None) -> None:
+    def __init__(self, volume_dir: str, log: StoreLogger | None = None) -> None:
         self._volume_dir = volume_dir
-        self._plugin_id = plugin_id
         self._log = log
         self._path = str(Path(volume_dir) / STORE_FILE_NAME)
         self._writer = CoalescingWriter(self._write_snapshot, log)
@@ -451,15 +397,14 @@ class PluginStoreFile:
 
         payload = await read_store_file(self._path, self._log)
         if payload is None:
-            # Persist the initial envelope so later opens skip the legacy probe.
             payload = {}
             await write_store_file(self._path, payload, self._log)
 
-        remapped = remap_legacy_layout(payload, self._plugin_id, self._log)
-        if remapped is not payload:
-            await write_store_file(self._path, remapped, self._log)
+        upgraded = upgrade_layout(payload)
+        if upgraded is not payload:
+            await write_store_file(self._path, upgraded, self._log)
 
-        self._payload = remapped
+        self._payload = upgraded
         await backup_store_file(self._path, self._log)
         self._closed = False
 

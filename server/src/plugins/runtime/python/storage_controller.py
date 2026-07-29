@@ -31,9 +31,7 @@ class StorageController:
         self.__storages: dict[str, DeviceStorage] = {}
         self.__plugin_db = plugin_db
 
-    def createCameraStorage(
-        self, cameraId: str, schemas: list[JsonSchema] | None = []
-    ) -> DeviceStorage:
+    def createCameraStorage(self, cameraId: str, schemas: list[JsonSchema] | None = []) -> DeviceStorage:
         if schemas is None:
             schemas = []
 
@@ -54,9 +52,7 @@ class StorageController:
 
         return camera_storage
 
-    def createPluginStorage(
-        self, schemas: list[JsonSchema] | None = []
-    ) -> DeviceStorage:
+    def createPluginStorage(self, schemas: list[JsonSchema] | None = []) -> DeviceStorage:
         if schemas is None:
             schemas = []
 
@@ -112,13 +108,9 @@ class StorageController:
         return self.__storages.get(sensor_storage_key(sensor_id))
 
     @overload
-    async def createStorage(
-        self, type_: Literal["camera"], device_id: str
-    ) -> DeviceStorage: ...
+    async def createStorage(self, type_: Literal["camera"], device_id: str) -> DeviceStorage: ...
     @overload
-    async def createStorage(
-        self, type_: Literal["plugin"], device_id: None = None
-    ) -> DeviceStorage: ...
+    async def createStorage(self, type_: Literal["plugin"], device_id: None = None) -> DeviceStorage: ...
     @overload
     async def createStorage(
         self,
@@ -141,9 +133,7 @@ class StorageController:
             storage = self.createCameraStorage(device_id)
         elif type_ == "sensor":
             if not device_id or not sensor_id:
-                raise ValueError(
-                    "pluginId and sensorId are required for sensor storage creation"
-                )
+                raise ValueError("pluginId and sensorId are required for sensor storage creation")
 
             storage = self.createSensorStorage(device_id, sensor_id)
         else:
@@ -155,9 +145,7 @@ class StorageController:
     @overload
     async def removeStorage(self, type_: Literal["camera"], device_id: str) -> None: ...
     @overload
-    async def removeStorage(
-        self, type_: Literal["plugin"], device_id: None
-    ) -> None: ...
+    async def removeStorage(self, type_: Literal["plugin"], device_id: None) -> None: ...
     @overload
     async def removeStorage(
         self,

@@ -33,8 +33,7 @@ from plugins.runtime.python.namespaces import NamespaceManager
 from plugins.runtime.python.plugin_api import PluginAPI
 from plugins.runtime.python.proxy.camera_device import CameraDeviceProxy
 from plugins.runtime.python.proxy.file_serve import PluginFileServer
-from plugins.runtime.python.store import STORE_FILE_NAME, PluginStoreFile
-from plugins.runtime.python.store_migrate import migrate_legacy_lmdbm, needs_lmdbm_migration
+from plugins.runtime.python.store import PluginStoreFile
 from plugins.runtime.python.typings import (
     PLUGIN_COMMAND,
     PLUGIN_STATUS,
@@ -251,12 +250,8 @@ class PluginChild:
             return remote_db
 
         volume_dir = Path(storage_path) / "volume"
-        store_path = volume_dir / STORE_FILE_NAME
 
-        if await asyncio.to_thread(needs_lmdbm_migration, volume_dir, store_path):
-            await migrate_legacy_lmdbm(volume_dir, store_path, self.logger)
-
-        store = PluginStoreFile(str(volume_dir), plugin_id, self.logger)
+        store = PluginStoreFile(str(volume_dir), self.logger)
         await store.open()
         return LocalPluginConfigDb(store)
 

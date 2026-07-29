@@ -20,7 +20,7 @@ export class PluginConfigStore implements PluginConfigStoreRPC {
   ) {}
 
   public async register(proxy: RPCClient): Promise<void> {
-    this.store = new PluginStoreFile(join(this.storagePath, 'volume'), this.pluginId);
+    this.store = new PluginStoreFile(join(this.storagePath, 'volume'));
     await this.store.open();
 
     const namespaces = NamespaceManager.pluginNamespaces(this.pluginId);

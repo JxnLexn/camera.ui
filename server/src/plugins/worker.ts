@@ -1,5 +1,4 @@
 import { sleep } from '@camera.ui/common/utils';
-import { join } from 'node:path';
 import { container } from 'tsyringe';
 
 import { CamerasService } from '../api/services/cameras.service.js';
@@ -9,8 +8,6 @@ import { isShuttingDown } from '../shutdown-state.js';
 import { describePlatformRequirement } from '../utils/platform.js';
 import { PluginConfigStore } from './config-store.js';
 import { RuntimeFactory } from './runtime/index.js';
-import { migrateLmdbToStoreFile } from './store/migrate.js';
-import { STORE_FILE_NAME } from './store/pluginStoreFile.js';
 
 import type { PrivateChannel, Promisify } from '@camera.ui/rpc';
 import type { BasePlugin, Camera, DeviceStorage, PluginInterfaces } from '@camera.ui/sdk';
@@ -165,11 +162,6 @@ export class PluginWorker {
           await this.channel?.close();
           resolve();
           return;
-        }
-
-        if (this.plugin.isGo) {
-          const volumeDir = join(this.plugin.storagePath, 'volume');
-          await migrateLmdbToStoreFile(volumeDir, join(volumeDir, STORE_FILE_NAME));
         }
 
         this.runtime.once('exit', () => {

@@ -115,9 +115,7 @@ class SensorManagerProxy:
         sensor._setPluginId(plugin_id)  # pyright: ignore[reportPrivateUsage]
 
         sensor_json = sensor.toJSON()
-        sensor_json["requiresFrames"] = (
-            getattr(sensor, "_requires_frames", False) is True
-        )
+        sensor_json["requiresFrames"] = getattr(sensor, "_requires_frames", False) is True
         model_spec = getattr(sensor, "modelSpec", None)
         if model_spec:
             sensor_json["modelSpec"] = model_spec
@@ -126,29 +124,19 @@ class SensorManagerProxy:
         sensor._setId(registration["id"])  # pyright: ignore[reportPrivateUsage]
         sensor._setAssignedCameras(registration["assignedCameraIds"])  # pyright: ignore[reportPrivateUsage]
 
-        sensor_namespace = NamespaceManager.sensor_provider_namespaces(
-            plugin_id, sensor.id
-        ).sensor_rpc
+        sensor_namespace = NamespaceManager.sensor_provider_namespaces(plugin_id, sensor.id).sensor_rpc
 
         sensor_type = sensor.type
         sensor._init(  # pyright: ignore[reportPrivateUsage]
-            lambda properties: self._on_sensor_state_write(
-                sensor, sensor_type, properties
-            )
+            lambda properties: self._on_sensor_state_write(sensor, sensor_type, properties)
         )
-        sensor._initCapabilities(
-            lambda caps: self._on_sensor_capabilities_changed(sensor.id, caps)
-        )  # pyright: ignore[reportPrivateUsage]
+        sensor._initCapabilities(lambda caps: self._on_sensor_capabilities_changed(sensor.id, caps))  # pyright: ignore[reportPrivateUsage]
 
-        storage = self._storage_controller.createSensorStorage(
-            plugin_id, sensor.id, sensor.storage_schema
-        )
+        storage = self._storage_controller.createSensorStorage(plugin_id, sensor.id, sensor.storage_schema)
         await storage.register_storage()
         sensor._setStorage(storage)  # pyright: ignore[reportPrivateUsage]
 
-        rpc_cleanup = await self._proxy.register_handler(
-            sensor_namespace, sensor, without_decorators=True
-        )
+        rpc_cleanup = await self._proxy.register_handler(sensor_namespace, sensor, without_decorators=True)
 
         event_ns = NamespaceManager.sensor_event_namespaces(sensor.id)
 
@@ -161,9 +149,7 @@ class SensorManagerProxy:
                         prop, change_data.get("value"), change_data.get("timestamp")
                     )
 
-        unsubscribe_events = await self._proxy.subscribe(
-            event_ns.sensor_subject, handle_backend_event
-        )
+        unsubscribe_events = await self._proxy.subscribe(event_ns.sensor_subject, handle_backend_event)
 
         async def cleanup() -> None:
             await unsubscribe_events()
@@ -238,9 +224,7 @@ class SensorManagerProxy:
         return data["type"] in self._plugin["contract"].get("consumes", [])
 
     def _add_consumed(self, data: StoredSensorData) -> SensorProxy:
-        owner_namespace = NamespaceManager.sensor_provider_namespaces(
-            data["pluginId"], data["id"]
-        ).sensor_rpc
+        owner_namespace = NamespaceManager.sensor_provider_namespaces(data["pluginId"], data["id"]).sensor_rpc
         sensor_proxy = SensorProxy(data, self._proxy, owner_namespace)
         self._consumed[data["id"]] = sensor_proxy
         return sensor_proxy
@@ -299,9 +283,7 @@ class SensorManagerProxy:
                 return
             if exposed["sensorId"] in self._consumed:
                 return
-            fetched = await self._registry_proxy.getSensorRpc(
-                exposed["sensorId"], self._plugin["id"]
-            )
+            fetched = await self._registry_proxy.getSensorRpc(exposed["sensorId"], self._plugin["id"])
             if not fetched or not self._is_consumable(fetched):
                 return
             sensor_proxy = self._add_consumed(fetched)
@@ -340,16 +322,12 @@ class SensorManagerProxy:
             # external detection provider: fan the write into every assigned camera's coordinator
             async def notify_coordinators() -> None:
                 for camera_id in sensor.assignedCameraIds:
-                    detection_ns = NamespaceManager.frame_worker_detection_namespaces(
-                        camera_id
-                    )
+                    detection_ns = NamespaceManager.frame_worker_detection_namespaces(camera_id)
                     coordinator: DetectionCoordinatorRPC = self._proxy.create_proxy(
                         detection_ns.detection_rpc
                     )
                     with contextlib.suppress(Exception):
-                        await coordinator.reportSensorWrite(
-                            sensor.id, sensor_type, properties
-                        )
+                        await coordinator.reportSensorWrite(sensor.id, sensor_type, properties)
 
             self._tasks.add(notify_coordinators())
             return
@@ -360,9 +338,7 @@ class SensorManagerProxy:
 
         self._tasks.add(notify_registry())
 
-    def _on_sensor_capabilities_changed(
-        self, sensor_id: str, capabilities: list[str]
-    ) -> None:
+    def _on_sensor_capabilities_changed(self, sensor_id: str, capabilities: list[str]) -> None:
         async def notify() -> None:
             with contextlib.suppress(Exception):
                 await self._registry_proxy.updateCapabilities(sensor_id, capabilities)
