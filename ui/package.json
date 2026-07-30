@@ -36,7 +36,7 @@
     "@aparajita/capacitor-biometric-auth": "^10.0.0",
     "@aparajita/capacitor-secure-storage": "^8.0.0",
     "@camera.ui/browser": "~0.0.148",
-    "@camera.ui/common": "~0.0.51",
+    "@camera.ui/common": "~0.0.53",
     "@camera.ui/nvr": "~0.0.65",
     "@camera.ui/rpc": "~1.0.10",
     "@camera.ui/sdk": "~1.2.0",
