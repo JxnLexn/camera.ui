@@ -373,6 +373,7 @@ import CopyIcon from '~icons/fluent/copy-16-filled';
 import PhoneIcon from '~icons/mdi/cellphone';
 import KeyIcon from '~icons/mdi/key-variant';
 import LaptopIcon from '~icons/mdi/laptop';
+import TvIcon from '~icons/mdi/television';
 
 import { AuthQuery } from '@/api/routes/auth.js';
 import { copyToClipboard, formatRelativeTime, readImgUpload } from '@/common/utils.js';
@@ -491,6 +492,7 @@ async function copySecret(): Promise<void> {
 }
 
 function iconForKind(kind: ClientKind) {
+  if (kind === 'tv') return TvIcon;
   return kind === 'native' ? PhoneIcon : LaptopIcon;
 }
 

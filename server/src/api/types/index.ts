@@ -51,7 +51,7 @@ export interface BusboyFileStream extends Readable {
   bytesRead: number;
 }
 
-export type ClientKind = 'native' | 'web';
+export type ClientKind = 'native' | 'web' | 'tv';
 
 export interface DBTokenDevice {
   id: string;

@@ -156,7 +156,7 @@ export const loginUserSchema = zod
   .object({
     username: zod.string().trim().min(1, 'Username is required'),
     password: zod.string().trim().min(1, 'Password is required'),
-    kind: zod.enum(['native', 'web']),
+    kind: zod.enum(['native', 'web', 'tv']),
     persistent: zod.boolean().default(false),
     device: zod.object({
       id: zod.string().min(1, 'Device id is required').max(128, 'Device id cannot be more than 128 characters'),

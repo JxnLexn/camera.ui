@@ -669,7 +669,8 @@ export class AuthController {
 
   private async issueSession(user: DBUser, body: LoginUserInput, req: FastifyRequest): Promise<UserData> {
     const kind: ClientKind = body.kind;
-    const persistent = kind === 'native' ? true : body.persistent;
+    // app sessions (phone, tv) stay signed in, only web asks
+    const persistent = kind === 'web' ? body.persistent : true;
     const access_token = this.signAccessToken(user, body.device.id);
 
     // If a session for this device already exists, replace it (re-login on the same device).
