@@ -538,6 +538,9 @@ export class CamerasController {
 
       const sensors = cameraController.sensorController.getAllSensors().map((sensor) => ({
         id: sensor.id,
+        // stub window: pre-standalone clients key on globalId/stableId, alias both to the persistent id
+        globalId: sensor.id,
+        stableId: sensor.id,
         type: sensor.type,
         name: sensor.name,
         displayName: sensor.displayName,

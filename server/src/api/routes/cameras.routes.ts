@@ -149,6 +149,7 @@ export const CamerasRoute: FastifyPluginAsync = async (app: FastifyInstance): Pr
     },
   });
 
+  // stub window: the three legacy sensor routes below go away in the first minor after the standalone-sensors release
   app.withTypeProvider<ZodTypeProvider>().route({
     url: '/:cameraname/sensors',
     method: 'GET',

@@ -14,7 +14,8 @@ export type SensorEvent =
   | 'sensor:connected:changed'
   | 'sensor:displayName:changed'
   | 'sensor:capabilities:changed'
-  | 'sensor:exposed:changed';
+  | 'sensor:exposed:changed'
+  | 'sensor:assignment:changed';
 
 export type InternalEvent = SystemEvent | PluginEvent | CameraEvent | SensorEvent;
 
@@ -58,6 +59,7 @@ export interface SensorLifecyclePayload {
   sensorName?: string;
   assignedCameraIds: string[];
   connected?: boolean;
+  exposed?: boolean;
 }
 
 export interface SensorDisplayNameChangedPayload {

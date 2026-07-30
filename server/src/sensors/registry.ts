@@ -363,6 +363,7 @@ export class SensorRegistry {
       sensorType: String(record.type),
       sensorName: record.name,
       assignedCameraIds: [...record.assignedCameraIds],
+      exposed,
     });
   }
 
@@ -719,6 +720,13 @@ export class SensorRegistry {
     this.safePublish(ns.sensorsSubject, {
       type: 'sensor:assignment:changed',
       data: { sensorId: record._id, sensorType: record.type, cameraId, assigned },
+    });
+
+    this.emitBus('sensor:assignment:changed', {
+      sensorId: record._id,
+      sensorType: String(record.type),
+      sensorName: record.name,
+      assignedCameraIds: [...record.assignedCameraIds],
     });
   }
 

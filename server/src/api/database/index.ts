@@ -100,7 +100,7 @@ export class Database {
   public automationStateDB!: DB<unknown, string>;
   public sensorsDB!: DB<DBSensor, string>;
   public sensorHistoryDB!: DB<DBSensorHistoryEntry, string>;
-  /** @deprecated read only by the v2.1.0 migration, remove with it */
+  /** @deprecated stub window, read only by the v2.1.0 migration, remove with it */
   public virtualSensorsDB!: DB<DBVirtualSensor, string>;
   public notificationsDB!: DB<DBNotificationSettings, string>;
   public notificationHistoryDB!: DB<DBNotificationHistory, string>;
