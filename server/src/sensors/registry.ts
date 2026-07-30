@@ -148,6 +148,7 @@ export class SensorRegistry {
         type: sensor.type,
         name: sensor.name,
         assignedCameraIds: options?.assignCameraId ? [options.assignCameraId] : [],
+        boundCameraId: options?.assignCameraId,
         exposed: true,
         state: {},
         createdAt: Date.now(),
@@ -160,6 +161,9 @@ export class SensorRegistry {
     }
 
     record.name = sensor.name;
+
+    // camera.addSensor re-registration re-binds (also backfills migrated records)
+    if (options?.assignCameraId) record.boundCameraId = options.assignCameraId;
     record.updatedAt = Date.now();
     this.persistRecord(record._id, () => {});
 
@@ -284,6 +288,12 @@ export class SensorRegistry {
 
     const target = new Set(cameraIds);
     const current = new Set(record.assignedCameraIds);
+
+    if (record.boundCameraId) {
+      const unchanged = target.size === current.size && [...target].every((id) => current.has(id));
+      if (unchanged) return;
+      throw new Error(`Sensor "${record.displayName ?? record.name}" was registered on its camera by plugin "${record.pluginInfo.id}", its assignment cannot be changed`);
+    }
 
     for (const cameraId of current) {
       if (!target.has(cameraId)) await this.unassignCamera(sensorId, cameraId);

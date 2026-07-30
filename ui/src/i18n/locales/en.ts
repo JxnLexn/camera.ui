@@ -1747,7 +1747,7 @@ export default {
       assigned_cameras: 'Assigned cameras',
       assigned_cameras_placeholder: 'Select cameras',
       assigned_cameras_hint: 'The sensor shows up on these cameras and can trigger their detection.',
-      assigned_cameras_bound_hint: 'This sensor type belongs to a single camera.',
+      assigned_cameras_locked_hint: 'Registered on this camera by its plugin. The assignment cannot be changed.',
       exposed: 'Expose sensor',
       exposed_hint: 'Show in HomeKit, Home Assistant and MQTT.',
       create_virtual: 'Create virtual sensor',

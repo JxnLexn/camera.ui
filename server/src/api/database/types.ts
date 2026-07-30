@@ -339,6 +339,7 @@ export interface DBSensor {
   name: string;
   displayName?: string;
   assignedCameraIds: string[];
+  boundCameraId?: string;
   exposed: boolean;
   state?: Record<string, unknown>;
   createdAt: number;

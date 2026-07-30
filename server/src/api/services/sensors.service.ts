@@ -18,6 +18,7 @@ export interface TransformedSensor {
   pluginName: string;
   virtual: boolean;
   cameraBound: boolean;
+  assignmentLocked: boolean;
   connected: boolean;
   assignedCameraIds: string[];
   exposed: boolean;
@@ -114,6 +115,7 @@ export class SensorsService {
       pluginName: record.pluginInfo.name,
       virtual: record.pluginInfo.id === VIRTUAL_SENSOR_OWNER_ID,
       cameraBound: SENSOR_TYPE_CONFIG[record.type]?.cameraBound ?? false,
+      assignmentLocked: record.boundCameraId !== undefined,
       connected: this.registry.isConnected(record._id),
       assignedCameraIds: data.assignedCameraIds,
       exposed: record.exposed,

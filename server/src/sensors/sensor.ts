@@ -34,6 +34,7 @@ export class ServerSensor implements SensorLike {
   public readonly onPropertyChanged = new Observable<{ property: string; value: unknown; timestamp: number }>(() => new Disposable(() => {}));
   public readonly onCapabilitiesChanged = new Observable<string[]>(() => new Disposable(() => {}));
   public readonly onConnectedChanged = new Observable<boolean>(() => new Disposable(() => {}));
+  public readonly onAssignmentChanged = new Observable<readonly string[]>(() => new Disposable(() => {}));
 
   private readonly ctx: SensorContext;
 

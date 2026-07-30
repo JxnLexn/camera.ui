@@ -15,17 +15,9 @@
 
     <div class="flex flex-col field-gap">
       <label class="cui-label">{{ $t('views.sensors.assigned_cameras') }}</label>
-      <Select
-        v-if="sensor.cameraBound"
-        :model-value="assignedCameraIds[0] ?? null"
-        :options="cameraOptions"
-        option-label="label"
-        option-value="value"
-        show-clear
-        :placeholder="$t('views.sensors.assigned_cameras_placeholder')"
-        class="w-full"
-        @update:model-value="(value) => (assignedCameraIds = value ? [String(value)] : [])"
-      />
+      <div v-if="sensor.assignmentLocked" class="flex flex-wrap gap-2">
+        <Chip v-for="camera in lockedCameras" :key="camera.value" :label="camera.label" />
+      </div>
       <MultiSelect
         v-else
         v-model="assignedCameraIds"
@@ -36,7 +28,7 @@
         class="w-full"
       />
       <Message severity="secondary" variant="simple" size="small" class="cui-input-hint">
-        {{ sensor.cameraBound ? $t('views.sensors.assigned_cameras_bound_hint') : $t('views.sensors.assigned_cameras_hint') }}
+        {{ sensor.assignmentLocked ? $t('views.sensors.assigned_cameras_locked_hint') : $t('views.sensors.assigned_cameras_hint') }}
       </Message>
     </div>
 
@@ -68,6 +60,7 @@ const exposed = ref(props.sensor.exposed);
 const { sensors: allSensors } = useAllSensors();
 
 const canControl = computed(() => hasPermission(undefined, 'admin'));
+const lockedCameras = computed(() => props.cameraOptions.filter((camera) => props.sensor.assignedCameraIds.includes(camera.value)));
 const hasWidget = computed(() => hasSensorControlWidget(props.sensor.type));
 const liveSensor = computed(() => allSensors.value.find((sensor) => sensor.id === props.sensor.id));
 
