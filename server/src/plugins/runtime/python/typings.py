@@ -55,6 +55,7 @@ class StoredSensorData(TypedDict):
     nativeId: NotRequired[str]
     pluginId: str
     assignedCameraIds: list[str]
+    boundCameraId: NotRequired[str]
     exposed: bool
     connected: bool
     properties: dict[str, Any]

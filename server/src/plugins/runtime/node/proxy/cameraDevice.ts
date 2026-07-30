@@ -241,6 +241,7 @@ export class CameraDeviceProxy extends CameraDevice {
     const registration = await this.#sensorRegistryProxy.registerSensor(sensorJSON, this.#plugin.id, { assignCameraId: this.id });
     sensor._setId(registration.id);
     sensor._setAssignedCameras(registration.assignedCameraIds);
+    sensor._setAssignmentLocked?.();
 
     // assignment changes arrive on the global stream the sensor manager owns
     await this.#sensorManager._trackCameraSensor(sensor);

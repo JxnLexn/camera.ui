@@ -26,6 +26,7 @@ export class SensorProxy implements SensorLike {
   private _nativeId?: string;
   private _ownerId: string;
   private _assignedCameraIds: string[];
+  private _assignmentLocked: boolean;
   private _exposed: boolean;
   private _connected: boolean;
   private _proxy: RPCClient;
@@ -42,6 +43,7 @@ export class SensorProxy implements SensorLike {
     this._nativeId = data.nativeId;
     this._ownerId = data.pluginId;
     this._assignedCameraIds = [...data.assignedCameraIds];
+    this._assignmentLocked = data.boundCameraId !== undefined;
     this._exposed = data.exposed;
     this._connected = data.connected;
     this._proxy = proxy;
@@ -86,6 +88,10 @@ export class SensorProxy implements SensorLike {
 
   get assignedCameraIds(): readonly string[] {
     return this._assignedCameraIds;
+  }
+
+  get assignmentLocked(): boolean {
+    return this._assignmentLocked;
   }
 
   get connected(): boolean {

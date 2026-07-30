@@ -28,6 +28,7 @@ class SensorProxy(SensorLike):
         self._native_id = data.get("nativeId")
         self._owner_id = data["pluginId"]
         self._assigned_camera_ids: list[str] = list(data.get("assignedCameraIds", []))
+        self._assignment_locked = data.get("boundCameraId") is not None
         self._exposed = data.get("exposed", False)
         self._connected = data.get("connected", False)
         self._proxy = proxy
@@ -71,6 +72,10 @@ class SensorProxy(SensorLike):
     @property
     def assignedCameraIds(self) -> list[str]:
         return self._assigned_camera_ids.copy()
+
+    @property
+    def assignmentLocked(self) -> bool:
+        return self._assignment_locked
 
     @property
     def connected(self) -> bool:

@@ -61,6 +61,10 @@ export class ServerSensor implements SensorLike {
     return this.ctx.assignedCameraIds(this.id);
   }
 
+  public get assignmentLocked(): boolean {
+    return this.data.boundCameraId !== undefined;
+  }
+
   public get connected(): boolean {
     return this.data.connected;
   }

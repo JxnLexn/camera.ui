@@ -458,6 +458,7 @@ export class SensorRegistry {
       nativeId: record.nativeId,
       pluginId: record.pluginInfo.id,
       assignedCameraIds: [...record.assignedCameraIds],
+      boundCameraId: record.boundCameraId,
       exposed: record.exposed,
       connected: this.runtime.has(record._id),
       properties: this.getAllPropertyValues(record._id),

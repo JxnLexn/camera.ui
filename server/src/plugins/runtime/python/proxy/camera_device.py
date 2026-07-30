@@ -431,6 +431,9 @@ class CameraDeviceProxy(Subscribed, CameraDeviceInterface):
         )
         sensor._setId(registration["id"])  # pyright: ignore[reportPrivateUsage]
         sensor._setAssignedCameras(registration["assignedCameraIds"])  # pyright: ignore[reportPrivateUsage]
+        set_locked = getattr(sensor, "_setAssignmentLocked", None)
+        if callable(set_locked):
+            set_locked()
 
         # assignment changes arrive on the global stream the sensor manager owns
         await self._sensor_manager.track_camera_sensor(sensor)

@@ -9,6 +9,7 @@ export interface StoredSensorData {
   nativeId?: string;
   pluginId: string;
   assignedCameraIds: string[];
+  boundCameraId?: string;
   exposed: boolean;
   connected: boolean;
   properties: Record<string, unknown>;
