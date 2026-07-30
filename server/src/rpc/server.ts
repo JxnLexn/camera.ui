@@ -135,6 +135,7 @@ export class NATS {
                   'rpc.plugin.*.child.rpc.getRecordingDays',
                   'rpc.plugin.*.child.rpc.getRecordingSegments',
                   'rpc.plugin.*.child.rpc.getManagedCameraIds',
+                  'rpc.plugin.*.child.rpc.getStorageStats',
                   'rpc.plugin.*.child.rpc.getSystemEvents',
                   'rpc.plugin.*.child.rpc.onRecordingState',
                   'rpc.plugin.*.child.rpc.onSystemEvent',
