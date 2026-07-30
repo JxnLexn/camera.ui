@@ -483,7 +483,7 @@ export class InstancesService {
   }
 
   private async verifyRemote2FA(url: string, tempToken: string, code: string): Promise<UserData> {
-    const res = await fetch(`${url}/api/auth/2fa/verify`, {
+    const res = await fetch(`${url}/api/auth/verify-2fa`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ tempToken, code }),
