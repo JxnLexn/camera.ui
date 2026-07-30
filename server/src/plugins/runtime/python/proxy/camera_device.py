@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import contextlib
+from collections.abc import Callable
 from copy import deepcopy
 from typing import TYPE_CHECKING, Any, Protocol, cast
 
@@ -28,6 +29,7 @@ from _camera_ui_tools.camera_ui_sdk import (
     DetectionEventPayload,
     DetectionLine,
     DetectionZone,
+    Disposable,
     LoggerService,
     Observable,
     ProbeConfig,
@@ -164,7 +166,9 @@ class CameraDeviceProxy(Subscribed, CameraDeviceInterface):
         self._detection_event_subject: Subject[DetectionEventPayload] = Subject()
 
         self._close_subscription: CloseHandler | None = None
-        self._close_detection_subscription: CloseHandler | None = None
+        self._detection_wire: CloseHandler | None = None
+        self._detection_wire_pending = False
+        self._detection_subscriber_count = 0
 
         self._owned_sensors: dict[str, tuple[Sensor[Any, Any, Any], SensorType]] = {}
         self._sensor_cleanup_functions: dict[str, CloseHandler] = {}
@@ -347,15 +351,6 @@ class CameraDeviceProxy(Subscribed, CameraDeviceInterface):
             self._namespaces[0].camera_subject, self._on_event_message
         )
 
-        ns = NamespaceManager.detection_event_namespaces(self.id)
-
-        def _handle_detection_msg(msg: dict[str, Any]) -> None:
-            self._detection_event_subject.next({"type": msg["type"], "event": msg["data"]})
-
-        self._close_detection_subscription = await self._proxy.subscribe(
-            ns.detection_event_subject, _handle_detection_msg
-        )
-
         await self._refresh_states()
 
     async def connect(self) -> None:
@@ -495,7 +490,23 @@ class CameraDeviceProxy(Subscribed, CameraDeviceInterface):
 
     @property
     def onDetectionEvent(self) -> Observable[DetectionEventPayload]:
-        return self._detection_event_subject.as_observable()
+        def _subscribe(callback: Callable[[DetectionEventPayload], None]) -> Disposable:
+            if self._detection_event_subject.closed:
+                return Disposable(lambda: None)
+
+            sub = self._detection_event_subject.subscribe(callback)
+            self._detection_subscriber_count += 1
+            self._ensure_detection_wire()
+
+            def _teardown() -> None:
+                sub.dispose()
+                self._detection_subscriber_count -= 1
+                if self._detection_subscriber_count == 0:
+                    self._drop_detection_wire()
+
+            return Disposable(_teardown)
+
+        return Observable(_subscribe)
 
     async def implement(self, impl: CameraImplementation) -> None:
         plugin_id = self._plugin["id"]
@@ -535,9 +546,9 @@ class CameraDeviceProxy(Subscribed, CameraDeviceInterface):
             await self._close_subscription()
             self._close_subscription = None
 
-        if self._close_detection_subscription:
-            await self._close_detection_subscription()
-            self._close_detection_subscription = None
+        if self._detection_wire:
+            await self._detection_wire()
+            self._detection_wire = None
 
         if self._impl_cleanup_function:
             with contextlib.suppress(Exception):
@@ -560,6 +571,40 @@ class CameraDeviceProxy(Subscribed, CameraDeviceInterface):
         self._frame_worker_state.complete()
         self._initialized.complete()
         self._detection_event_subject.complete()
+
+    def _handle_detection_msg(self, msg: dict[str, Any]) -> None:
+        self._detection_event_subject.next({"type": msg["type"], "event": msg["data"]})
+
+    def _ensure_detection_wire(self) -> None:
+        if self._detection_wire or self._detection_wire_pending:
+            return
+
+        self._detection_wire_pending = True
+
+        async def _subscribe() -> None:
+            try:
+                ns = NamespaceManager.detection_event_namespaces(self.id)
+                close = await self._proxy.subscribe(ns.detection_event_subject, self._handle_detection_msg)
+            except Exception as error:
+                self._logger.error(f"Failed to subscribe to detection events: {error}")
+                self._detection_wire_pending = False
+                return
+
+            self._detection_wire_pending = False
+            if self._detection_subscriber_count == 0:
+                # last consumer left while the subscribe was in flight
+                self._tasks.add(close())
+                return
+
+            self._detection_wire = close
+
+        self._tasks.add(_subscribe())
+
+    def _drop_detection_wire(self) -> None:
+        close = self._detection_wire
+        self._detection_wire = None
+        if close:
+            self._tasks.add(close())
 
     async def _refresh_states(self) -> None:
         response = await self._camera_controller_proxy.refreshStates()

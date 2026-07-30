@@ -1,5 +1,5 @@
 import { isEqual } from '@camera.ui/common/utils';
-import { Subject } from '@camera.ui/sdk';
+import { Disposable, Observable, Subject } from '@camera.ui/sdk';
 
 import { CameraDevice } from '../../../../camera/index.js';
 import { Fmp4Session } from '../../../../camera/streaming/fmp4-session.js';
@@ -21,7 +21,6 @@ import type {
   DeviceStorage,
   JsonSchema,
   ModelSpec,
-  Observable,
   PluginInfo,
   ProbeConfig,
   ProbeStream,
@@ -34,9 +33,9 @@ import type { DetectionEventMessage } from '@camera.ui/sdk/internal';
 import type { DetectionCoordinatorInterface } from '../../../../rpc/interfaces/detection.js';
 import type { CameraDeviceInterface, CameraDeviceListenerMessagePayload, RefreshedStates } from '../../../../rpc/interfaces/device.js';
 import type { SensorRegistryInterface } from '../../../../rpc/interfaces/sensor.js';
-import type { SensorManagerProxy } from './sensorManager.js';
 import type { CameraNamespaces, FrameWorkerDetectionNamespaces, PluginCameraNamespaces, SensorRegistryNamespaces } from '../../../../rpc/namespaces.js';
 import type { StorageController } from '../storageController.js';
+import type { SensorManagerProxy } from './sensorManager.js';
 
 const DETECTION_SENSOR_TYPES: ReadonlySet<SensorType> = new Set(getDetectionTypes());
 
@@ -50,7 +49,8 @@ export class CameraDeviceProxy extends CameraDevice {
   #storageController: StorageController;
   #sensorManager: SensorManagerProxy;
   #closeSubscription?: () => void;
-  #closeDetectionSubscription?: () => void;
+  #detectionWire?: Promise<(() => void) | undefined>;
+  #detectionSubscriberCount = 0;
   #ownedSensors = new Map<string, { sensor: Sensor<any>; type: SensorType }>();
   #sensorCleanupFunctions = new Map<string, () => Promise<void>>();
   #implCleanupFunction?: () => Promise<void>;
@@ -60,7 +60,23 @@ export class CameraDeviceProxy extends CameraDevice {
   constructor(proxy: RPCClient, storageController: StorageController, sensorManager: SensorManagerProxy, camera: Camera, plugin: PluginInfo, logger: Logger) {
     super(camera, logger);
 
-    this.onDetectionEvent = this.#detectionEventSubject.asObservable();
+    this.onDetectionEvent = new Observable((callback) => {
+      if (this.#detectionEventSubject.closed) {
+        return new Disposable(() => {});
+      }
+
+      const sub = this.#detectionEventSubject.subscribe(callback);
+      this.#detectionSubscriberCount++;
+      this.#ensureDetectionWire();
+
+      return new Disposable(() => {
+        sub.dispose();
+        this.#detectionSubscriberCount--;
+        if (this.#detectionSubscriberCount === 0) {
+          this.#dropDetectionWire();
+        }
+      });
+    });
 
     this.#plugin = plugin;
     this.#proxy = proxy;
@@ -135,11 +151,6 @@ export class CameraDeviceProxy extends CameraDevice {
 
     this.#closeSubscription = await this.#proxy.subscribe<CameraDeviceListenerMessagePayload>(this.#namespaces.cameraSubject, this.#onEventMessage.bind(this));
 
-    const detectionNs = NamespaceManager.detectionEventNamespaces(this.id);
-    this.#closeDetectionSubscription = await this.#proxy.subscribe<DetectionEventMessage>(detectionNs.detectionEventSubject, (message) => {
-      this.#detectionEventSubject.next({ type: message.type, event: message.data });
-    });
-
     await this._refreshStates();
   }
 
@@ -178,7 +189,7 @@ export class CameraDeviceProxy extends CameraDevice {
     this.removeAllListeners();
     this.unsubscribe();
     this.#closeSubscription?.();
-    this.#closeDetectionSubscription?.();
+    this.#dropDetectionWire();
 
     this.#detectionEventSubject.complete();
 
@@ -310,6 +321,33 @@ export class CameraDeviceProxy extends CameraDevice {
     if (this.frameWorkerState.getValue() !== response.frameWorkerState) {
       super.updateFrameWorkerState(response.frameWorkerState);
     }
+  }
+
+  #ensureDetectionWire(): void {
+    if (this.#detectionWire) {
+      return;
+    }
+
+    const detectionNs = NamespaceManager.detectionEventNamespaces(this.id);
+    const wire = this.#proxy
+      .subscribe<DetectionEventMessage>(detectionNs.detectionEventSubject, (message) => {
+        this.#detectionEventSubject.next({ type: message.type, event: message.data });
+      })
+      .catch((error) => {
+        this.logger.error('Failed to subscribe to detection events', error);
+        if (this.#detectionWire === wire) {
+          this.#detectionWire = undefined;
+        }
+        return undefined;
+      });
+
+    this.#detectionWire = wire;
+  }
+
+  #dropDetectionWire(): void {
+    const wire = this.#detectionWire;
+    this.#detectionWire = undefined;
+    void wire?.then((close) => close?.());
   }
 
   async #onEventMessage(event: CameraDeviceListenerMessagePayload): Promise<void> {
