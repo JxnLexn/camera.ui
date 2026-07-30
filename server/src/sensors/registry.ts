@@ -193,6 +193,33 @@ export class SensorRegistry {
   }
 
   @RPCMethod
+  public resolveSensor(sensor: SensorJSON, pluginId: string, options?: RegisterSensorOptions): string {
+    this.validateContract(sensor, pluginId, options);
+
+    let record = this.reconcile(sensor, pluginId);
+    if (!record) {
+      record = {
+        _id: randomUUID(),
+        nativeId: sensor.nativeId,
+        pluginInfo: { id: pluginId, name: this.getPluginContract(pluginId)?.name ?? pluginId },
+        type: sensor.type,
+        name: sensor.name,
+        assignedCameraIds: options?.assignCameraId ? [options.assignCameraId] : [],
+        boundCameraId: options?.assignCameraId,
+        exposed: true,
+        state: {},
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      };
+      this.records.set(record._id, record);
+      this.persistRecord(record._id, () => {});
+      this.announceAdded(record);
+    }
+
+    return record._id;
+  }
+
+  @RPCMethod
   public unregisterSensor(sensorId: string): void {
     const record = this.records.get(sensorId);
     if (!record || !this.runtime.has(sensorId)) return;

@@ -117,12 +117,22 @@ class SensorManagerProxy:
 
         sensor_json = sensor.toJSON()
         sensor_json["requiresFrames"] = getattr(sensor, "_requires_frames", False) is True
+
+        # resolve the durable id first and wire storage with it, so registration
+        # data (modelSpec) can read sensor storage
+        sensor_id = await self._registry_proxy.resolveSensor(sensor_json, plugin_id)
+        sensor._setId(sensor_id)  # pyright: ignore[reportPrivateUsage]
+        sensor_json["id"] = sensor_id
+
+        storage = self._storage_controller.createSensorStorage(plugin_id, sensor.id, sensor.storage_schema)
+        await storage.register_storage()
+        sensor._setStorage(storage)  # pyright: ignore[reportPrivateUsage]
+
         model_spec = getattr(sensor, "modelSpec", None)
         if model_spec:
             sensor_json["modelSpec"] = model_spec
 
         registration = await self._registry_proxy.registerSensor(sensor_json, plugin_id)
-        sensor._setId(registration["id"])  # pyright: ignore[reportPrivateUsage]
         sensor._setAssignedCameras(registration["assignedCameraIds"])  # pyright: ignore[reportPrivateUsage]
 
         sensor_namespace = NamespaceManager.sensor_provider_namespaces(plugin_id, sensor.id).sensor_rpc
@@ -132,10 +142,6 @@ class SensorManagerProxy:
             lambda properties: self._on_sensor_state_write(sensor, sensor_type, properties)
         )
         sensor._initCapabilities(lambda caps: self._on_sensor_capabilities_changed(sensor.id, caps))  # pyright: ignore[reportPrivateUsage]
-
-        storage = self._storage_controller.createSensorStorage(plugin_id, sensor.id, sensor.storage_schema)
-        await storage.register_storage()
-        sensor._setStorage(storage)  # pyright: ignore[reportPrivateUsage]
 
         rpc_cleanup = await self._proxy.register_handler(sensor_namespace, sensor, without_decorators=True)
 

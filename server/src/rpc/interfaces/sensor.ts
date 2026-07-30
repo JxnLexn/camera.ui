@@ -36,6 +36,7 @@ export interface RegisterSensorOptions {
 }
 
 export interface SensorRegistryInterface {
+  resolveSensor(sensor: SensorJSON, pluginId: string, options?: RegisterSensorOptions): string;
   registerSensor(sensor: SensorJSON, pluginId: string, options?: RegisterSensorOptions): SensorRegistration;
   unregisterSensor(sensorId: string): void;
   updatePropertyValues(sensorId: string, properties: Record<string, unknown>): void;

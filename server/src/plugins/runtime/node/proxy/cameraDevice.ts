@@ -225,21 +225,27 @@ export class CameraDeviceProxy extends CameraDevice {
 
     sensor._setPluginId(this.#plugin.id);
 
-    const requiresFrames = sensor._requiresFrames === true;
-    const modelSpec: ModelSpec | undefined = (sensor as { modelSpec?: ModelSpec }).modelSpec;
-
     const sensorJSON = sensor.toJSON();
-    sensorJSON.requiresFrames = requiresFrames;
-    if (modelSpec) {
-      sensorJSON.modelSpec = modelSpec;
-    }
+    sensorJSON.requiresFrames = sensor._requiresFrames === true;
     // derived nativeId keeps per-camera instances of same-named sensors distinct
     sensorJSON.nativeId ??= `${this.id}:${sensor.type}:${sensor.name}`;
 
-    // register first: the host reconciles against the persisted entity and
-    // hands back the durable id every namespace binds to
+    // resolve the durable id first and wire storage with it, so registration
+    // data (modelSpec) can read sensor storage
+    const sensorId = await this.#sensorRegistryProxy.resolveSensor(sensorJSON, this.#plugin.id, { assignCameraId: this.id });
+    sensor._setId(sensorId);
+    sensorJSON.id = sensorId;
+
+    const storage = this.#storageController.createSensorStorage(this.#plugin.id, sensor.id, sensor.storageSchema ?? []);
+    await storage.registerStorage();
+    sensor._setStorage(storage);
+
+    const modelSpec: ModelSpec | undefined = (sensor as { modelSpec?: ModelSpec }).modelSpec;
+    if (modelSpec) {
+      sensorJSON.modelSpec = modelSpec;
+    }
+
     const registration = await this.#sensorRegistryProxy.registerSensor(sensorJSON, this.#plugin.id, { assignCameraId: this.id });
-    sensor._setId(registration.id);
     sensor._setAssignedCameras(registration.assignedCameraIds);
     sensor._setAssignmentLocked?.();
 
@@ -265,11 +271,6 @@ export class CameraDeviceProxy extends CameraDevice {
     sensor._initCapabilities(async (capabilities: string[]) => {
       await this.#sensorRegistryProxy.updateCapabilities(sensor.id, capabilities);
     });
-
-    const schemas = sensor.storageSchema ?? [];
-    const storage = this.#storageController.createSensorStorage(this.#plugin.id, sensor.id, schemas);
-    await storage.registerStorage();
-    sensor._setStorage(storage);
 
     const sensorCleanup = await this.#proxy.registerHandler(sensorNamespace, sensor, { withoutDecorators: true });
     this.#sensorCleanupFunctions.set(sensor.id, sensorCleanup);

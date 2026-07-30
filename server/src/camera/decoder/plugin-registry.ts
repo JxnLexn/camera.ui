@@ -50,6 +50,17 @@ export class PluginRegistry {
     return true;
   }
 
+  public updateModelSpec(sensorId: string, modelSpec?: AnyModelSpec): void {
+    for (const plugin of this.single.values()) {
+      if (plugin.sensorId === sensorId) plugin.modelSpec = modelSpec;
+    }
+    for (const typePlugins of this.multi.values()) {
+      for (const plugin of typePlugins.values()) {
+        if (plugin.sensorId === sensorId) plugin.modelSpec = modelSpec;
+      }
+    }
+  }
+
   public removeBySensor(sensorId: string): RegisteredPlugin[] {
     const removed: RegisteredPlugin[] = [];
 

@@ -753,7 +753,11 @@ export class DetectionCoordinator {
       modelSpec: sensor.modelSpec,
       proxy: sensorProxy,
     });
-    if (!registered) return;
+    if (!registered) {
+      // re-push from the registry: the sensor is already live, only the spec may have changed
+      this.plugins.updateModelSpec(sensor.sensorId, sensor.modelSpec);
+      return;
+    }
     this.logger.trace(`Plugin registered: ${sensor.pluginId} for ${sensor.sensorType}`);
 
     if (!wasVideoNeeded && this.plugins.shouldVideoBeActive()) {

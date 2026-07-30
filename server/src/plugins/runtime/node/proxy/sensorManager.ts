@@ -89,13 +89,23 @@ export class SensorManagerProxy implements SensorManager {
 
     const sensorJSON = sensor.toJSON();
     sensorJSON.requiresFrames = sensor._requiresFrames === true;
+
+    // resolve the durable id first and wire storage with it, so registration
+    // data (modelSpec) can read sensor storage
+    const sensorId = await this.#registryProxy.resolveSensor(sensorJSON, this.#plugin.id);
+    sensor._setId(sensorId);
+    sensorJSON.id = sensorId;
+
+    const storage = this.#storageController.createSensorStorage(this.#plugin.id, sensor.id, sensor.storageSchema ?? []);
+    await storage.registerStorage();
+    sensor._setStorage(storage);
+
     const modelSpec: ModelSpec | undefined = (sensor as { modelSpec?: ModelSpec }).modelSpec;
     if (modelSpec) {
       sensorJSON.modelSpec = modelSpec;
     }
 
     const registration = await this.#registryProxy.registerSensor(sensorJSON, this.#plugin.id);
-    sensor._setId(registration.id);
     sensor._setAssignedCameras(registration.assignedCameraIds);
 
     const sensorNamespace = NamespaceManager.sensorProviderNamespaces(this.#plugin.id, sensor.id).sensorRpc;
@@ -116,10 +126,6 @@ export class SensorManagerProxy implements SensorManager {
     sensor._initCapabilities(async (capabilities: string[]) => {
       await this.#registryProxy.updateCapabilities(sensor.id, capabilities);
     });
-
-    const storage = this.#storageController.createSensorStorage(this.#plugin.id, sensor.id, sensor.storageSchema ?? []);
-    await storage.registerStorage();
-    sensor._setStorage(storage);
 
     const rpcCleanup = await this.#proxy.registerHandler(sensorNamespace, sensor, { withoutDecorators: true });
 
