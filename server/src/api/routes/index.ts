@@ -10,6 +10,7 @@ import { FrameWorkersRoute } from './frameWorkers.routes.js';
 import { InstancesRoute } from './instances.routes.js';
 import { MqttRoute } from './mqtt.routes.js';
 import { NotificationsRoute } from './notifications.routes.js';
+import { NvrRoute } from './nvr.routes.js';
 import { OAuthCallbackRoute } from './oauthCallback.routes.js';
 import { PluginsRoute } from './plugins.routes.js';
 import { RemoteRoute } from './remote.routes.js';
@@ -53,6 +54,7 @@ export class FastifyRoutes {
     await this.app.register(AutomationsRoute, { prefix: '/api/automations' });
     await this.app.register(SensorsRoute, { prefix: '/api/sensors' });
     await this.app.register(NotificationsRoute, { prefix: '/api/notifications' });
+    await this.app.register(NvrRoute, { prefix: '/api/nvr' });
     await this.app.register(OAuthCallbackRoute, { prefix: '/oauth' });
 
     const serveIndex = (req: FastifyRequest, reply: FastifyReply): void => {
