@@ -73,9 +73,12 @@ export class SensorsController {
 
   public async delete(req: FastifyRequest<AuthLoginRequest & SensorsParamsRequest>, reply: FastifyReply): Promise<FastifyReply> {
     try {
-      const success = await this.service.delete(req.params.id);
-      if (!success) {
+      const result = await this.service.delete(req.params.id);
+      if (result === 'not-found') {
         return reply.code(404).send({ statusCode: 404, message: 'Sensor not found' });
+      }
+      if (result === 'connected') {
+        return reply.code(409).send({ statusCode: 409, message: 'Sensor is still provided by its plugin' });
       }
       return reply.code(204).send();
     } catch (error: any) {

@@ -22,6 +22,7 @@ export interface TransformedSensor {
   connected: boolean;
   assignedCameraIds: string[];
   exposed: boolean;
+  hidden: boolean;
   properties: Record<string, unknown>;
   capabilities: string[];
   semantics?: SensorSemantics;
@@ -74,6 +75,10 @@ export class SensorsService {
       await this.registry.setExposed(id, input.exposed);
     }
 
+    if (input.hidden !== undefined) {
+      await this.registry.setHidden(id, input.hidden);
+    }
+
     return this.transform(id);
   }
 
@@ -82,10 +87,12 @@ export class SensorsService {
     return this.registry.getHistory(id, limit);
   }
 
-  public async delete(id: string): Promise<boolean> {
-    if (!this.registry.getRecord(id)) return false;
+  public async delete(id: string): Promise<'ok' | 'not-found' | 'connected'> {
+    const record = this.registry.getRecord(id);
+    if (!record) return 'not-found';
+    if (this.registry.isConnected(id) && record.pluginInfo.id !== VIRTUAL_SENSOR_OWNER_ID) return 'connected';
     await this.registry.deleteSensor(id);
-    return true;
+    return 'ok';
   }
 
   public async command(id: string, property: string, value: unknown): Promise<'ok' | 'not-found' | 'read-only' | 'disconnected'> {
@@ -119,6 +126,7 @@ export class SensorsService {
       connected: this.registry.isConnected(record._id),
       assignedCameraIds: data.assignedCameraIds,
       exposed: record.exposed,
+      hidden: record.hidden ?? false,
       properties: data.properties,
       capabilities: data.capabilities,
       semantics: resolveSensorSemantics(data),

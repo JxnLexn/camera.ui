@@ -19,8 +19,9 @@ export const patchSensorSchema = zod
     displayName: zod.string().trim().min(1, 'Display name is required').max(100, 'Display name cannot be more than 100 characters').optional(),
     assignedCameraIds: zod.array(zod.string().min(1)).optional(),
     exposed: zod.boolean().optional(),
+    hidden: zod.boolean().optional(),
   })
-  .refine((body) => body.displayName !== undefined || body.assignedCameraIds !== undefined || body.exposed !== undefined, {
+  .refine((body) => body.displayName !== undefined || body.assignedCameraIds !== undefined || body.exposed !== undefined || body.hidden !== undefined, {
     message: 'Nothing to update',
   });
 

@@ -240,6 +240,11 @@ export class SensorRegistry {
     const record = this.records.get(sensorId);
     if (!record) return;
 
+    // a connected plugin sensor re-registers with a fresh id, delete is for leftovers
+    if (this.runtime.has(sensorId) && record.pluginInfo.id !== VIRTUAL_SENSOR_OWNER_ID) {
+      throw new Error(`Sensor "${record.displayName ?? record.name}" is still provided by plugin "${record.pluginInfo.name}"`);
+    }
+
     if (this.runtime.has(sensorId)) this.disconnectSensor(sensorId);
     if (record.pluginInfo.id === VIRTUAL_SENSOR_OWNER_ID) await disposeVirtualSensorHost(sensorId);
     this.records.delete(sensorId);
@@ -328,6 +333,15 @@ export class SensorRegistry {
     for (const cameraId of target) {
       if (!current.has(cameraId)) await this.assignCamera(sensorId, cameraId);
     }
+  }
+
+  public async setHidden(sensorId: string, hidden: boolean): Promise<void> {
+    const record = this.records.get(sensorId);
+    if (!record) throw new Error(`Sensor ${sensorId} not found`);
+    if ((record.hidden ?? false) === hidden) return;
+
+    record.hidden = hidden;
+    this.persistRecord(sensorId, () => {});
   }
 
   public async setExposed(sensorId: string, exposed: boolean): Promise<void> {
