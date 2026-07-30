@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 from typing import Any
 
 from _camera_ui_tools.camera_ui_common import (
     LoggerService,
+    TaskSet,
 )
 from _camera_ui_tools.camera_ui_rpc import CloseHandler, RPCClient
 from _camera_ui_tools.camera_ui_sdk import (
@@ -50,6 +52,7 @@ class DeviceManagerProxy(DeviceManager):
         self.__close_request: CloseHandler | None = None
 
         self.__devices: dict[str, CameraDeviceProxy] = {}
+        self.__tasks = TaskSet(name=f"DeviceManager:{plugin['id']}")
         self.__namespaces: tuple[DeviceManagerNamespaces, PluginNamespaces, DiscoveryManagerNamespaces] = (
             NamespaceManager.device_manager_namespaces(),
             NamespaceManager.plugin_namespaces(self.__plugin["id"]),
@@ -95,15 +98,26 @@ class DeviceManagerProxy(DeviceManager):
     async def configureCameras(self, camera_devices: list[CameraDeviceProxy]) -> None:
         await asyncio.gather(*[self.__get_camera_device(camera_device) for camera_device in camera_devices])
 
+    def on_rpc_reconnected(self) -> None:
+        if not self.__initialized:
+            return
+        self.__tasks.add(self.__refresh_all_devices())
+
     async def close(self) -> None:
         """Internal method to close the device manager proxy and cleanup resources."""
         self.__initialized = False
+        self.__tasks.remove_all()
         if self.__close_request:
             await self.__close_request()
 
         for device in self.__devices.values():
             await device.cleanup()
         self.__devices.clear()
+
+    async def __refresh_all_devices(self) -> None:
+        for device in list(self.__devices.values()):
+            with contextlib.suppress(Exception):
+                await device._refresh_states()  # pyright: ignore[reportPrivateUsage]
 
     async def __on_event_message(self, event: Any) -> None:
         if not self.__plugin_instance:

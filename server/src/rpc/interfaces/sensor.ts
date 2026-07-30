@@ -41,7 +41,7 @@ export interface SensorRegistryInterface {
   updateCapabilities(sensorId: string, capabilities: string[]): void;
   getPropertyValue(sensorId: string, property: string): unknown;
   getAllPropertyValues(sensorId: string): Record<string, unknown>;
-  getSensorState(sensorId: string): SensorRefreshedState;
+  getSensorState(sensorId: string): SensorRefreshedState | undefined;
   getSensorStates(): Record<string, SensorRefreshedState>;
   getSensors(pluginId?: string): StoredSensorData[];
   getSensorRpc(sensorId: string, pluginId?: string): StoredSensorData | undefined;

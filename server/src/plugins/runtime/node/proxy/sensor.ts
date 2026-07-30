@@ -1,3 +1,4 @@
+import { isEqual } from '@camera.ui/common/utils';
 import { Subject } from '@camera.ui/sdk';
 
 import { NamespaceManager } from '../../../../rpc/namespaces.js';
@@ -11,10 +12,12 @@ export class SensorProxy implements SensorLike {
   readonly onPropertyChanged: Observable<{ property: string; value: unknown; timestamp: number }>;
   readonly onCapabilitiesChanged: Observable<string[]>;
   readonly onConnectedChanged: Observable<boolean>;
+  readonly onAssignmentChanged: Observable<readonly string[]>;
 
   readonly #propertyChangedSubject = new Subject<{ property: string; value: unknown; timestamp: number }>();
   readonly #capabilitiesChangedSubject = new Subject<string[]>();
   readonly #connectedChangedSubject = new Subject<boolean>();
+  readonly #assignmentChangedSubject = new Subject<readonly string[]>();
 
   private _id: string;
   private _type: SensorType;
@@ -47,6 +50,7 @@ export class SensorProxy implements SensorLike {
     this.onPropertyChanged = this.#propertyChangedSubject.asObservable();
     this.onCapabilitiesChanged = this.#capabilitiesChangedSubject.asObservable();
     this.onConnectedChanged = this.#connectedChangedSubject.asObservable();
+    this.onAssignmentChanged = this.#assignmentChangedSubject.asObservable();
 
     // RPC directly to owner - for Control sensors
     this._rpcProxy = proxy.createProxy<SensorLike>(ownerNamespace);
@@ -117,18 +121,22 @@ export class SensorProxy implements SensorLike {
   }
 
   _updateCachedValue(property: string, value: unknown, timestamp?: number): void {
+    if (isEqual(this._properties.get(property), value, true)) return;
     this._properties.set(property, value);
     this.#propertyChangedSubject.next({ property, value, timestamp: timestamp ?? Date.now() });
   }
 
   _applyRefreshedState(state: SensorRefreshedState): void {
-    this._capabilities = state.capabilities;
     if (state.displayName) {
       this.setDisplayName(state.displayName);
     }
 
-    for (const [key, value] of Object.entries(state.properties)) {
-      this._updateCachedValue(key, value);
+    if (!isEqual(this._capabilities, state.capabilities, true)) {
+      this._updateCapabilities(state.capabilities);
+    }
+
+    for (const [property, value] of Object.entries(state.properties)) {
+      this._updateCachedValue(property, value);
     }
   }
 
@@ -149,6 +157,7 @@ export class SensorProxy implements SensorLike {
 
   _setAssignedCameras(cameraIds: string[]): void {
     this._assignedCameraIds = [...cameraIds];
+    this.#assignmentChangedSubject.next(this._assignedCameraIds);
   }
 
   _setExposed(exposed: boolean): void {

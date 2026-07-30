@@ -37,6 +37,7 @@ class SensorProxy(SensorLike):
         self._property_changed_subject: Subject[SensorPropertyChangeData] = Subject()
         self._capabilities_changed_subject: Subject[list[str]] = Subject()
         self._connected_changed_subject: Subject[bool] = Subject()
+        self._assignment_changed_subject: Subject[list[str]] = Subject()
         self._event_subscription: CloseHandler | None = None
 
     @property
@@ -107,10 +108,20 @@ class SensorProxy(SensorLike):
     def onConnectedChanged(self) -> Observable[bool]:
         return self._connected_changed_subject.as_observable()
 
+    @property
+    def onAssignmentChanged(self) -> Observable[list[str]]:
+        return self._assignment_changed_subject.as_observable()
+
     def _update_cached_value(self, property: str, value: Any, timestamp: int | None = None) -> None:
+        if self._properties.get(property) == value:
+            return
         self._properties[property] = value
         self._property_changed_subject.next(
-            {"property": property, "value": value, "timestamp": timestamp or int(time.time() * 1000)}
+            {
+                "property": property,
+                "value": value,
+                "timestamp": timestamp or int(time.time() * 1000),
+            }
         )
 
     def _set_display_name(self, display_name: str) -> None:
@@ -128,16 +139,22 @@ class SensorProxy(SensorLike):
 
     def _set_assigned_cameras(self, camera_ids: list[str]) -> None:
         self._assigned_camera_ids = list(camera_ids)
+        self._assignment_changed_subject.next(self._assigned_camera_ids.copy())
 
     def _set_exposed(self, exposed: bool) -> None:
         self._exposed = exposed
 
     def _apply_refreshed_state(self, state: SensorRefreshedState) -> None:
-        self._capabilities = list(state["capabilities"])
-        if "displayName" in state:
-            self._display_name = state["displayName"]
-        for key, value in state.get("properties", {}).items():
-            self._update_cached_value(key, value)
+        display_name = state.get("displayName")
+        if display_name:
+            self._set_display_name(display_name)
+
+        capabilities = list(state.get("capabilities", []))
+        if sorted(capabilities) != sorted(self._capabilities):
+            self._update_capabilities(capabilities)
+
+        for property, value in state.get("properties", {}).items():
+            self._update_cached_value(property, value)
 
     async def _subscribe_to_events(self) -> None:
         if self._event_subscription is not None:
@@ -198,7 +215,7 @@ class SensorRegistryInterface(Protocol):
     async def updateCapabilities(self, sensor_id: str, capabilities: list[str]) -> None: ...
     async def getPropertyValue(self, sensor_id: str, property: str) -> Any: ...
     async def getAllPropertyValues(self, sensor_id: str) -> dict[str, Any]: ...
-    async def getSensorState(self, sensor_id: str) -> SensorRefreshedState: ...
+    async def getSensorState(self, sensor_id: str) -> SensorRefreshedState | None: ...
     async def getSensorStates(self) -> dict[str, SensorRefreshedState]: ...
     async def getSensors(self, plugin_id: str | None = None) -> list[StoredSensorData]: ...
     async def getSensorRpc(self, sensor_id: str, plugin_id: str | None = None) -> StoredSensorData | None: ...

@@ -564,9 +564,13 @@ class CameraDeviceProxy(Subscribed, CameraDeviceInterface):
     async def _refresh_states(self) -> None:
         response = await self._camera_controller_proxy.refreshStates()
 
-        self._camera_subject.next(response["camera"])
-        self._camera_state.next(response["cameraState"])
-        self._frame_worker_state.next(response["frameWorkerState"])
+        # a resync must not wake subscribers for state they already hold
+        if response["camera"] != self._camera_subject.value:
+            self._camera_subject.next(response["camera"])
+        if response["cameraState"] != self._camera_state.value:
+            self._camera_state.next(response["cameraState"])
+        if response["frameWorkerState"] != self._frame_worker_state.value:
+            self._frame_worker_state.next(response["frameWorkerState"])
 
     async def _on_event_message(self, event: CameraEventMessage) -> None:
         if not self._initialized.value:

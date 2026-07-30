@@ -60,6 +60,7 @@ class PluginChild:
                     "user": os.environ["PROXY_USER"],
                     "password": os.environ["PROXY_PASSWORD"],
                 },
+                "reconnected_cb": self._on_rpc_reconnected,
             }
         )
 
@@ -111,6 +112,12 @@ class PluginChild:
             raise
         finally:
             await self.stop_plugin()
+
+    async def _on_rpc_reconnected(self) -> None:
+        if self.stopped or self.api is None:
+            return
+        self.api.sensor_manager.on_rpc_reconnected()
+        self.api.device_manager.on_rpc_reconnected()
 
     async def on_start(self) -> None:
         self.channel = await self.proxy.private_channel("plugin-communication", "camera.ui")

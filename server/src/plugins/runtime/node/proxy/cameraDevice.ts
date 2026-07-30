@@ -1,3 +1,4 @@
+import { isEqual } from '@camera.ui/common/utils';
 import { Subject } from '@camera.ui/sdk';
 
 import { CameraDevice } from '../../../../camera/index.js';
@@ -139,7 +140,7 @@ export class CameraDeviceProxy extends CameraDevice {
       this.#detectionEventSubject.next({ type: message.type, event: message.data });
     });
 
-    await this.#refreshStates();
+    await this._refreshStates();
   }
 
   public async implement(impl: CameraImplementation): Promise<void> {
@@ -296,12 +297,19 @@ export class CameraDeviceProxy extends CameraDevice {
     }
   }
 
-  async #refreshStates(): Promise<void> {
+  public async _refreshStates(): Promise<void> {
     const response: RefreshedStates = await this.#cameraControllerProxy.refreshStates();
 
-    super.updateCamera(response.camera);
-    super.updateCameraState(response.cameraState);
-    super.updateFrameWorkerState(response.frameWorkerState);
+    // a resync must not wake subscribers for state they already hold
+    if (!isEqual(this.cameraSubject.getValue(), response.camera)) {
+      super.updateCamera(response.camera);
+    }
+    if (this.cameraState.getValue() !== response.cameraState) {
+      super.updateCameraState(response.cameraState);
+    }
+    if (this.frameWorkerState.getValue() !== response.frameWorkerState) {
+      super.updateFrameWorkerState(response.frameWorkerState);
+    }
   }
 
   async #onEventMessage(event: CameraDeviceListenerMessagePayload): Promise<void> {

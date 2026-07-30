@@ -1,5 +1,6 @@
 import { NamespaceManager } from '../../../../rpc/namespaces.js';
 import { getDetectionTypes } from '../../../../sensors/types.js';
+import { watchReconnect } from './reconnect.js';
 import { SensorProxy } from './sensor.js';
 
 import type { Logger } from '@camera.ui/common';
@@ -33,6 +34,7 @@ export class SensorManagerProxy implements SensorManager {
   #consumed = new Map<string, SensorProxy>();
 
   #globalUnsubscribe?: () => void;
+  #stopReconnectWatch?: () => void;
 
   constructor(proxy: RPCClient, storageController: StorageController, plugin: PluginInfo, logger: Logger) {
     this.#proxy = proxy;
@@ -170,6 +172,8 @@ export class SensorManagerProxy implements SensorManager {
   public async close(): Promise<void> {
     this.#globalUnsubscribe?.();
     this.#globalUnsubscribe = undefined;
+    this.#stopReconnectWatch?.();
+    this.#stopReconnectWatch = undefined;
 
     for (const proxySensor of this.#consumed.values()) {
       proxySensor._unsubscribeFromEvents();
@@ -192,12 +196,36 @@ export class SensorManagerProxy implements SensorManager {
   async #ensureGlobalSubscription(): Promise<void> {
     if (this.#globalUnsubscribe) return;
 
+    this.#stopReconnectWatch ??= watchReconnect(
+      this.#proxy,
+      () => this.#resyncAllConsumed(),
+      (error) => this.#logger.debug('Sensor reconnect watch ended:', error),
+    );
+
     const ns = NamespaceManager.sensorRegistryNamespaces();
     this.#globalUnsubscribe = await this.#proxy.subscribe<SensorEventMessage>(ns.sensorsSubject, (message) => {
       this.#onGlobalSensorEvent(message).catch((error: unknown) => {
         this.#logger.warn('Sensor event handling failed:', error);
       });
     });
+  }
+
+  async #resyncAllConsumed(): Promise<void> {
+    for (const sensorId of [...this.#consumed.keys()]) {
+      await this.#resyncConsumed(sensorId);
+    }
+  }
+
+  async #resyncConsumed(sensorId: string): Promise<void> {
+    const proxySensor = this.#consumed.get(sensorId);
+    if (!proxySensor) return;
+
+    try {
+      const state = await this.#registryProxy.getSensorState(sensorId);
+      if (state) proxySensor._applyRefreshedState(state);
+    } catch {
+      // owner or registry unreachable, the next re-announce carries the state
+    }
   }
 
   #isConsumable(data: StoredSensorData): boolean {
@@ -229,7 +257,13 @@ export class SensorManagerProxy implements SensorManager {
         const event = message.data as SensorAddedEvent;
         this.#owned.get(event.sensor.id)?._setAssignedCameras(event.sensor.assignedCameraIds);
         this.#external.get(event.sensor.id)?._setAssignedCameras(event.sensor.assignedCameraIds);
-        if (this.#consumed.has(event.sensor.id) || !this.#isConsumable(event.sensor)) return;
+        const consumed = this.#consumed.get(event.sensor.id);
+        if (consumed) {
+          // re-announced while we already hold it: the payload is authoritative, our cache may be stale
+          consumed._applyRefreshedState(event.state);
+          return;
+        }
+        if (!this.#isConsumable(event.sensor)) return;
         const proxySensor = this.#addConsumed(event.sensor);
         await this.#pluginInstance?.onSensorAdded?.(proxySensor);
         break;
@@ -241,7 +275,13 @@ export class SensorManagerProxy implements SensorManager {
       }
       case 'sensor:connected:changed': {
         const event = message.data as SensorConnectedChangedEvent;
-        this.#consumed.get(event.sensorId)?._setConnected(event.connected);
+        const proxySensor = this.#consumed.get(event.sensorId);
+        if (!proxySensor) break;
+        proxySensor._setConnected(event.connected);
+        if (event.connected) {
+          // the owner was away, whatever it published in the meantime never reached us
+          void this.#resyncConsumed(event.sensorId);
+        }
         break;
       }
       case 'sensor:exposed:changed': {

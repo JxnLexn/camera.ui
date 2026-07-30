@@ -1,5 +1,6 @@
 import { NamespaceManager } from '../../../../rpc/namespaces.js';
 import { CameraDeviceProxy } from './cameraDevice.js';
+import { watchReconnect } from './reconnect.js';
 
 import type { Logger } from '@camera.ui/common';
 import type { Promisify, RPCClient } from '@camera.ui/rpc';
@@ -21,6 +22,7 @@ export class DeviceManagerProxy implements DeviceManager {
   #initialized = false;
 
   #closeRequests?: () => void;
+  #stopReconnectWatch?: () => void;
   #namespaces: DeviceManagerNamespaces & PluginNamespaces & DiscoveryManagerNamespaces;
 
   #devices = new Map<string, CameraDeviceProxy>();
@@ -48,6 +50,11 @@ export class DeviceManagerProxy implements DeviceManager {
     }
 
     this.#initialized = true;
+    this.#stopReconnectWatch = watchReconnect(
+      this.#proxy,
+      () => this.#refreshAllDevices(),
+      (error) => this.#logger.debug('Device reconnect watch ended:', error),
+    );
     this.#closeRequests = await this.#proxy.onRequest<DeviceManagerListenerMessagePayload>(this.#namespaces.pluginDeviceManagerSubject, this.#onEventMessage.bind(this));
   }
 
@@ -76,6 +83,8 @@ export class DeviceManagerProxy implements DeviceManager {
   /** Internal method to close the device manager and clean up resources */
   public async close(): Promise<void> {
     this.#initialized = false;
+    this.#stopReconnectWatch?.();
+    this.#stopReconnectWatch = undefined;
     this.#closeRequests?.();
 
     for (const device of this.#devices.values()) {
@@ -90,6 +99,16 @@ export class DeviceManagerProxy implements DeviceManager {
 
   get #discoveryManagerProxy(): Promisify<DiscoveryManagerInterface> {
     return this.#proxy.createProxy<DiscoveryManagerInterface>(this.#namespaces.discoveryManagerRpc);
+  }
+
+  async #refreshAllDevices(): Promise<void> {
+    for (const device of this.#devices.values()) {
+      try {
+        await device._refreshStates();
+      } catch {
+        // controller unreachable, keep refreshing the rest
+      }
+    }
   }
 
   async #onEventMessage(event: DeviceManagerListenerMessagePayload): Promise<void> {

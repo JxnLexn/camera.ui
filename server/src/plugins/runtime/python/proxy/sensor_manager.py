@@ -60,6 +60,7 @@ class SensorManagerProxy:
         self._external: dict[str, Sensor[Any, Any, Any]] = {}
         self._consumed: dict[str, SensorProxy] = {}
         self._global_unsubscribe: CloseHandler | None = None
+        self._closed = False
 
         self._tasks = TaskSet(name=f"SensorManager:{plugin['id']}")
 
@@ -184,7 +185,14 @@ class SensorManagerProxy:
     def untrack_camera_sensor(self, sensor_id: str) -> None:
         self._external.pop(sensor_id, None)
 
+    def on_rpc_reconnected(self) -> None:
+        if self._closed:
+            return
+        self._tasks.add(self._resync_all_consumed())
+
     async def close(self) -> None:
+        self._closed = True
+
         if self._global_unsubscribe:
             with contextlib.suppress(Exception):
                 await self._global_unsubscribe()
@@ -215,6 +223,24 @@ class SensorManagerProxy:
         self._global_unsubscribe = await self._proxy.subscribe(
             ns.sensors_subject, self._on_global_sensor_event
         )
+
+    async def _resync_all_consumed(self) -> None:
+        for sensor_id in list(self._consumed):
+            await self._resync_consumed(sensor_id)
+
+    async def _resync_consumed(self, sensor_id: str) -> None:
+        sensor_proxy = self._consumed.get(sensor_id)
+        if not sensor_proxy:
+            return
+
+        try:
+            state = await self._registry_proxy.getSensorState(sensor_id)
+        except Exception:
+            # owner or registry unreachable, the next re-announce carries the state
+            return
+
+        if state:
+            sensor_proxy._apply_refreshed_state(state)  # pyright: ignore[reportPrivateUsage]
 
     def _is_consumable(self, data: StoredSensorData) -> bool:
         if data["id"] in self._owned or data["pluginId"] == self._plugin["id"]:
@@ -259,7 +285,12 @@ class SensorManagerProxy:
             for owned in (self._owned.get(data["id"]), self._external.get(data["id"])):
                 if owned:
                     owned._setAssignedCameras(data["assignedCameraIds"])  # pyright: ignore[reportPrivateUsage]
-            if data["id"] in self._consumed or not self._is_consumable(data):
+            consumed = self._consumed.get(data["id"])
+            if consumed is not None:
+                # re-announced while we already hold it: the payload is authoritative, our cache may be stale
+                consumed._apply_refreshed_state(added["state"])  # pyright: ignore[reportPrivateUsage]
+                return
+            if not self._is_consumable(data):
                 return
             sensor_proxy = self._add_consumed(data)
             await sensor_proxy._subscribe_to_events()  # pyright: ignore[reportPrivateUsage]
@@ -275,6 +306,9 @@ class SensorManagerProxy:
             consumed = self._consumed.get(connected["sensorId"])
             if consumed:
                 consumed._set_connected(connected["connected"])  # pyright: ignore[reportPrivateUsage]
+                if connected["connected"]:
+                    # the owner was away, whatever it published in the meantime never reached us
+                    self._tasks.add(self._resync_consumed(connected["sensorId"]))
 
         elif event_type == "sensor:exposed:changed":
             exposed = cast("SensorExposedChangedEvent", message.get("data"))
