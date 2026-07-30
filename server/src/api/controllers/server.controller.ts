@@ -88,6 +88,17 @@ export class ServerController {
     }
   }
 
+  public getEndpoints(_req: FastifyRequest, reply: FastifyReply): FastifyReply {
+    try {
+      return reply.code(200).send(this.service.networkEndpoints());
+    } catch (error: any) {
+      return reply.code(500).send({
+        statusCode: 500,
+        message: error.message,
+      });
+    }
+  }
+
   public async patchServerInfo(req: FastifyRequest<AuthLoginRequest & ServerPatchRequest>, reply: FastifyReply): Promise<FastifyReply> {
     try {
       const oldServer = JSON.parse(JSON.stringify(this.service.info())) as DBServer;

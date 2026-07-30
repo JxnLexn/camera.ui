@@ -93,6 +93,7 @@ class WebSocketProxy {
       let targetUrl = this.upstream;
       let natsCreds: AuthConfig = this.proxy.auth.server;
       let firewallConnId: string | null = null;
+      let firewallUserId: string | undefined;
 
       if (this.target === 'go2rtc') {
         const src = url.searchParams.get('src') ?? '';
@@ -122,6 +123,7 @@ class WebSocketProxy {
             return;
           }
           firewallConnId = connId;
+          firewallUserId = dbToken.user_id;
         }
       }
 
@@ -142,7 +144,7 @@ class WebSocketProxy {
       });
 
       this.wss.handleUpgrade(request, socket, head, (clientWs) => {
-        this.proxyWebSockets(clientWs, serverWs, natsCreds, firewallConnId);
+        this.proxyWebSockets(clientWs, serverWs, natsCreds, firewallConnId, firewallUserId);
       });
     } catch (err) {
       this.logger.warn(`Proxy upgrade failed (500) target=${this.target}: ${(err as Error)?.message ?? err}`);
@@ -151,19 +153,23 @@ class WebSocketProxy {
     }
   }
 
-  private proxyWebSockets(client: WebSocket, server: WebSocket, natsCreds: AuthConfig, firewallConnId: string | null): void {
+  private proxyWebSockets(client: WebSocket, server: WebSocket, natsCreds: AuthConfig, firewallConnId: string | null, firewallUserId?: string): void {
     if (firewallConnId) {
-      const firewall = new NatsSubFirewall(firewallConnId, {
-        forward: (chunk) => {
-          if (server.readyState === WebSocket.OPEN) server.send(chunk, { binary: true });
+      const firewall = new NatsSubFirewall(
+        firewallConnId,
+        {
+          forward: (chunk) => {
+            if (server.readyState === WebSocket.OPEN) server.send(chunk, { binary: true });
+          },
+          close: (reason) => {
+            this.logger.warn(`RPC firewall closed connection (connId ${firewallConnId}): ${reason}`);
+            if (client.readyState === WebSocket.OPEN) client.close(4403, `forbidden: ${reason}`.slice(0, 123));
+            if (server.readyState === WebSocket.OPEN) server.close(1000);
+          },
+          rewriteConnect: (connectData) => this.applyNatsCreds(connectData, natsCreds),
         },
-        close: (reason) => {
-          this.logger.warn(`RPC firewall closed connection (connId ${firewallConnId}): ${reason}`);
-          if (client.readyState === WebSocket.OPEN) client.close(4403, `forbidden: ${reason}`.slice(0, 123));
-          if (server.readyState === WebSocket.OPEN) server.close(1000);
-        },
-        rewriteConnect: (connectData) => this.applyNatsCreds(connectData, natsCreds),
-      });
+        firewallUserId,
+      );
 
       client.on('message', (data) => {
         if (server.readyState !== WebSocket.OPEN) return;

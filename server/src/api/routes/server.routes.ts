@@ -33,6 +33,17 @@ export const ServerRoute: FastifyPluginAsync = async (app: FastifyInstance): Pro
   });
 
   app.route({
+    url: '/endpoints',
+    method: 'GET',
+    preValidation: [validJWTNeeded],
+    handler: serverController.getEndpoints.bind(serverController),
+    schema: {
+      tags: ['Server'],
+      summary: 'Return internal and external base URLs this server is reachable at',
+    },
+  });
+
+  app.route({
     url: '/version',
     method: 'GET',
     preValidation: [validJWTNeeded, onlyAdminCanDoThisAction],

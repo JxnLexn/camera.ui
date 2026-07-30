@@ -1,3 +1,4 @@
+import { buildHttpsUrl, fetchViableNetworkAddresses } from '@camera.ui/common/network';
 import { APP_SERVER_NAME, mergeWith } from '@camera.ui/common/utils';
 import { userInfo } from 'node:os';
 import { satisfies } from 'semver';
@@ -8,6 +9,7 @@ import { getTerminalCols, InstallLogger } from '../utils/install-logger.js';
 
 import type { Server } from 'socket.io';
 import type { CameraUi } from '../../main.js';
+import type { RemoteAccessManager } from '../../remote/index.js';
 import type { Database } from '../database/index.js';
 import type { DBServer } from '../database/types.js';
 import type { SocketService } from '../websocket/index.js';
@@ -29,6 +31,22 @@ export class ServerService {
 
   public info(): DBServer {
     return this.dbs.serverDB.get('server')!;
+  }
+
+  public networkEndpoints(): { internalAddresses: string[]; externalAddresses: string[] } {
+    const allAddresses = fetchViableNetworkAddresses();
+    const selectedAddresses = this.info().serverAddresses ?? [];
+    const port = container.resolve<ConfigService>('configService').config.port;
+
+    const internalAddresses = allAddresses
+      .filter((addr) => selectedAddresses.length === 0 || selectedAddresses.includes(addr.address))
+      .map((addr) => buildHttpsUrl(addr.address, port));
+
+    const remoteStatus = container.resolve<RemoteAccessManager>('remoteAccessManager').getStatus();
+    const externalAddresses: string[] = [];
+    if (remoteStatus.externalUrl) externalAddresses.push(remoteStatus.externalUrl);
+
+    return { internalAddresses, externalAddresses };
   }
 
   public async patch(infoData: Partial<DBServer> = {}): Promise<DBServer> {
