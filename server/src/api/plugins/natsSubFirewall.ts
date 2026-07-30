@@ -8,7 +8,7 @@ export interface NatsSubFirewallHooks {
 }
 
 export class NatsSubFirewall {
-  private static readonly RESTRICTED_ROOTS = ['rpc', '_rpc', '_INBOX', 'stream'];
+  private static readonly RESTRICTED_ROOTS = ['rpc', '_rpc', '_INBOX', 'stream', 'notifications'];
 
   private buffer: Buffer = Buffer.alloc(0);
   private payloadRemaining = 0;
@@ -18,8 +18,12 @@ export class NatsSubFirewall {
   constructor(
     connId: string,
     private readonly hooks: NatsSubFirewallHooks,
+    userId?: string,
   ) {
     this.allowedPrefixes = [`rpc.reply.${connId}`, `rpc.cb.${connId}`, `_rpc.cb.${connId}`, `_rpc.iterator.${connId}`, `_INBOX.${connId}`];
+    if (userId) {
+      this.allowedPrefixes.push(`notifications.user.${userId}`);
+    }
   }
 
   public push(chunk: Buffer): void {

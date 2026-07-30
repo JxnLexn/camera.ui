@@ -444,6 +444,7 @@ export class NotificationManager {
     } catch (err) {
       this.logger.warn(`UI broadcast failed: ${(err as Error).message}`);
     }
+    this.proxyServer.proxy.publish(`notifications.user.${userId}`, { event, payload }).catch(() => {});
   }
 
   private historyFor(userId: string): StoredNotification[] {

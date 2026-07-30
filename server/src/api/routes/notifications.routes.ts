@@ -111,4 +111,27 @@ export const NotificationsRoute: FastifyPluginAsync = async (app: FastifyInstanc
       summary: 'Clear the notification history',
     },
   });
+
+  app.route({
+    url: '/history/seen',
+    method: 'POST',
+    preValidation: [validJWTNeeded],
+    handler: controller.markAllSeen.bind(controller),
+    schema: {
+      tags: ['Notifications'],
+      summary: 'Mark all notifications as seen',
+    },
+  });
+
+  app.withTypeProvider<ZodTypeProvider>().route({
+    url: '/history/:id/seen',
+    method: 'POST',
+    preValidation: [validJWTNeeded],
+    handler: controller.markSeen.bind(controller),
+    schema: {
+      tags: ['Notifications'],
+      summary: 'Mark a notification as seen',
+      params: deviceParamsSchema,
+    },
+  });
 };

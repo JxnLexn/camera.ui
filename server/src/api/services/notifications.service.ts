@@ -54,6 +54,14 @@ export class NotificationsService {
     await this.proxyServer.notificationManager.clearHistory(userId);
   }
 
+  public async markSeen(userId: string, id: string): Promise<void> {
+    await this.proxyServer.notificationManager.markSeen(userId, id);
+  }
+
+  public async markAllSeen(userId: string): Promise<void> {
+    await this.proxyServer.notificationManager.markAllSeen(userId);
+  }
+
   public async registerDevice(userId: string, body: RegisterDeviceInput): Promise<NotifierDevice> {
     return this.proxyServer.notificationManager.registerDevice(body.pluginName, userId, body.input);
   }

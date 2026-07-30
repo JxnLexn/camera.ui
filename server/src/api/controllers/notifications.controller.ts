@@ -78,6 +78,24 @@ export class NotificationsController {
     }
   }
 
+  public async markSeen(req: FastifyRequest<AuthLoginRequest & { Params: { id: string } }>, reply: FastifyReply): Promise<FastifyReply> {
+    try {
+      await this.service.markSeen(req.locals.user!._id, req.params.id);
+      return reply.code(204).send();
+    } catch (error: any) {
+      return reply.code(500).send({ statusCode: 500, message: error.message });
+    }
+  }
+
+  public async markAllSeen(req: FastifyRequest<AuthLoginRequest>, reply: FastifyReply): Promise<FastifyReply> {
+    try {
+      await this.service.markAllSeen(req.locals.user!._id);
+      return reply.code(204).send();
+    } catch (error: any) {
+      return reply.code(500).send({ statusCode: 500, message: error.message });
+    }
+  }
+
   public async registerDevice(req: FastifyRequest<AuthLoginRequest & NotificationsRegisterDeviceRequest>, reply: FastifyReply): Promise<FastifyReply> {
     try {
       const userId = req.locals.user!._id;
