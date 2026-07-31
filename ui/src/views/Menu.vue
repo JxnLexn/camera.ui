@@ -89,7 +89,7 @@ const { t } = useI18n();
 const authStore = useAuthStore();
 const { user } = storeToRefs(authStore);
 
-const appRouteNames = new Set(['Faces', 'Plugins', 'Settings']);
+const appRouteNames = new Set(['Sensors', 'Faces', 'Plugins', 'Settings']);
 
 const menuRoutes = computed(() => routes.filter((r) => r.meta?.menu && r.meta.auth && hasPermission(r)));
 

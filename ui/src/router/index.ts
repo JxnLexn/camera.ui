@@ -234,7 +234,7 @@ export const routes: RouteRecordRaw[] = [
           active: SensorsIconActive,
         },
       },
-      bottombar: {
+      menu: {
         icon: {
           default: SensorsIcon,
           active: SensorsIconActive,

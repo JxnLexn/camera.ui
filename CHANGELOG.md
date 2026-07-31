@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.0.24]
+
+### Changed
+
+- **Sensors moved from the bottom bar to the menu.** On the phone, the Sensors page now sits at the top of the menu instead of taking a slot in the bottom bar.
+
+### Fixed
+
+- **Plugin settings in the camera drawer no longer get stuck on "No configuration available".** Switching between plugins, sensor types or sensors while a settings request was still running could permanently swallow the request for the new selection, the panel then stayed empty even though the plugin answered.
+
 ## [2.0.23]
 
 **This release rebuilds the sensor system. A few things need your attention after updating:**
