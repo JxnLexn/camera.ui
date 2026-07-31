@@ -70,6 +70,8 @@
             :step="schemaField.step || 1"
             :min="schemaField.minimum"
             :max="schemaField.maximum"
+            :max-fraction-digits="fractionDigits(schemaField)"
+            :show-buttons="!schemaField.readonly"
             :use-grouping="false"
             :loading
             @value-change="(e) => (fieldValue = e ?? undefined)"
@@ -370,6 +372,13 @@ const fieldValue = computed({
     triggerFieldValue.value++;
   },
 });
+
+function fractionDigits(field: { step?: number }): number {
+  if (!field.step) return 3;
+  const text = String(field.step);
+  const dot = text.indexOf('.');
+  return dot === -1 ? 0 : text.length - dot - 1;
+}
 
 function getArrayValue(obj: Record<string, any>, key: string): any[] {
   const value = getValueByKey(obj, key);

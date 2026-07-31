@@ -33,6 +33,8 @@ Virtual sensors carry over automatically.
 
 - **A plugin that hangs while starting can't wedge itself in anymore.** A plugin stuck at "Initializing process" now gets killed after two minutes with a clear error instead of sitting in that state forever. On Windows, stopping a plugin now also ends its whole process tree; a hidden leftover process used to keep files locked and made plugin updates fail with "EPERM: operation not permitted".
 
+- **Number fields accept decimals on the phone.** Editing a value like 0.3 in plugin or sensor settings was impossible on mobile, the keyboard came up without a decimal separator and typing one was ignored. Number fields also show step arrows now, so stepped values can be set by tapping.
+
 ## [2.0.22]
 
 ### Added

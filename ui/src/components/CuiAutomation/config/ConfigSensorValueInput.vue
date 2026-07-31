@@ -38,6 +38,7 @@
       :model-value="numberValue"
       :min="meta.min"
       :max="meta.max"
+      :max-fraction-digits="3"
       show-buttons
       fluid
       :disabled

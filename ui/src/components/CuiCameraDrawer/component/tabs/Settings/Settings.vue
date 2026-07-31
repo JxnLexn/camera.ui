@@ -401,6 +401,7 @@
                 :loading="isLoading"
                 show-buttons
                 :step="0.01"
+                :max-fraction-digits="2"
                 :max="1"
                 mode="decimal"
                 :use-grouping="false"
@@ -465,6 +466,7 @@
                 :loading="isLoading"
                 show-buttons
                 :step="0.05"
+                :max-fraction-digits="2"
                 :min="0"
                 :max="1"
                 mode="decimal"
@@ -563,6 +565,7 @@
                 :loading="isLoading"
                 show-buttons
                 :step="0.01"
+                :max-fraction-digits="2"
                 :min="0"
                 :max="1"
                 mode="decimal"
@@ -598,6 +601,7 @@
                 :loading="isLoading"
                 show-buttons
                 :step="0.01"
+                :max-fraction-digits="2"
                 :min="0"
                 :max="1"
                 mode="decimal"
