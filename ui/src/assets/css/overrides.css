@@ -50,10 +50,10 @@
   background-color: var(--table-row-odd-background);
 }
 
-:not(.p-inputgroup) > .p-inputtext,
+/* :not(.p-inputgroup) > .p-inputtext,
 :not(.p-inputgroup) > .p-select,
 :not(.p-inputgroup) > .p-multiselect,
-:not(.p-inputgroup) > .p-autocomplete,
+:not(.p-inputgroup) > .p-autocomplete, */
 .p-inputgroup:not(:has(.p-inputgroupaddon)) > .p-inputtext,
 .p-inputgroup:not(:has(.p-inputgroupaddon)) > .p-select,
 .p-inputgroup:not(:has(.p-inputgroupaddon)) > .p-multiselect,
@@ -82,7 +82,11 @@
 }
 
 .p-inputgroup:has(.p-inputgroupaddon) > .p-password,
-.p-inputgroup:has(.p-inputgroupaddon) > .p-password > .p-inputtext {
+.p-inputgroup:has(.p-inputgroupaddon) > .p-password > .p-inputtext,
+.p-inputgroup:has(.p-inputgroupaddon) > .p-inputtext,
+.p-inputgroup:has(.p-inputgroupaddon) > .p-select,
+.p-inputgroup:has(.p-inputgroupaddon) > .p-multiselect,
+.p-inputgroup:has(.p-inputgroupaddon) > .p-autocomplete {
   border-top-right-radius: 0 !important;
   border-bottom-right-radius: 0 !important;
 }
