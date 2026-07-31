@@ -24,6 +24,7 @@ import type { BasePluginRuntime } from './runtime/base.js';
 
 const REMOTE_START_TIMEOUT_MS = 5 * 60_000;
 const REMOTE_START_MAX_MS = 10 * 60_000;
+const LOCAL_READY_TIMEOUT_MS = 2 * 60_000;
 
 export class PluginWorker {
   private api: CameraUiAPI;
@@ -36,6 +37,7 @@ export class PluginWorker {
   private shuttingDown = false;
   private isRemote = false;
   private remoteStartTimeout?: NodeJS.Timeout;
+  private localReadyTimeout?: NodeJS.Timeout;
   private configStore?: PluginConfigStore;
   private opChain: Promise<unknown> = Promise.resolve();
 
@@ -165,16 +167,36 @@ export class PluginWorker {
         }
 
         this.runtime.once('exit', () => {
+          clearTimeout(this.localReadyTimeout);
+          this.localReadyTimeout = undefined;
           reject(new Error(`Plugin ${this.plugin.displayName} exited before it was ready`));
           this.handleClose();
         });
         await this.runtime.start();
+        this.armLocalReadyTimeout(reject);
       } catch (error) {
         this.setStatus(PLUGIN_STATUS.ERROR);
         await this.doTeardown();
         reject(error);
       }
     });
+  }
+
+  private armLocalReadyTimeout(reject: (reason?: any) => void): void {
+    clearTimeout(this.localReadyTimeout);
+    this.localReadyTimeout = setTimeout(async () => {
+      if (this.isRemote || this.status !== PLUGIN_STATUS.STARTING || this.shuttingDown) {
+        return;
+      }
+      this.runtime.logger.error(
+        `Plugin ${this.plugin.displayName} did not become ready within ${LOCAL_READY_TIMEOUT_MS / 1000}s, killing the process. ` +
+          // eslint-disable-next-line @stylistic/indent-binary-ops
+          'The process started but never reported back — a hanging import or driver initialization is the usual cause.',
+      );
+      this.setStatus(PLUGIN_STATUS.ERROR);
+      await this.doTeardown();
+      reject(new Error(`Plugin ${this.plugin.displayName} did not become ready in time`));
+    }, LOCAL_READY_TIMEOUT_MS);
   }
 
   private async openChannel(resolve: (value: void | PromiseLike<void>) => void, reject: (reason?: any) => void): Promise<void> {
@@ -233,10 +255,13 @@ export class PluginWorker {
         }
 
         this.runtime.once('exit', () => {
+          clearTimeout(this.localReadyTimeout);
+          this.localReadyTimeout = undefined;
           reject(new Error(`Plugin ${this.plugin.displayName} exited before it was ready`));
           this.handleClose();
         });
         await this.runtime.start();
+        this.armLocalReadyTimeout(reject);
       } catch (error) {
         this.setStatus(PLUGIN_STATUS.ERROR);
         reject(error);
@@ -250,6 +275,8 @@ export class PluginWorker {
     }
 
     this.shuttingDown = true;
+    clearTimeout(this.localReadyTimeout);
+    this.localReadyTimeout = undefined;
 
     const cameraControllers = this.api.getCameras(this.plugin.id);
     cameraControllers.forEach((cameraController) => cameraController.disconnect());
@@ -401,6 +428,8 @@ export class PluginWorker {
         // Remote child made it — no local fallback needed.
         clearTimeout(this.remoteStartTimeout);
         this.remoteStartTimeout = undefined;
+        clearTimeout(this.localReadyTimeout);
+        this.localReadyTimeout = undefined;
 
         this.setStatus(PLUGIN_STATUS.READY);
 

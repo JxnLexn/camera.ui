@@ -1,6 +1,6 @@
 import { move, pathExists, readJson, remove } from 'fs-extra/esm';
 
-import { uuidv4 } from '@camera.ui/common/utils';
+import { sleep, uuidv4 } from '@camera.ui/common/utils';
 import { tmpdir, userInfo } from 'node:os';
 import { join } from 'node:path';
 import { container, delay, registry } from 'tsyringe';
@@ -197,7 +197,9 @@ export class PluginsService {
     let installedNew = false;
 
     try {
-      if (worker && wasRunning) {
+      // also tear down a process stuck in STARTING — it holds file locks that
+      // make the backup rename fail on windows
+      if (worker && (wasRunning || worker.getPID() > 0)) {
         log.step('Stopping running plugin');
         await worker.teardown();
         log.done();
@@ -256,7 +258,19 @@ export class PluginsService {
     try {
       if (await pathExists(targetDir)) {
         log.step('Backing up existing installation');
-        await move(targetDir, backupTempDir);
+        try {
+          await move(targetDir, backupTempDir);
+        } catch (error: any) {
+          if (error.code !== 'EPERM' && error.code !== 'EBUSY') {
+            throw error;
+          }
+          // windows releases file handles of a just-killed process with a delay
+          await sleep(2000);
+          await move(targetDir, backupTempDir).catch((retryError: any) => {
+            retryError.message = `${retryError.message} (plugin files are locked — is a plugin process still running?)`;
+            throw retryError;
+          });
+        }
         backedUp = true;
         log.done();
       }

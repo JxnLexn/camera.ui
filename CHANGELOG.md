@@ -31,6 +31,8 @@ Virtual sensors carry over automatically.
 
 - **Plugin and sensor settings no longer come up empty while a plugin is starting.** Opening a camera's plugin settings right after enabling a sensor could show "No configuration available" because the plugin was still loading its models and missed the request. The panel now retries for a bit and fills in once the plugin answers.
 
+- **A plugin that hangs while starting can't wedge itself in anymore.** A plugin stuck at "Initializing process" now gets killed after two minutes with a clear error instead of sitting in that state forever. On Windows, stopping a plugin now also ends its whole process tree; a hidden leftover process used to keep files locked and made plugin updates fail with "EPERM: operation not permitted".
+
 ## [2.0.22]
 
 ### Added

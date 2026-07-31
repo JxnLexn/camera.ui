@@ -1,6 +1,8 @@
 import { Logger } from '@camera.ui/common/logger';
 import { API_EVENT } from '@camera.ui/sdk';
+import { execFile } from 'node:child_process';
 import { EventEmitter } from 'node:events';
+import { platform } from 'node:os';
 import { join } from 'node:path';
 import { container } from 'tsyringe';
 
@@ -94,7 +96,7 @@ export abstract class BasePluginRuntime extends EventEmitter {
 
       const killTimeout = setTimeout(() => {
         this.logger.trace(`Plugin ${this.plugin.displayName} still running after grace, force-closing.`);
-        this.worker?.kill('SIGKILL');
+        this.forceKill();
         resolve();
       }, 3000);
 
@@ -105,11 +107,28 @@ export abstract class BasePluginRuntime extends EventEmitter {
         resolve();
       });
 
-      this.worker.kill('SIGTERM');
+      if (platform() === 'win32') {
+        // no signals on windows, go straight for the tree
+        this.forceKill();
+      } else {
+        this.worker.kill('SIGTERM');
+      }
     });
   }
 
   public kill(): void {
+    this.forceKill();
+  }
+
+  private forceKill(): void {
+    const pid = this.worker?.pid;
+    // the win32 venv python.exe is a launcher stub whose child is the real
+    // interpreter; terminating only the stub leaves a hidden process behind
+    // that keeps every file in the plugin dir locked (EPERM on update)
+    if (pid && platform() === 'win32') {
+      execFile('taskkill', ['/pid', String(pid), '/T', '/F'], () => {});
+      return;
+    }
     this.worker?.kill('SIGKILL');
   }
 
