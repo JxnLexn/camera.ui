@@ -1,7 +1,7 @@
 <template>
   <div>
-    <div class="mb-4 rounded-xl overflow-hidden">
-      <img :src="src" alt="CLIP test image" class="w-full object-contain" />
+    <div class="mb-4 rounded-xl overflow-hidden w-fit mx-auto">
+      <img :src="src" alt="CLIP test image" class="max-w-full max-h-[50vh] w-auto object-contain" />
     </div>
 
     <div class="text-sm text-muted mb-4">

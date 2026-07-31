@@ -1,6 +1,6 @@
 <template>
   <div>
-    <video ref="videoPlayerRef" controls class="w-full">Your browser does not support the video tag.</video>
+    <video ref="videoPlayerRef" controls class="max-w-full max-h-[60vh] w-auto mx-auto">Your browser does not support the video tag.</video>
   </div>
 </template>
 

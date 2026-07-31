@@ -1,7 +1,10 @@
 <template>
-  <div class="mb-5 h-min">
-    <CuiBBoxPlayground :detections />
-    <img :src alt="Preview" class="w-full" />
+  <div class="mb-5 flex justify-center">
+    <!-- the bbox overlay sizes itself to this box, it must match the image exactly -->
+    <div class="relative w-fit">
+      <CuiBBoxPlayground :detections />
+      <img :src alt="Preview" class="max-w-full max-h-[60vh] w-auto" />
+    </div>
   </div>
 </template>
 
