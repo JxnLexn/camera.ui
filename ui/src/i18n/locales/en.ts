@@ -929,6 +929,7 @@ export default {
           'Hardware used to decode this camera for detection. Auto picks the best available. Applies on the machine that decodes this camera (server or its worker).',
         decoder_device:
           'Which device the backend opens, for example 0 for the first GPU or /dev/dri/renderD128. Empty uses the backend default. Falls back to Auto if not usable.',
+        worker_decoder_hardware: 'Hardware used while this camera is decoded on its assigned worker. Same as server uses the selection above.',
         hq_snapshots: 'Capture event thumbnails from the highest-resolution stream.',
         motion_resolution: 'Resolution preset for motion detection (low: fast, medium: balanced, high: accurate)',
         hot_mode: 'Keeps the connection to the camera active to minimize delay',
@@ -1019,6 +1020,9 @@ export default {
         fps: 'FPS',
         decoder_hardware: 'Decoder hardware',
         decoder_device: 'Decoder device',
+        worker_decoder_hardware: 'Decoder hardware (worker)',
+        worker_decoder_device: 'Decoder device (worker)',
+        decoder_same_as_server: 'Same as server',
         hardware_version: 'Hardware version',
         hot_mode: 'Hot mode',
         hq_snapshots: 'HQ event thumbnails',

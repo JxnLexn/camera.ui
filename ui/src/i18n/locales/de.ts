@@ -942,6 +942,7 @@ export default {
           'Hardware, mit der diese Kamera für die Erkennung decodiert wird. Auto wählt die beste verfügbare. Gilt auf der Maschine, die diese Kamera decodiert (Server oder zugewiesener Worker).',
         decoder_device:
           'Welches Gerät das Backend öffnet, zum Beispiel 0 für die erste GPU oder /dev/dri/renderD128. Leer verwendet den Backend-Standard. Fällt auf Auto zurück, wenn nicht nutzbar.',
+        worker_decoder_hardware: 'Hardware, wenn diese Kamera auf ihrem zugewiesenen Worker decodiert wird. Wie Server verwendet die Auswahl oben.',
         hq_snapshots: 'Event-Thumbnails aus dem höchstauflösenden Stream erzeugen.',
         motion_resolution: 'Auflösungsvoreinstellung für Bewegungserkennung (low: schnell, medium: ausgewogen, high: genau)',
         hot_mode: 'Lässt die Verbindung zur Kamera aktiv, um die Verzögerung zu minimieren',
@@ -1033,6 +1034,9 @@ export default {
         fps: 'FPS',
         decoder_hardware: 'Decoder-Hardware',
         decoder_device: 'Decoder-Gerät',
+        worker_decoder_hardware: 'Decoder-Hardware (Worker)',
+        worker_decoder_device: 'Decoder-Gerät (Worker)',
+        decoder_same_as_server: 'Wie Server',
         hardware_version: 'Hardware Version',
         hot_mode: 'Hot Modus',
         hq_snapshots: 'HQ-Event-Thumbnails',

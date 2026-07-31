@@ -1334,6 +1334,53 @@
             }}</Message>
           </Field>
 
+          <Field
+            v-slot="{ errors }"
+            :model-value="cameraForm.frameWorkerSettings.workerDecoder?.hardware ?? 'inherit'"
+            name="frameWorkerSettings.workerDecoder.hardware"
+            as="div"
+            class="flex flex-col field-gap"
+          >
+            <label for="frameWorkerSettings.workerDecoder.hardware" class="cui-label">{{ $t('components.form.label.worker_decoder_hardware') }}</label>
+            <InputGroup>
+              <Select
+                :model-value="cameraForm.frameWorkerSettings.workerDecoder?.hardware ?? 'inherit'"
+                :options="workerDecoderHardwareOptions"
+                option-label="label"
+                option-value="value"
+                :invalid="errors.length > 0"
+                :loading="isLoading"
+                @update:model-value="(e) => setWorkerDecoderHardware(e)"
+              />
+            </InputGroup>
+            <Message v-if="!errors.length" severity="secondary" variant="simple" size="small" class="cui-input-hint">{{
+              $t('components.form.hint.worker_decoder_hardware')
+            }}</Message>
+          </Field>
+
+          <Field
+            v-if="workerDecoderDeviceVisible"
+            v-slot="{ errors }"
+            :model-value="cameraForm.frameWorkerSettings.workerDecoder?.device ?? ''"
+            name="frameWorkerSettings.workerDecoder.device"
+            as="div"
+            class="flex flex-col field-gap"
+          >
+            <label for="frameWorkerSettings.workerDecoder.device" class="cui-label">{{ $t('components.form.label.worker_decoder_device') }}</label>
+            <InputGroup>
+              <InputText
+                :model-value="cameraForm.frameWorkerSettings.workerDecoder?.device ?? ''"
+                :invalid="errors.length > 0"
+                :loading="isLoading"
+                type="text"
+                @update:model-value="(e) => setWorkerDecoderDevice(e ?? '')"
+              />
+            </InputGroup>
+            <Message v-if="!errors.length" severity="secondary" variant="simple" size="small" class="cui-input-hint">{{
+              $t('components.form.hint.decoder_device')
+            }}</Message>
+          </Field>
+
           <div class="w-full flex flex-col gap-2">
             <Field
               v-slot="{ field, errors }"
@@ -1470,6 +1517,13 @@ const decoderDeviceVisible = computed(() => {
   return !!hardware && hardware !== 'auto' && hardware !== 'cpu';
 });
 
+const workerDecoderHardwareOptions = computed(() => [{ label: t('components.form.label.decoder_same_as_server'), value: 'inherit' as const }, ...decoderHardwareOptions]);
+
+const workerDecoderDeviceVisible = computed(() => {
+  const hardware = cameraForm.value.frameWorkerSettings.workerDecoder?.hardware;
+  return !!hardware && hardware !== 'auto' && hardware !== 'cpu';
+});
+
 const hasNvrPlugin = computed(() => (cameraExtensions.value ?? []).some((p) => p.contract.interfaces?.includes(PluginInterface.NVR)));
 
 const zoneEntryDeleting = computed(() => zonesPatching.value || linesPatching.value);
@@ -1524,6 +1578,20 @@ function setDecoderHardware(hardware: FrameWorkerDecoderHardware) {
 function setDecoderDevice(device: string) {
   const hardware = cameraForm.value.frameWorkerSettings.decoder?.hardware ?? 'auto';
   cameraForm.value.frameWorkerSettings.decoder = { hardware, device };
+}
+
+function setWorkerDecoderHardware(hardware: FrameWorkerDecoderHardware | 'inherit') {
+  if (hardware === 'inherit') {
+    cameraForm.value.frameWorkerSettings.workerDecoder = undefined;
+    return;
+  }
+  const device = hardware === 'auto' || hardware === 'cpu' ? '' : (cameraForm.value.frameWorkerSettings.workerDecoder?.device ?? '');
+  cameraForm.value.frameWorkerSettings.workerDecoder = { hardware, device };
+}
+
+function setWorkerDecoderDevice(device: string) {
+  const hardware = cameraForm.value.frameWorkerSettings.workerDecoder?.hardware ?? 'auto';
+  cameraForm.value.frameWorkerSettings.workerDecoder = { hardware, device };
 }
 
 function updateRecordingSettings(patch: Partial<CameraRecordingSettings>) {

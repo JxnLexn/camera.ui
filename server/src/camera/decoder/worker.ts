@@ -17,6 +17,7 @@ import type {
   CameraUiSettings,
   DetectionLine,
   DetectionZone,
+  FrameWorkerDecoderSettings,
   PtzAutotrackSettings,
   StreamingRole,
 } from '@camera.ui/sdk';
@@ -213,11 +214,11 @@ export class FrameWorker extends Subscribed {
           }
 
           if (property === 'frameWorkerSettings') {
-            this.pushChildUpdate('frame worker settings', this.frameWorkerChildProxy.updateFrameWorkerSettings(newData as CameraFrameWorkerSettings));
             const newSettings = newData as CameraFrameWorkerSettings;
             const oldSettings = oldData as CameraFrameWorkerSettings;
+            this.pushChildUpdate('frame worker settings', this.frameWorkerChildProxy.updateFrameWorkerSettings(this.resolveFrameWorkerSettings(newSettings)));
             // fps and decoder live inside the running decode session, restart to apply
-            if (newSettings.fps !== oldSettings.fps || !isEqual(newSettings.decoder, oldSettings.decoder, true)) {
+            if (newSettings.fps !== oldSettings.fps || !isEqual(this.effectiveDecoder(newSettings), this.effectiveDecoder(oldSettings), true)) {
               this.restart();
             }
             return;
@@ -422,7 +423,7 @@ export class FrameWorker extends Subscribed {
         lines: this.camera.detectionLines,
         detectionSettings: this.camera.detectionSettings,
         ptzAutotrack: this.camera.ptzAutotrack,
-        frameWorkerSettings: this.camera.frameWorkerSettings,
+        frameWorkerSettings: this.resolveFrameWorkerSettings(this.camera.frameWorkerSettings),
         interfaceSettings: this.camera.interfaceSettings,
       });
 
@@ -438,6 +439,19 @@ export class FrameWorker extends Subscribed {
 
   private pushChildUpdate(label: string, update: Promise<unknown>): void {
     update.catch((error) => this.logger.warn(`Frame worker did not accept the ${label} update:`, error instanceof Error ? error.message : error));
+  }
+
+  private resolveFrameWorkerSettings(settings: CameraFrameWorkerSettings): CameraFrameWorkerSettings {
+    const resolved: CameraFrameWorkerSettings = { fps: settings.fps, hqSnapshots: settings.hqSnapshots };
+    const decoder = this.effectiveDecoder(settings);
+    if (decoder) {
+      resolved.decoder = decoder;
+    }
+    return resolved;
+  }
+
+  private effectiveDecoder(settings: CameraFrameWorkerSettings): FrameWorkerDecoderSettings | undefined {
+    return this.isRemote ? (settings.workerDecoder ?? settings.decoder) : settings.decoder;
   }
 
   private async handleProcessExit(): Promise<void> {

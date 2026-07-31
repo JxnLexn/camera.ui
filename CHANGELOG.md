@@ -19,6 +19,8 @@ Virtual sensors carry over automatically.
 
 - **Notifications show their event image.** The notification list gets a small preview per entry, and opening one shows the picture above the text, so you can tell at a glance whether it's worth a look. Tapping the picture or the text jumps straight to the event, same as the Go to message button. Images now stay available for as long as the notification is in the list.
 
+- **Cameras on a worker can use their own GPU for decoding.** A second decoder selection in the camera's frame worker settings applies while the camera decodes on its assigned worker, while the first one keeps applying on the server, for example when the worker is offline and decoding falls back. On Same as server the worker uses the server's choice, as before.
+
 - **Sensors are independent of cameras now.** The new Sensors page lists every sensor, whether it comes from a plugin or was created there as a virtual sensor. A sensor can be assigned to any number of cameras, renamed, and an Expose toggle per sensor decides what MQTT, HomeKit and Home Assistant get to see. Sensors keep their identity across restarts and plugin updates, so exports, automations and history stay stable from here on.
 
 ### Fixed
