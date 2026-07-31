@@ -35,6 +35,8 @@ Virtual sensors carry over automatically.
 
 - **Number fields accept decimals on the phone.** Editing a value like 0.3 in plugin or sensor settings was impossible on mobile, the keyboard came up without a decimal separator and typing one was ignored. Number fields also show step arrows now, so stepped values can be set by tapping.
 
+- **The iOS app no longer crashes after muting from a notification.** Using Mute 1 hour or Mute 8 hours on a push notification, or looking at one right after, could kill the app.
+
 ## [2.0.22]
 
 ### Added
