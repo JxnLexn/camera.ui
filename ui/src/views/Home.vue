@@ -41,7 +41,7 @@
 
         <div v-else-if="viewMode === 'default'" key="defaultView">
           <div class="grid w-full gap-1" :style="{ gridTemplateColumns: gridColsFilled }">
-            <DndProvider :backend="dndBackend">
+            <DndProvider :backend="dndBackend" :options="dndOptions">
               <TransitionGroup name="list">
                 <CuiDraggableCameraCard
                   v-for="camera in sortedCameras"
@@ -71,7 +71,7 @@
               {{ group.room === 'Default' ? $t('components.form.label.room_default') : group.room }}
             </h2>
             <div class="grid w-full gap-1" :style="{ gridTemplateColumns: gridColsFilled }">
-              <DndProvider :backend="dndBackend">
+              <DndProvider :backend="dndBackend" :options="dndOptions">
                 <TransitionGroup name="list">
                   <CuiDraggableCameraCard
                     v-for="camera in group.cameras"
@@ -237,6 +237,7 @@ const snapshotRefs = shallowRef<Record<string, InstanceType<typeof CuiCameraSnap
 const isLoading = computed(() => camerasLoading.value);
 const isAdmin = computed(() => hasPermission(undefined, 'admin'));
 const dndBackend = computed(() => (isTouch.value ? TouchBackend : HTML5Backend));
+const dndOptions = computed(() => (isTouch.value ? { enableMouseEvents: true } : undefined));
 const viewMode = computed(() => uiSettings.value.cameras.viewMode ?? 'default');
 const gridCols = computed(() => `repeat(auto-fill, minmax(${smBreakpoint.value ? '100%' : '300px'}, 1fr))`);
 const gridColsFilled = computed(() => {

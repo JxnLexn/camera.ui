@@ -10,7 +10,7 @@
         opacity: isDragging ? 0 : 1,
         viewTransitionName: viewTransition ? `camera-card-${camera.name.replace(/[^a-zA-Z0-9-_]/g, '-')}` : undefined,
       }"
-      :draggable="canDrag"
+      :draggable="canDrag && !isTouch"
     >
       <div v-if="camera.disabled" class="absolute inset-0 z-2 flex items-center justify-center bg-black/80 pointer-events-none">
         <i-fluent:video-off-32-filled class="w-8 h-8 text-white/60" />
@@ -90,7 +90,8 @@ const props = defineProps<CuiDraggableCameraCardProps>();
 
 defineEmits<CuiDraggableCameraCardEmits>();
 
-const { x: mouseX, y: mouseY, sourceType } = useSharedMouse();
+const { x: mouseX, y: mouseY } = useSharedMouse();
+const { isTouch } = useSharedCuiUserAgent();
 
 const { camera, noDrag, viewTransition } = toRefs(props);
 
@@ -157,7 +158,7 @@ const [, drop] = useDrop(() => ({
 }));
 
 const isDragging = computed(() => collect.value.isDragging);
-const isDraggingTouch = computed(() => isDragging.value && sourceType.value === 'touch');
+const needsCustomPreview = computed(() => isDragging.value && isTouch.value);
 
 function startDrag() {
   endDrag();
@@ -220,7 +221,7 @@ function setRef(el: any) {
   card.value = drag(drop(el));
 }
 
-watch(isDraggingTouch, (newValue) => {
+watch(needsCustomPreview, (newValue) => {
   if (newValue) {
     startDrag();
   } else {

@@ -33,7 +33,8 @@ const offsetX = ref(0);
 const offsetY = ref(0);
 const isDraggingActive = ref(false);
 
-const { x: mouseX, y: mouseY, sourceType } = useSharedMouse();
+const { x: mouseX, y: mouseY } = useSharedMouse();
+const { isTouch } = useSharedCuiUserAgent();
 
 const [collect, drag] = useDrag(() => ({
   type: 'camera-sidebar',
@@ -47,7 +48,8 @@ const [collect, drag] = useDrag(() => ({
 }));
 
 const isDragging = computed(() => collect.value.isDragging);
-const isDraggingTouch = computed(() => isDragging.value && sourceType.value === 'touch');
+// the touch backend renders no native preview, mouse drags on it need the custom one too
+const needsCustomPreview = computed(() => isDragging.value && isTouch.value);
 
 function removeDragPreview(): void {
   if (dragPreview.value && document.body.contains(dragPreview.value)) {
@@ -95,7 +97,7 @@ function updateDragPreview(): void {
   });
 }
 
-watch(isDraggingTouch, (v) => (v ? startDrag() : endDrag()));
+watch(needsCustomPreview, (v) => (v ? startDrag() : endDrag()));
 watch([mouseX, mouseY], () => updateDragPreview(), { flush: 'sync' });
 
 onBeforeUnmount(() => endDrag());

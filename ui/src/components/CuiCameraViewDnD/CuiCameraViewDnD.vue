@@ -1,5 +1,5 @@
 <template>
-  <DndProvider :backend="isTouch ? TouchBackend : HTML5Backend">
+  <DndProvider :backend="isTouch ? TouchBackend : HTML5Backend" :options="isTouch ? { enableMouseEvents: true } : undefined">
     <div class="w-full h-full flex flex-row">
       <div ref="viewRef" class="view-container w-full flex flex-col min-w-0 overflow-y-auto items-center" :class="{ 'px-2': editMode && lgBreakpoint }">
         <Button v-if="isFullscreen" severity="secondary" rounded class="cui-fs-exit" :aria-label="$t('components.form.tooltip.fullscreen_off')" @click="toggleFs">
