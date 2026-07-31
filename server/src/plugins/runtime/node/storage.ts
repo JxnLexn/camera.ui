@@ -56,6 +56,8 @@ export class DeviceStorage<T extends Record<string, any> = Record<string, any>> 
     } else {
       throw new Error(`sensor storage for ${this.#plugin.id} requires a sensorId`);
     }
+
+    this.#initializeStorage();
   }
 
   public getValue<T = string>(key: string): Promise<T | undefined>;
@@ -74,18 +76,22 @@ export class DeviceStorage<T extends Record<string, any> = Record<string, any>> 
     if (schema) {
       validateStoreValue(key, newValue);
       const oldValue = getValueByKey(this.values, key);
-      const unchanged = newValue === null || newValue === undefined ? oldValue === undefined : isEqual(oldValue, newValue);
-      if (newValue === null || newValue === undefined) {
+
+      const fallback = (schema as { defaultValue?: unknown }).defaultValue;
+      const effectiveValue = (newValue ?? fallback) as T | undefined;
+
+      const unchanged = effectiveValue === undefined ? oldValue === undefined : isEqual(oldValue, effectiveValue);
+      if (effectiveValue === undefined) {
         deleteValueByKey(this.values, key);
       } else {
-        setValueByKey(this.values, key, typeof newValue === 'object' ? structuredClone(newValue) : newValue);
+        setValueByKey(this.values, key, typeof effectiveValue === 'object' ? structuredClone(effectiveValue) : effectiveValue);
       }
 
       if (this.#containsStorableSchema(schema) && (!unchanged || this.#dirty)) {
         await this.save();
       }
 
-      this.#runOnSetDetached((schema as any).onSet, key, newValue, oldValue);
+      this.#runOnSetDetached((schema as any).onSet, key, effectiveValue, oldValue);
     }
   }
 
@@ -330,7 +336,7 @@ export class DeviceStorage<T extends Record<string, any> = Record<string, any>> 
     return false;
   }
 
-  async #initializeStorage(): Promise<void> {
+  #initializeStorage(): void {
     const config = this.#pluginDb.get('config') ?? {};
     const deviceConfig = readLocation(config, this.#location) ?? {};
     const schemaConfig = generateConfigFromSchemas(this.schemas);

@@ -50,6 +50,7 @@ class DeviceManagerProxy(DeviceManager):
         self.__logger = logger
         self.__plugin = plugin
         self.__close_request: CloseHandler | None = None
+        self.__event_lock = asyncio.Lock()
 
         self.__devices: dict[str, CameraDeviceProxy] = {}
         self.__tasks = TaskSet(name=f"DeviceManager:{plugin['id']}")
@@ -78,7 +79,8 @@ class DeviceManagerProxy(DeviceManager):
 
         self.__initialized = True
         self.__close_request = await self.__proxy.on_request(
-            self.__namespaces[1].plugin_device_manager_subject, self.__on_event_message
+            self.__namespaces[1].plugin_device_manager_subject,
+            self.__on_event_serialized,
         )
 
     async def getCamera(self, cameraIdOrName: str) -> CameraDeviceProxy | None:
@@ -119,6 +121,10 @@ class DeviceManagerProxy(DeviceManager):
             with contextlib.suppress(Exception):
                 await device._refresh_states()  # pyright: ignore[reportPrivateUsage]
 
+    async def __on_event_serialized(self, event: Any) -> None:
+        async with self.__event_lock:
+            await self.__on_event_message(event)
+
     async def __on_event_message(self, event: Any) -> None:
         if not self.__plugin_instance:
             self.__logger.warn("Plugin instance not set, cannot handle lifecycle event")
@@ -149,7 +155,7 @@ class DeviceManagerProxy(DeviceManager):
             if camera_device:
                 await camera_device.cleanup()
 
-            await self.__remove_camera_storage(camera_id)
+            await self.__storage_controller.releaseCameraStorage(camera_id)
 
             if camera_id in self.__devices:
                 del self.__devices[camera_id]
@@ -203,6 +209,3 @@ class DeviceManagerProxy(DeviceManager):
 
     async def __create_camera_storage(self, camera_id: str) -> None:
         await self.__storage_controller.createStorage("camera", camera_id)
-
-    async def __remove_camera_storage(self, camera_id: str) -> None:
-        await self.__storage_controller.removeStorage("camera", camera_id)

@@ -12,6 +12,12 @@ All notable changes to this project will be documented in this file.
 
 - **Plugin settings in the camera drawer no longer get stuck on "No configuration available".** Switching between plugins, sensor types or sensors while a settings request was still running could permanently swallow the request for the new selection, the panel then stayed empty even though the plugin answered.
 
+- **Toggling a plugin off and on for a camera no longer breaks or resets its settings.** The toggle deleted the plugin's stored per-camera settings and could leave that plugin's settings panel permanently empty until the plugin was restarted. Settings now survive the toggle, values included.
+
+- **Clearing a plugin or sensor setting returns it to its default.** A cleared value used to become undefined until the next restart; motion detectors reading such a value then failed on every frame and flooded the log with "Motion detection error". Cleared values now fall back to their default everywhere.
+
+- **Camera-bound sensors find their camera again.** Toggling a plugin off for a camera dropped its sensors' camera assignment for good: they showed "Not assigned to a camera" on the Sensors page and their settings vanished from the camera drawer. The assignment is restored when the plugin registers the sensor again, so existing installs heal on the next restart.
+
 ## [2.0.23]
 
 **This release rebuilds the sensor system. A few things need your attention after updating:**

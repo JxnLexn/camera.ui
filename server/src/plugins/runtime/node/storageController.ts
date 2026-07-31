@@ -29,7 +29,7 @@ export class StorageController {
     if (!cameraStorage) {
       cameraStorage = new DeviceStorage<T>(this.#api, this.#proxy, this.#plugin, this.#pluginDb, { kind: 'camera', cameraId }, schemas);
       this.#storages.set(cameraId, cameraStorage);
-    } else {
+    } else if (schemas.length) {
       cameraStorage.updateSchema(schemas);
     }
 
@@ -42,7 +42,7 @@ export class StorageController {
     if (!pluginStorage) {
       pluginStorage = new DeviceStorage<T>(this.#api, this.#proxy, this.#plugin, this.#pluginDb, { kind: 'plugin' }, schemas);
       this.#storages.set('storage', pluginStorage);
-    } else {
+    } else if (schemas.length) {
       pluginStorage.updateSchema(schemas);
     }
 
@@ -64,8 +64,9 @@ export class StorageController {
     if (!storage) {
       storage = new DeviceStorage<T>(this.#api, this.#proxy, this.#plugin, this.#pluginDb, { kind: 'sensor', pluginId, sensorId }, schemas, sensorId);
       this.#storages.set(storageKey, storage);
+    } else if (schemas.length) {
+      storage.updateSchema(schemas);
     }
-    storage.updateSchema(schemas);
 
     return storage as DeviceStorage<T>;
   }
@@ -98,30 +99,8 @@ export class StorageController {
     return storage;
   }
 
-  public async removeStorage(type: 'camera', deviceId: string): Promise<void>;
-  public async removeStorage(type: 'plugin'): Promise<void>;
-  public async removeStorage(type: 'sensor', sensorId: string): Promise<void>;
-  public async removeStorage(type: 'camera' | 'plugin' | 'sensor', deviceIdOrSensorId?: string): Promise<void> {
-    let storageKey: string;
-
-    if (type === 'sensor') {
-      if (!deviceIdOrSensorId) {
-        throw new Error('sensorId is required for sensor storage removal');
-      }
-      storageKey = sensorStorageKey(deviceIdOrSensorId);
-    } else if (type === 'camera') {
-      if (!deviceIdOrSensorId) {
-        throw new Error('deviceId is required for camera storage removal');
-      }
-      storageKey = deviceIdOrSensorId;
-    } else {
-      storageKey = 'storage';
-    }
-
-    const deviceStorage = this.#storages.get(storageKey);
-    await deviceStorage?.destroy();
-    await deviceStorage?.unregisterStorage();
-    this.#storages.delete(storageKey);
+  public async releaseCameraStorage(cameraId: string): Promise<void> {
+    await this.#storages.get(cameraId)?.unregisterStorage();
   }
 
   /** Internal method to close all storages */

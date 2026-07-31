@@ -99,6 +99,8 @@ class DeviceStorage(DeviceStorageInterface):
             camera_ns = NamespaceManager.plugin_camera_namespaces(plugin["id"], location.camera_id)
             self.__storage_namespace = camera_ns.camera_storage_rpc
 
+        self.__initializeStorage()
+
     @RPCMethod
     async def getValue(self, key: str, default_value: Any | None = None) -> Any:
         schema: Any = next((schema for schema in self.schemas if schema["key"] == key), None)
@@ -138,22 +140,25 @@ class DeviceStorage(DeviceStorageInterface):
         if schema:
             validate_store_value(key, new_value)
             old_value = ObjectPath.get(self.values, key)
-            if new_value is None:
+
+            effective_value = schema.get("defaultValue") if new_value is None else new_value
+
+            if effective_value is None:
                 unchanged = old_value is None
                 ObjectPath.delete(self.values, key)
             else:
-                unchanged = old_value is not None and DeepDiff(old_value, new_value) == {}
+                unchanged = old_value is not None and DeepDiff(old_value, effective_value) == {}
                 stored = (  # pyright: ignore[reportUnknownVariableType]
-                    deepcopy(new_value)  # pyright: ignore[reportUnknownVariableType, reportUnknownArgumentType]
-                    if isinstance(new_value, (dict, list))
-                    else new_value
+                    deepcopy(effective_value)  # pyright: ignore[reportUnknownVariableType, reportUnknownArgumentType]
+                    if isinstance(effective_value, (dict, list))
+                    else effective_value
                 )
                 ObjectPath.set(self.values, key, stored)
 
             if self.__contains_storable_schema(schema) and (not unchanged or self.__dirty):
                 await self.save()
 
-            self.__run_on_set_detached(schema.get("onSet", None), key, new_value, old_value)
+            self.__run_on_set_detached(schema.get("onSet", None), key, effective_value, old_value)
 
     @RPCMethod
     async def submitValue(self, key: str, new_value: Any) -> FormSubmitResponse | None:

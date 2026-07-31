@@ -26,6 +26,7 @@ export class DeviceManagerProxy implements DeviceManager {
   #namespaces: DeviceManagerNamespaces & PluginNamespaces & DiscoveryManagerNamespaces;
 
   #devices = new Map<string, CameraDeviceProxy>();
+  #eventChain: Promise<void> = Promise.resolve();
 
   constructor(proxy: RPCClient, storageController: StorageController, sensorManager: SensorManagerProxy, pluginInfo: PluginInfo, logger: Logger) {
     this.#proxy = proxy;
@@ -55,7 +56,12 @@ export class DeviceManagerProxy implements DeviceManager {
       () => this.#refreshAllDevices(),
       (error) => this.#logger.debug('Device reconnect watch ended:', error),
     );
-    this.#closeRequests = await this.#proxy.onRequest<DeviceManagerListenerMessagePayload>(this.#namespaces.pluginDeviceManagerSubject, this.#onEventMessage.bind(this));
+
+    this.#closeRequests = await this.#proxy.onRequest<DeviceManagerListenerMessagePayload>(this.#namespaces.pluginDeviceManagerSubject, (event) => {
+      const run = this.#eventChain.then(() => this.#onEventMessage(event));
+      this.#eventChain = run.catch(() => {});
+      return run;
+    });
   }
 
   public async getCamera(cameraIdOrName: string): Promise<CameraDeviceProxy | undefined> {
@@ -132,7 +138,7 @@ export class DeviceManagerProxy implements DeviceManager {
         await this.#pluginInstance.onCameraReleased(cameraId);
         const cameraDevice = this.#devices.get(cameraId);
         await cameraDevice?.cleanup();
-        await this.#removeCameraStorage(cameraId);
+        await this.#storageController.releaseCameraStorage(cameraId);
         this.#devices.delete(cameraId);
         break;
       }
@@ -177,9 +183,5 @@ export class DeviceManagerProxy implements DeviceManager {
 
   async #createCameraStorage(cameraId: string): Promise<void> {
     await this.#storageController.createStorage('camera', cameraId);
-  }
-
-  async #removeCameraStorage(cameraId: string): Promise<void> {
-    await this.#storageController.removeStorage('camera', cameraId);
   }
 }

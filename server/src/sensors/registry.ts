@@ -163,7 +163,14 @@ export class SensorRegistry {
     record.name = sensor.name;
 
     // camera.addSensor re-registration re-binds (also backfills migrated records)
-    if (options?.assignCameraId) record.boundCameraId = options.assignCameraId;
+    if (options?.assignCameraId) {
+      record.boundCameraId = options.assignCameraId;
+      // camera-bound means assigned to its camera, restore an assignment a plugin toggle removed
+      if (!record.assignedCameraIds.includes(options.assignCameraId)) {
+        record.assignedCameraIds.push(options.assignCameraId);
+        this.announceAssignment(record, options.assignCameraId, true);
+      }
+    }
     record.updatedAt = Date.now();
     this.persistRecord(record._id, () => {});
 

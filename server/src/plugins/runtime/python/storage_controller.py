@@ -47,7 +47,7 @@ class StorageController:
                 schemas,
             )
             self.__storages[cameraId] = camera_storage
-        else:
+        elif schemas:
             camera_storage.update_schema(schemas)
 
         return camera_storage
@@ -68,7 +68,7 @@ class StorageController:
                 schemas,
             )
             self.__storages["storage"] = plugin_storage
-        else:
+        elif schemas:
             plugin_storage.update_schema(schemas)
 
         return plugin_storage
@@ -99,8 +99,8 @@ class StorageController:
                 sensor_id,
             )
             self.__storages[storage_key] = storage
-
-        storage.update_schema(schemas)
+        elif schemas:
+            storage.update_schema(schemas)
 
         return storage
 
@@ -142,41 +142,10 @@ class StorageController:
         await storage.register_storage()
         return storage
 
-    @overload
-    async def removeStorage(self, type_: Literal["camera"], device_id: str) -> None: ...
-    @overload
-    async def removeStorage(self, type_: Literal["plugin"], device_id: None) -> None: ...
-    @overload
-    async def removeStorage(
-        self,
-        type_: Literal["sensor"],
-        device_id: str,  # sensor_id
-    ) -> None: ...
-    async def removeStorage(
-        self,
-        type_: Literal["camera", "plugin", "sensor"],
-        device_id: str | None = None,
-    ) -> None:
-        storage_key: str
-
-        if type_ == "sensor":
-            if not device_id:
-                raise ValueError("sensorId is required for sensor storage removal")
-
-            storage_key = sensor_storage_key(device_id)
-        elif type_ == "camera":
-            if not device_id:
-                raise ValueError("ID is required for storage removal")
-            storage_key = device_id
-        else:
-            storage_key = "storage"
-
-        device_storage = self.__storages.get(storage_key)
+    async def releaseCameraStorage(self, camera_id: str) -> None:
+        device_storage = self.__storages.get(camera_id)
         if device_storage:
-            await device_storage.destroy()
             await device_storage.unregister_storage()
-            del self.__storages[storage_key]
-            return
 
     # Internal method to close all storages
     async def close(self) -> None:
