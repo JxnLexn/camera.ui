@@ -1,7 +1,9 @@
 import { sleep } from '@camera.ui/common/utils';
+import { Severity } from '@camera.ui/sdk';
 import { container } from 'tsyringe';
 
 import { CamerasService } from '../api/services/cameras.service.js';
+import { SystemNotificationTypeId } from '../manager/types.js';
 import { PLUGIN_COMMAND, PLUGIN_STATUS } from '../plugins/types.js';
 import { NamespaceManager } from '../rpc/namespaces.js';
 import { isShuttingDown } from '../shutdown-state.js';
@@ -166,6 +168,12 @@ export class PluginWorker {
           return;
         }
 
+        if (this.gateProtocol()) {
+          await this.channel?.close();
+          resolve();
+          return;
+        }
+
         this.runtime.once('exit', () => {
           clearTimeout(this.localReadyTimeout);
           this.localReadyTimeout = undefined;
@@ -254,6 +262,12 @@ export class PluginWorker {
           return;
         }
 
+        if (this.gateProtocol()) {
+          await this.channel?.close();
+          resolve();
+          return;
+        }
+
         this.runtime.once('exit', () => {
           clearTimeout(this.localReadyTimeout);
           this.localReadyTimeout = undefined;
@@ -267,6 +281,42 @@ export class PluginWorker {
         reject(error);
       }
     }, REMOTE_START_TIMEOUT_MS);
+  }
+
+  private gateProtocol(): boolean {
+    const compat = this.plugin.info.protocolCompat;
+    if (compat !== 'pluginTooOld' && compat !== 'serverTooOld') {
+      return false;
+    }
+
+    const status = compat === 'pluginTooOld' ? PLUGIN_STATUS.UPDATE_REQUIRED : PLUGIN_STATUS.SERVER_UPDATE_REQUIRED;
+    const alreadyFlagged = this.status === status;
+    this.setStatus(status);
+    this.runtime.logger.warn(
+      compat === 'pluginTooOld'
+        ? `Can not start plugin ${this.plugin.displayName}: it was built for an older camera.ui plugin API. Update the plugin.`
+        : `Can not start plugin ${this.plugin.displayName}: it was built for a newer camera.ui plugin API. Update camera.ui.`,
+    );
+
+    if (!alreadyFlagged) {
+      this.proxyServer.notificationManager
+        .notify({
+          source: { kind: 'system', id: SystemNotificationTypeId.PluginIncompatible },
+          notification: {
+            title: 'Plugin Not Started',
+            body:
+              compat === 'pluginTooOld'
+                ? `${this.plugin.displayName} needs an update to work with this camera.ui version`
+                : `${this.plugin.displayName} needs a newer camera.ui version`,
+            severity: Severity.Warn,
+            tag: `${SystemNotificationTypeId.PluginIncompatible}:${this.plugin.id}`,
+            deepLink: `/plugins/${this.plugin.pluginName}`,
+          },
+        })
+        .catch(() => {});
+    }
+
+    return true;
   }
 
   private async doTeardown(destroy?: boolean): Promise<void> {

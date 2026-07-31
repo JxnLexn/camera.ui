@@ -3,7 +3,7 @@ import { dirname, join } from 'node:path';
 import { container } from 'tsyringe';
 
 import { ConfigService } from '../services/config/index.js';
-import { checkEngineCompatibility } from '../utils/engines.js';
+import { checkEngineCompatibility, checkProtocolCompat } from '../utils/engines.js';
 import { isPlatformCompatible } from '../utils/platform.js';
 import { PluginManager } from './index.js';
 import { resolvePluginMain } from './main-file.js';
@@ -158,6 +158,8 @@ not satisfy the current Node.js version of ${process.version}. You may need to u
       cpu: pjson.cpu,
       compatible: isPlatformCompatible(pjson.os, pjson.cpu),
       engineIssues: checkEngineCompatibility(pjson.engines, ConfigService.VERSION, process.version),
+      protocolLevel: pjson.cameraui?.protocolLevel,
+      protocolCompat: checkProtocolCompat(pjson.cameraui?.protocolLevel),
     };
 
     return pluginPackageJson;

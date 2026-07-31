@@ -1,6 +1,16 @@
+import { PROTOCOL_LEVEL } from '@camera.ui/sdk';
 import semver from 'semver';
 
-import type { EngineIssue } from '../api/types/index.js';
+import type { EngineIssue, ProtocolCompat } from '../api/types/index.js';
+
+export const MIN_SUPPORTED_PROTOCOL_LEVEL = 1;
+
+export function checkProtocolCompat(protocolLevel: unknown): ProtocolCompat {
+  if (typeof protocolLevel !== 'number') return 'unknown';
+  if (protocolLevel < MIN_SUPPORTED_PROTOCOL_LEVEL) return 'pluginTooOld';
+  if (protocolLevel > PROTOCOL_LEVEL) return 'serverTooOld';
+  return 'compatible';
+}
 
 export function checkEngineCompatibility(engines: Record<string, string> | undefined, hostVersion: string, nodeVersion: string): EngineIssue[] {
   if (!engines) {

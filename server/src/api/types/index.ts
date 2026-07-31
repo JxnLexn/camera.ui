@@ -17,6 +17,7 @@ import type { FilesParamsInput } from '../schemas/files.schema.js';
 import type { FrameWorkerParamsInput } from '../schemas/frameWorkers.schema.js';
 import type { PatchGo2RtcConfigInput } from '../schemas/go2rtc.schema.js';
 import type { CreateInstanceInput, InstanceLoginInput, UpdateInstanceInput } from '../schemas/instances.schema.js';
+import type { PatchMqttInput, TestMqttInput } from '../schemas/mqtt.schema.js';
 import type {
   ActionPluginInput,
   InstallPluginInput,
@@ -28,8 +29,8 @@ import type {
   TestMotionInput,
   TestObjectInput,
 } from '../schemas/plugins.schema.js';
-import type { PatchMqttInput, TestMqttInput } from '../schemas/mqtt.schema.js';
 import type { CloudflareManagedConnectInput, PairInitInput, PairPollInput, PatchRemoteInput } from '../schemas/remote.schema.js';
+import type { CreateVirtualSensorInput, PatchSensorInput, SensorCommandInput } from '../schemas/sensors.schema.js';
 import type { PatchServerInput, ServerChangelogQueryInput, UpdateServerInput } from '../schemas/server.schema.js';
 import type { PatchStorateInput, SetStorageInput, SubmitStorageInput } from '../schemas/storage.schema.js';
 import type {
@@ -43,7 +44,6 @@ import type {
   UserLanguage,
   UsernameParamsInput,
 } from '../schemas/users.schema.js';
-import type { CreateVirtualSensorInput, PatchSensorInput, SensorCommandInput } from '../schemas/sensors.schema.js';
 import type { RegisterDeviceInput } from '../services/notifications.service.js';
 
 export interface BusboyFileStream extends Readable {
@@ -366,14 +366,6 @@ export interface CamerasExtensionsParamsRequest {
 
 export interface CamerasSensorStorageParamsRequest {
   Params: { cameraname: string; pluginname: string; sensorId: string; scope?: string };
-}
-
-export interface CameraSensorCommandParamsRequest {
-  Params: { cameraname: string; stableId: string };
-}
-
-export interface CameraSensorCommandRequest {
-  Body: { property: string; value: unknown };
 }
 
 export interface CamerasExtensionsRequest {
@@ -709,7 +701,7 @@ export interface IPackageJson {
   publishConfig?: { registry?: string };
   exports?: Record<string, any>;
   type?: 'module';
-  'camera.ui'?: PluginContract;
+  cameraui?: { protocolLevel?: number };
 }
 
 export interface INpmRegistryModule {
@@ -789,12 +781,16 @@ export interface EngineIssue {
   current: string;
 }
 
+// unknown = plugin built before the protocol stamp existed
+export type ProtocolCompat = 'compatible' | 'unknown' | 'pluginTooOld' | 'serverTooOld';
+
 export interface EngineCompatResult {
   compatible: boolean;
   issues: EngineIssue[];
   os?: string[];
   cpu?: string[];
   platformCompatible?: boolean;
+  protocolCompat?: ProtocolCompat;
 }
 
 export interface CameraUiPlugin {
@@ -841,6 +837,8 @@ export interface CameraUiPlugin {
   cpu?: string[];
   compatible: boolean;
   engineIssues?: EngineIssue[];
+  protocolLevel?: number;
+  protocolCompat?: ProtocolCompat;
   workerAgentId?: string;
 }
 

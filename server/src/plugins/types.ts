@@ -33,6 +33,8 @@ export enum PLUGIN_STATUS {
   UNKNOWN = 'unknown',
   DISABLED = 'disabled',
   INCOMPATIBLE = 'incompatible',
+  UPDATE_REQUIRED = 'update_required',
+  SERVER_UPDATE_REQUIRED = 'server_update_required',
 }
 
 export enum PLUGIN_COMMAND {

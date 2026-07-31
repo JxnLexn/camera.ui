@@ -8,6 +8,7 @@ export interface CatalogEntry {
   tagline?: string;
   logo?: string;
   screenshots?: string[];
+  protocolLevel?: number;
 }
 
 export interface VerifiedEntry {

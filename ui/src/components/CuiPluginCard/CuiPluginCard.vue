@@ -202,7 +202,9 @@ const isPluginStopped = computed(
     pluginsSocket.status.value === PLUGIN_STATUS.STOPPED ||
     pluginsSocket.status.value === PLUGIN_STATUS.DISABLED ||
     pluginsSocket.status.value === PLUGIN_STATUS.ERROR ||
-    pluginsSocket.status.value === PLUGIN_STATUS.UNKNOWN,
+    pluginsSocket.status.value === PLUGIN_STATUS.UNKNOWN ||
+    pluginsSocket.status.value === PLUGIN_STATUS.UPDATE_REQUIRED ||
+    pluginsSocket.status.value === PLUGIN_STATUS.SERVER_UPDATE_REQUIRED,
 );
 
 const isNvr = plugin.value.contract && hasInterface(plugin.value.contract, PluginInterface.NVR);
@@ -221,6 +223,12 @@ const compatWarnings = computed<string[]>(() => {
   for (const issue of plugin.value.engineIssues ?? []) {
     const engine = issue.engine === 'node' ? 'Node.js' : 'camera.ui';
     warnings.push(t('components.plugin_card.compat_engine', { engine, required: issue.required, current: issue.current }));
+  }
+
+  if (plugin.value.protocolCompat === 'pluginTooOld') {
+    warnings.push(t('components.plugin_card.compat_protocol_plugin'));
+  } else if (plugin.value.protocolCompat === 'serverTooOld') {
+    warnings.push(t('components.plugin_card.compat_protocol_server'));
   }
 
   return warnings;

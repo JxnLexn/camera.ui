@@ -29,6 +29,12 @@
           severity="warn"
           :value="$t('components.plugin_search.incompatible')"
         />
+        <Tag
+          v-if="plugin.protocolCompat === 'serverTooOld'"
+          v-tooltip.top="{ value: $t('components.plugin_search.requires_newer_server_hint') }"
+          severity="warn"
+          :value="$t('components.plugin_search.requires_newer_server')"
+        />
         <CuiPluginCategoryChip :category="plugin.category" />
         <span v-if="weeklyDownloads" class="plugin-store-meta">
           <i-mdi:download class="plugin-store-meta-icon" />

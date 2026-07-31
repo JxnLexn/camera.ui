@@ -7,6 +7,7 @@ import { PluginManager } from '../../plugins/index.js';
 import { resolvePluginMain } from '../../plugins/main-file.js';
 import { RuntimeFactory } from '../../plugins/runtime/index.js';
 import { isShuttingDown } from '../../shutdown-state.js';
+import { checkProtocolCompat } from '../../utils/engines.js';
 import { extractPackage, installDependencies } from '../../utils/npm/index.js';
 import { describePlatformRequirement, isPlatformCompatible } from '../../utils/platform.js';
 import { WorkerCapability } from '../types.js';
@@ -182,6 +183,14 @@ export class PluginHostHandler implements CapabilityHandler<WorkerCapability.Plu
 
     if (!isPlatformCompatible(pjson.os, pjson.cpu)) {
       throw new Error(`plugin requires ${describePlatformRequirement(pjson.os, pjson.cpu)}, this worker is ${process.platform}/${process.arch}`);
+    }
+
+    const protocolCompat = checkProtocolCompat(pjson.cameraui?.protocolLevel);
+    if (protocolCompat === 'pluginTooOld') {
+      throw new Error(`plugin ${spec.pluginName} was built for an older camera.ui plugin API, update the plugin`);
+    }
+    if (protocolCompat === 'serverTooOld') {
+      throw new Error(`plugin ${spec.pluginName} was built for a newer camera.ui plugin API, update this worker`);
     }
 
     let main = resolvePluginMain(pjson);

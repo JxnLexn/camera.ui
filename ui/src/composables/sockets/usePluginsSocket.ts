@@ -35,6 +35,10 @@ function updateStatusColor(state: PluginsSocketState, status: PLUGIN_STATUS): vo
     case PLUGIN_STATUS.STOPPED:
       state.statusColor = 'red';
       break;
+    case PLUGIN_STATUS.UPDATE_REQUIRED:
+    case PLUGIN_STATUS.SERVER_UPDATE_REQUIRED:
+      state.statusColor = 'orange';
+      break;
     case PLUGIN_STATUS.DISABLED:
     case PLUGIN_STATUS.UNKNOWN:
     default:

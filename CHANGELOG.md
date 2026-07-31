@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.1.0]
+
+### Added
+
+- **Incompatible plugins are stopped with a clear message instead of failing.** A plugin built for a different camera.ui plugin API no longer starts into cryptic errors: its card now says whether the plugin or camera.ui needs the update, and you get a notification. Installing a version that can't run on your server is refused with the reason, and the store marks plugins that need a newer camera.ui.
+
+### Changed
+
+- **The old sensor compatibility paths are gone.** 2.0.23 kept the pre-rework sensor API alive for one release so outdated plugins and the old Home Assistant integration kept partly working. That window is over: update your plugins and the Home Assistant integration if you haven't yet.
+
 ## [2.0.24]
 
 ### Changed

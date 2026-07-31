@@ -12,7 +12,7 @@ import { gt, parse } from 'semver';
 
 import { resolveNpmOptions } from './auth.js';
 
-import type { AbbreviatedManifest, AbbreviatedPackument, ManifestResult, Options, Packument, PackumentResult } from 'pacote';
+import type { AbbreviatedManifest, AbbreviatedPackument, Manifest, ManifestResult, Options, Packument, PackumentResult } from 'pacote';
 
 type FullPackument = Packument & PackumentResult & { description?: string };
 type AbbrPackument = AbbreviatedPackument & PackumentResult;
@@ -88,6 +88,10 @@ export async function getDistTags(name: string): Promise<Record<string, string>>
 
 export async function getManifest(spec: string): Promise<AbbreviatedManifest & ManifestResult> {
   return pacote.manifest(spec, npmOptions());
+}
+
+export async function getFullManifest(spec: string): Promise<Manifest & ManifestResult & { cameraui?: { protocolLevel?: number } }> {
+  return pacote.manifest(spec, { ...npmOptions(), fullMetadata: true as const });
 }
 
 export async function getVersionsAndDistTags(name: string): Promise<{ versions: string[]; 'dist-tags': Record<string, string> }> {

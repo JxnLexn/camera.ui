@@ -12,8 +12,8 @@ import { container } from 'tsyringe';
 
 import { PluginManager } from '../../plugins/index.js';
 import { ConfigService } from '../../services/config/index.js';
-import { checkEngineCompatibility } from '../../utils/engines.js';
-import { checkForUpdate, extractPackage, getManifest, getPackument, getVersionsAndDistTags, invalidatePackage, searchPackages } from '../../utils/npm/index.js';
+import { checkEngineCompatibility, checkProtocolCompat } from '../../utils/engines.js';
+import { checkForUpdate, extractPackage, getFullManifest, getPackument, getVersionsAndDistTags, invalidatePackage, searchPackages } from '../../utils/npm/index.js';
 import { isPlatformCompatible } from '../../utils/platform.js';
 import { computeTrust, getBlock, getBlocklist, getCatalog, getVerified, getWeeklyDownloads, invalidateRegistry } from '../../utils/plugin-registry/index.js';
 import { CamerasService } from '../services/cameras.service.js';
@@ -234,12 +234,14 @@ export class PluginsController {
       let engines: Record<string, string> | undefined;
       let os: string[] | undefined;
       let cpu: string[] | undefined;
+      let protocolLevel: number | undefined;
 
       try {
-        const manifest = await getManifest(`${pluginName}@${pluginVersion}`);
+        const manifest = await getFullManifest(`${pluginName}@${pluginVersion}`);
         engines = manifest.engines;
         os = (manifest as { os?: string[] }).os;
         cpu = (manifest as { cpu?: string[] }).cpu;
+        protocolLevel = manifest.cameraui?.protocolLevel;
       } catch (error: any) {
         this.logger.warn(`Failed to resolve engines for ${pluginName}@${pluginVersion}: ${error.message}`);
         return reply.code(200).send({ compatible: true, issues: [], platformCompatible: true });
@@ -247,7 +249,14 @@ export class PluginsController {
 
       const issues = checkEngineCompatibility(engines, ConfigService.VERSION, process.version);
 
-      return reply.code(200).send({ compatible: issues.length === 0, issues, os, cpu, platformCompatible: isPlatformCompatible(os, cpu) });
+      return reply.code(200).send({
+        compatible: issues.length === 0,
+        issues,
+        os,
+        cpu,
+        platformCompatible: isPlatformCompatible(os, cpu),
+        protocolCompat: checkProtocolCompat(protocolLevel),
+      });
     } catch (error: any) {
       return reply.code(500).send({
         statusCode: 500,
@@ -832,6 +841,22 @@ export class PluginsController {
         });
       }
 
+      // registry metadata is best-effort, an unreachable registry must not block installs
+      const manifest = await getFullManifest(`${req.body.pluginname}@${req.body.pluginversion}`).catch(() => undefined);
+      const protocolCompat = manifest ? checkProtocolCompat(manifest.cameraui?.protocolLevel) : 'unknown';
+      if (protocolCompat === 'serverTooOld') {
+        return reply.code(409).send({
+          statusCode: 409,
+          message: 'This plugin version needs a newer camera.ui. Update camera.ui first.',
+        });
+      }
+      if (protocolCompat === 'pluginTooOld') {
+        return reply.code(409).send({
+          statusCode: 409,
+          message: 'This plugin version was built for an older camera.ui and cannot run anymore. Pick a newer version.',
+        });
+      }
+
       let plugin = this.pluginManager.plugins.get(req.body.pluginname);
 
       const command = plugin ? 'update' : 'install';
@@ -973,6 +998,8 @@ export class PluginsController {
       plugin.tagline = catalogEntry.tagline;
       plugin.logo = catalogEntry.logo;
       plugin.screenshots = catalogEntry.screenshots;
+      plugin.protocolLevel = catalogEntry.protocolLevel;
+      plugin.protocolCompat = checkProtocolCompat(catalogEntry.protocolLevel);
     }
 
     if (plugin.links?.repository) {
