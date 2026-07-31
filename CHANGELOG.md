@@ -4,9 +4,30 @@ All notable changes to this project will be documented in this file.
 
 ## [2.0.23]
 
+**This release rebuilds the sensor system. A few things need your attention after updating:**
+
+- **Update your plugins.** Plugins built against the old sensor system can't provide sensors anymore; their sensors stay unavailable until the plugin is updated, and the log tells you which plugin is affected. Updates for all official plugins are available.
+- **Automations that use sensors were disabled** and are marked on the Automations page. Open each one, pick the sensor again and re-enable it.
+- **Sensor cascade triggers** in the camera detection settings and **sensor shortcuts** on camera views need to be set up again.
+- **Home Assistant users:** update the camera.ui integration so sensors show up correctly. Over MQTT, sensors re-appear as their own devices with new entity ids, so Home Assistant automations pointing at them need to be re-pointed.
+
+Virtual sensors carry over automatically.
+
+**A native Apple TV app is coming.** It is in review at Apple right now. As soon as it passes, the TestFlight beta starts, the links land in #apple-tv on Discord.
+
+### Added
+
+- **Sensors are independent of cameras now.** The new Sensors page lists every sensor, whether it comes from a plugin or was created there as a virtual sensor. A sensor can be assigned to any number of cameras, renamed, and an Expose toggle per sensor decides what MQTT, HomeKit and Home Assistant get to see. Sensors keep their identity across restarts and plugin updates, so exports, automations and history stay stable from here on.
+
 ### Fixed
 
 - **Restart and similar buttons work behind Home Assistant and other proxies.** Pressing Restart through the Home Assistant panel failed with "Unsupported Media Type" because some proxies tag empty requests with a content type the server rejected. The server now accepts them.
+
+- **Dragging cameras with a mouse works on touch screen PCs.** On a computer with both a touch screen and a mouse, reordering cameras on the home page and building a CamView grid only worked by touch, the mouse could not grab the cards. Mouse and touch now both work on such devices.
+
+- **Connecting a server whose account uses two-factor authentication works again.** The code step when adding such a server, or when finishing a pending 2FA challenge later, always failed even with the right code.
+
+- **Plugin and sensor settings no longer come up empty while a plugin is starting.** Opening a camera's plugin settings right after enabling a sensor could show "No configuration available" because the plugin was still loading its models and missed the request. The panel now retries for a bit and fills in once the plugin answers.
 
 ## [2.0.22]
 
