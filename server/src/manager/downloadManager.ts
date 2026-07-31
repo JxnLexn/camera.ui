@@ -156,6 +156,12 @@ export class DownloadManager implements DownloadManagerInterface {
     }
   }
 
+  public resolveLocalFile(token: string): string | null {
+    const entry = this.registry.get(token);
+    if (!entry || entry.remotePluginId || entry.streaming || Date.now() > entry.expiresAt) return null;
+    return entry.filePath;
+  }
+
   public async handleDownload(req: FastifyRequest<DownloadParamsRequest>, reply: FastifyReply): Promise<void> {
     const { token } = req.params;
     const entry = this.registry.get(token);

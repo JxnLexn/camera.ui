@@ -50,6 +50,10 @@ export class NotificationsService {
     return this.proxyServer.notificationManager.getHistory(userId);
   }
 
+  public getHistoryImagePath(userId: string, id: string): string | null {
+    return this.proxyServer.notificationManager.getImagePath(userId, id);
+  }
+
   public async clearHistory(userId: string): Promise<void> {
     await this.proxyServer.notificationManager.clearHistory(userId);
   }

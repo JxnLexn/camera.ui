@@ -1,3 +1,5 @@
+import { readFile } from 'node:fs/promises';
+
 import { DeviceForbiddenError } from '../../manager/notificationManager.js';
 import { NotificationsService } from '../services/notifications.service.js';
 
@@ -78,6 +80,19 @@ export class NotificationsController {
     }
   }
 
+  public async historyImage(req: FastifyRequest<AuthLoginRequest & { Params: { id: string } }>, reply: FastifyReply): Promise<FastifyReply> {
+    const path = this.service.getHistoryImagePath(req.locals.user!._id, req.params.id);
+    if (!path) {
+      return reply.code(404).send({ statusCode: 404, message: 'No image for this notification' });
+    }
+    try {
+      const data = await readFile(path);
+      return reply.code(200).header('cache-control', 'private, max-age=31536000, immutable').type(this.imageMime(data)).send(data);
+    } catch {
+      return reply.code(404).send({ statusCode: 404, message: 'No image for this notification' });
+    }
+  }
+
   public async markSeen(req: FastifyRequest<AuthLoginRequest & { Params: { id: string } }>, reply: FastifyReply): Promise<FastifyReply> {
     try {
       await this.service.markSeen(req.locals.user!._id, req.params.id);
@@ -152,5 +167,12 @@ export class NotificationsController {
       const status = (error?.message ?? '').includes('not found') ? 404 : 500;
       return reply.code(status).send({ statusCode: status, message: error.message });
     }
+  }
+
+  private imageMime(data: Buffer): string {
+    if (data[0] === 0x89 && data[1] === 0x50) return 'image/png';
+    if (data[0] === 0x47 && data[1] === 0x49) return 'image/gif';
+    if (data.subarray(8, 12).toString('ascii') === 'WEBP') return 'image/webp';
+    return 'image/jpeg';
   }
 }

@@ -46,6 +46,7 @@ export interface ContentBaseProps {
   goTo?: string;
   rootId?: string;
   headerActions?: { icon: Component; tooltip?: string; onClick: () => void; toggle?: boolean; loading?: boolean }[];
+  contentClickConfirms?: boolean;
 }
 
 export interface ContentTextProps extends ContentBaseProps {

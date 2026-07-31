@@ -74,6 +74,15 @@ export function formatCompactNumber(value: number): string {
   return new Intl.NumberFormat(undefined, { notation: 'compact', maximumFractionDigits: 1 }).format(value);
 }
 
+export function notificationImageUrl(imageUrl?: string): string | undefined {
+  if (!imageUrl?.startsWith('/api/')) return undefined;
+  const connection = useConnection();
+  const token = connection.accessToken.value;
+  if (!token) return undefined;
+  const origin = connection.endpoint.value ?? location.origin;
+  return `${origin}${imageUrl}?token=${token}${proxySessionQuery()}`;
+}
+
 export function getImageUrl(img: string = 'logo-512.png'): string {
   if (img.startsWith('data:') || img.startsWith('blob:') || img.startsWith('http:') || img.startsWith('https:')) {
     return img;

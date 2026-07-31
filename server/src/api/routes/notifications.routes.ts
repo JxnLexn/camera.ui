@@ -134,4 +134,16 @@ export const NotificationsRoute: FastifyPluginAsync = async (app: FastifyInstanc
       params: deviceParamsSchema,
     },
   });
+
+  app.withTypeProvider<ZodTypeProvider>().route({
+    url: '/history/:id/image',
+    method: 'GET',
+    preValidation: [validJWTNeeded],
+    handler: controller.historyImage.bind(controller),
+    schema: {
+      tags: ['Notifications'],
+      summary: 'Get the stored image of a notification',
+      params: deviceParamsSchema,
+    },
+  });
 };

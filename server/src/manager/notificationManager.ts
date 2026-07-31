@@ -1,5 +1,7 @@
 import { uuidv4 } from '@camera.ui/common/utils';
 import { hasCapability, PluginCapability, Severity } from '@camera.ui/sdk';
+import { copyFile, mkdir, readdir, unlink } from 'node:fs/promises';
+import { join } from 'node:path';
 import { container } from 'tsyringe';
 
 import { NotificationsService } from '../api/services/notifications.service.js';
@@ -18,6 +20,7 @@ import type { InternalEventBus } from '../internal-bus.js';
 import type { Plugin } from '../plugins/plugin.js';
 import type { ProxyServer } from '../rpc/index.js';
 import type { NotifyResult } from '../rpc/interfaces/notification.js';
+import type { ConfigService } from '../services/config/index.js';
 import type { LoggerService } from '../services/logger/index.js';
 import type { NotificationSource, NotifierDeviceWithSource, NotifyOptions, ResolvedNotification, SourcesListing } from './types.js';
 
@@ -43,6 +46,7 @@ export class NotificationManager {
   private usersService: UsersService;
 
   private closePublishUnsub?: () => void;
+  private imagesDir: string;
 
   constructor() {
     this.proxyServer = container.resolve<ProxyServer>('proxy');
@@ -52,10 +56,13 @@ export class NotificationManager {
     this.pluginsService = new PluginsService();
     this.remoteService = new RemoteService();
     this.usersService = new UsersService();
+    this.imagesDir = join(container.resolve<ConfigService>('configService').STORAGE_PATH, 'notification-images');
   }
 
   public async register(): Promise<void> {
     await this.subscribePublishTopic();
+    await mkdir(this.imagesDir, { recursive: true }).catch(() => {});
+    this.pruneOrphanImages().catch(() => {});
   }
 
   public async destroy(): Promise<void> {
@@ -103,13 +110,20 @@ export class NotificationManager {
     return this.historyFor(userId);
   }
 
+  public getImagePath(userId: string, id: string): string | null {
+    if (!this.historyFor(userId).some((n) => n.id === id)) return null;
+    return join(this.imagesDir, `${id}.img`);
+  }
+
   public unreadCount(userId: string): number {
     return this.historyFor(userId).filter((n) => n.seenAt == null).length;
   }
 
   public async clearHistory(userId: string): Promise<void> {
+    const dropped = this.historyFor(userId).map((n) => n.id);
     await this.putHistory(userId, []);
     this.emitToUser(userId, 'history', []);
+    await this.dropImages(dropped);
   }
 
   public async removeByTag(userId: string, tag: string): Promise<boolean> {
@@ -118,6 +132,7 @@ export class NotificationManager {
     if (next.length === items.length) return false;
     await this.putHistory(userId, next);
     this.emitToUser(userId, 'history', next);
+    await this.dropImages(items.filter((n) => n.tag === tag).map((n) => n.id));
     return true;
   }
 
@@ -422,19 +437,28 @@ export class NotificationManager {
       body: n.body,
       severity: n.severity,
       tag: n.tag,
-      imageUrl: n.imageUrl,
+      imageUrl: await this.persistImage(n.id, n.imageUrl),
       deepLink: n.deepLink,
       source: n.source,
       data: n.data,
     };
 
     const items = this.historyFor(userId);
-    const deduped = stored.tag ? items.filter((h) => h.tag !== stored.tag) : items;
+    const dropped: string[] = [];
+    let deduped = items;
+    if (stored.tag) {
+      deduped = items.filter((h) => h.tag !== stored.tag);
+      dropped.push(...items.filter((h) => h.tag === stored.tag).map((h) => h.id));
+    }
     deduped.unshift(stored);
-    if (deduped.length > HISTORY_LIMIT) deduped.length = HISTORY_LIMIT;
+    if (deduped.length > HISTORY_LIMIT) {
+      dropped.push(...deduped.slice(HISTORY_LIMIT).map((h) => h.id));
+      deduped.length = HISTORY_LIMIT;
+    }
 
     await this.putHistory(userId, deduped);
     this.emitToUser(userId, 'notification', stored);
+    await this.dropImages(dropped);
   }
 
   private emitToUser(userId: string, event: string, payload: unknown): void {
@@ -445,6 +469,46 @@ export class NotificationManager {
       this.logger.warn(`UI broadcast failed: ${(err as Error).message}`);
     }
     this.proxyServer.proxy.publish(`notifications.user.${userId}`, { event, payload }).catch(() => {});
+  }
+
+  private async persistImage(id: string, imageUrl?: string): Promise<string | undefined> {
+    if (!imageUrl) return undefined;
+    const token = /\/api\/download\/([0-9a-f-]+)/i.exec(imageUrl)?.[1];
+    const filePath = token ? this.proxyServer.downloadManager.resolveLocalFile(token) : null;
+    if (!filePath) return imageUrl;
+    try {
+      await copyFile(filePath, join(this.imagesDir, `${id}.img`));
+      return `/api/notifications/history/${id}/image`;
+    } catch {
+      return imageUrl;
+    }
+  }
+
+  private async dropImages(ids: string[]): Promise<void> {
+    if (ids.length === 0) return;
+    const referenced = this.referencedIds();
+    for (const id of ids) {
+      if (referenced.has(id)) continue;
+      await unlink(join(this.imagesDir, `${id}.img`)).catch(() => {});
+    }
+  }
+
+  private async pruneOrphanImages(): Promise<void> {
+    const files = await readdir(this.imagesDir).catch(() => [] as string[]);
+    if (files.length === 0) return;
+    const referenced = this.referencedIds();
+    for (const file of files) {
+      if (referenced.has(file.replace(/\.img$/, ''))) continue;
+      await unlink(join(this.imagesDir, file)).catch(() => {});
+    }
+  }
+
+  private referencedIds(): Set<string> {
+    const ids = new Set<string>();
+    for (const user of this.usersService.list()) {
+      for (const n of this.historyFor(user._id)) ids.add(n.id);
+    }
+    return ids;
   }
 
   private historyFor(userId: string): StoredNotification[] {

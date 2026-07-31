@@ -68,10 +68,12 @@
         'p-dialog-body flex justify-center w-full overflow-y-auto px-5 py-1 text-balance',
         {
           'h-full': fullscreen,
+          'cursor-pointer': contentClickConfirms,
         },
         dialogContentClass,
       ]"
       :style="dialogContentStyle"
+      @click="onBodyClick"
     >
       <span v-if="contentText && !md" class="text-wrap">{{ contentText }}</span>
       <CuiMarkdownContent v-else-if="contentText && md" :content="contentText" />
@@ -139,6 +141,7 @@ const {
   rootId,
   markdown: md,
   headerActions,
+  contentClickConfirms,
 } = props;
 provide('dialogRefProps', props);
 
@@ -232,6 +235,12 @@ const confirmProps = computed<ButtonProps>(() => {
     disabled: disabled.value,
   };
 });
+
+function onBodyClick(): void {
+  if (contentClickConfirms?.value) {
+    onConfirm();
+  }
+}
 
 function goToPage(path: string): void {
   const resolved = componentRef.value?.resolveGoTo?.();
