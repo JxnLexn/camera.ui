@@ -212,11 +212,8 @@ export class MqttBridge {
     this.sweepLegacyRetained();
   }
 
-  /**
-   * @deprecated stub window, one-time retained-topic cleanup for pre-standalone MQTT
-   * trees, remove in the first minor after the standalone-sensors release (with the
-   * legacySensorSweepDone flag)
-   */
+  // one-time broker cleanup of pre-standalone camera-scoped sensor topics,
+  // keep while pre-2.0.23 installs can upgrade straight to current
   private sweepLegacyRetained(): void {
     const dbs = container.resolve<Database>('dbs');
     const record = dbs.mqttDB.get('mqtt');

@@ -101,13 +101,6 @@ class SensorManagerProxy:
             )
 
     async def addSensor(self, sensor: Sensor[Any, Any, Any]) -> None:
-        # pre-standalone SDK: its toJSON reads the removed cameraId getter and throws, drop the guard with the stub window
-        if not callable(getattr(sensor, "_setId", None)):
-            self._logger.warn(
-                f'Plugin "{self._plugin["id"]}" uses a pre-standalone SDK, sensor "{sensor.name}" stays unavailable. Update the plugin.'
-            )
-            return
-
         # producers need the global stream too: assignment changes must reach
         # owned sensors, their detection fan-out reads assignedCameraIds
         await self._ensure_global_subscription()

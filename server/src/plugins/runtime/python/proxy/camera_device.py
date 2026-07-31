@@ -405,13 +405,6 @@ class CameraDeviceProxy(Subscribed, CameraDeviceInterface):
         return self._storage_controller.createCameraStorage(self.id, schemas)
 
     async def addSensor(self, sensor: Sensor[Any, Any, Any]) -> None:
-        # pre-standalone SDK: its toJSON reads the removed cameraId getter and throws, drop the guard with the stub window
-        if not callable(getattr(sensor, "_setId", None)):
-            self._logger.warn(
-                f'Plugin "{self._plugin["id"]}" uses a pre-standalone SDK, sensor "{sensor.name}" stays unavailable. Update the plugin.'
-            )
-            return
-
         plugin_id = self._plugin["id"]
         sensor._setPluginId(plugin_id)  # pyright: ignore[reportPrivateUsage]
 

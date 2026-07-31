@@ -122,10 +122,6 @@ export class NATS {
                   'rpc.camera.*.controller.rpc.streamUrl',
                   'rpc.camera.*.controller.rpc.refreshStates',
 
-                  // Sensor controller — state reads only
-                  'rpc.camera.*.sensors.rpc.getSensors',
-                  'rpc.camera.*.sensors.rpc.getSensorStates',
-
                   // NVR specific — read-only access
                   'rpc.plugin.*.child.rpc.getInstanceId',
                   'rpc.plugin.*.child.rpc.getEvents',

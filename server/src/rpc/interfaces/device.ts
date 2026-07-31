@@ -1,5 +1,4 @@
 import type { Camera, ProbeConfig, ProbeStream, SnapshotInterface, StreamingInterface } from '@camera.ui/sdk';
-import type { SensorJSON } from '@camera.ui/sdk/internal';
 import type { PartialReturnType } from '../../types.js';
 import type { SensorRefreshedState } from './sensor.js';
 
@@ -61,6 +60,4 @@ export interface CameraDeviceInterface extends CameraDeviceImplementation {
   snapshotWithMeta(sourceId: string, forceNew?: boolean): Promise<SnapshotWithMeta | undefined>;
   probeStream(sourceId: string, probeConfig?: ProbeConfig, refresh?: boolean): Promise<ProbeStream | undefined>;
   getStreamStatus(sourceId: string): Promise<string>;
-  registerSensor(sensor: SensorJSON, pluginId: string): Promise<boolean>;
-  unregisterSensor(sensorId: string): void;
 }

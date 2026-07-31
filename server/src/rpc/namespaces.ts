@@ -53,12 +53,6 @@ export interface SensorProviderNamespaces {
   sensorRpc: string;
 }
 
-/** @deprecated stub window for pre-standalone plugins, remove in the first minor after the standalone-sensors release */
-export interface LegacySensorNamespaces {
-  sensorSubject: string;
-  sensorRpc: string;
-}
-
 export interface FrameWorkerDetectionNamespaces {
   detectionRpc: string;
 }
@@ -171,14 +165,6 @@ export class NamespaceManager {
   static sensorProviderNamespaces(pluginId: string, sensorId: string): SensorProviderNamespaces {
     return {
       sensorRpc: `plugin.${pluginId}.sensor.${sensorId}.rpc`,
-    };
-  }
-
-  /** @deprecated stub window for pre-standalone plugins, remove in the first minor after the standalone-sensors release */
-  static legacySensorNamespaces(cameraId: string): LegacySensorNamespaces {
-    return {
-      sensorSubject: `camera.${cameraId}.sensors.subject`,
-      sensorRpc: `camera.${cameraId}.sensors.rpc`,
     };
   }
 

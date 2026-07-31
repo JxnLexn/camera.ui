@@ -180,7 +180,7 @@ export const dbMqttSchema = zod.object({
       prefix: zod.string().default('homeassistant'),
     })
     .default({ enabled: false, prefix: 'homeassistant' }),
-  // stub window, remove with mqtt sweepLegacyRetained in the first minor after the standalone-sensors release
+  // guards mqtt sweepLegacyRetained, keep while pre-2.0.23 installs can upgrade straight to current
   legacySensorSweepDone: zod.boolean().default(false),
 });
 

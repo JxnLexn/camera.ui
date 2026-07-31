@@ -43,9 +43,6 @@ interface SensorMessage {
   displayName?: string;
   capabilities?: string[];
   connected?: boolean;
-  // stub window for pre-standalone clients keying on globalId/cameraId, remove in the first minor after the standalone-sensors release
-  globalId?: string;
-  cameraId?: string;
 }
 
 const FORWARDED_TYPES: ReadonlySet<DetectionEventType> = new Set(['start', 'update', 'end', 'segment-start', 'segment-end']);
@@ -185,10 +182,6 @@ export class EventsNamespace {
   }
 
   private emitSensor(message: SensorMessage): void {
-    // stub window aliases for pre-standalone clients
-    message.globalId = message.sensorId;
-    message.cameraId = message.assignedCameraIds[0];
-
     // fan out into each assigned camera's room, 'all' subscribers see everything once
     const rooms = this.nsp.to('all');
     for (const cameraId of message.assignedCameraIds) rooms.to(`camera:${cameraId}`);

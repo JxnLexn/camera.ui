@@ -566,18 +566,6 @@ export const cameraSensorConfigParamsSchema = zod.object({
   sensorId: zod.string(),
 });
 
-/** @deprecated stub window, superseded by /api/sensors schemas */
-export const legacyCameraSensorCommandParamsSchema = zod.object({
-  cameraname: zod.string(),
-  stableId: zod.string(),
-});
-
-/** @deprecated stub window, superseded by /api/sensors schemas */
-export const legacyCameraSensorCommandSchema = zod.object({
-  property: zod.string(),
-  value: zod.unknown(),
-});
-
 export const scopedSensorParamsSchema = zod.object({
   cameraname: zod.string(),
   scope: zod.string(),

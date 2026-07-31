@@ -75,12 +75,6 @@ export class SensorManagerProxy implements SensorManager {
   }
 
   public async addSensor(sensor: Sensor<any, any, any>): Promise<void> {
-    // pre-standalone SDK: its toJSON reads the removed cameraId getter and throws, drop the guard with the stub window
-    if (typeof (sensor as { _setId?: unknown })._setId !== 'function') {
-      this.#logger.warn(`Plugin "${this.#plugin.id}" uses a pre-standalone SDK, sensor "${sensor.name}" stays unavailable. Update the plugin.`);
-      return;
-    }
-
     // producers need the global stream too: assignment changes must reach
     // owned sensors, their detection fan-out reads assignedCameraIds
     await this.#ensureGlobalSubscription();

@@ -3,8 +3,6 @@ import { createReadStream, truncate } from 'node:fs';
 import { Readable } from 'node:stream';
 import { container } from 'tsyringe';
 
-import { resolveSensorSemantics } from '../../sensors/semantics.js';
-import { isWritableSensor } from '../../sensors/types.js';
 import { createSourceName } from '../../utils/camera.js';
 import { CamerasService } from '../services/cameras.service.js';
 import { PluginsService } from '../services/plugins.service.js';
@@ -21,8 +19,6 @@ import type {
   AuthLoginRequest,
   CameraLineInsertPatchRequest,
   CameraProbeSourceQueryRequest,
-  CameraSensorCommandParamsRequest,
-  CameraSensorCommandRequest,
   CameraSnapshotQueryRequest,
   CameraSourceParamsRequest,
   CameraZoneInsertPatchRequest,
@@ -515,118 +511,6 @@ export class CamerasController {
         }));
 
       return reply.code(200).send({ sources });
-    } catch (error: any) {
-      return reply.code(500).send({
-        statusCode: 500,
-        message: error.message,
-      });
-    }
-  }
-
-  /** @deprecated stub window for the pre-standalone HA integration, superseded by /api/sensors, remove in the first minor after the standalone-sensors release */
-  public getSensorsByName(req: FastifyRequest<AuthLoginRequest & CamerasParamsRequest>, reply: FastifyReply): FastifyReply {
-    try {
-      const camera = this.service.findByName(req.params.cameraname) ?? this.service.findById(req.params.cameraname);
-      const cameraController = this.api.getCamera(camera?._id ?? '');
-
-      if (!camera || !cameraController) {
-        return reply.code(404).send({
-          statusCode: 404,
-          message: 'Camera not exists',
-        });
-      }
-
-      const sensors = cameraController.sensorController.getAllSensors().map((sensor) => ({
-        id: sensor.id,
-        // stub window: pre-standalone clients key on globalId/stableId, alias both to the persistent id
-        globalId: sensor.id,
-        stableId: sensor.id,
-        type: sensor.type,
-        name: sensor.name,
-        displayName: sensor.displayName,
-        assignedCameraIds: sensor.data.assignedCameraIds,
-        exposed: sensor.data.exposed,
-        properties: sensor.data.properties,
-        capabilities: sensor.capabilities,
-        semantics: resolveSensorSemantics(sensor.data),
-      }));
-
-      return reply.code(200).send({ sensors });
-    } catch (error: any) {
-      return reply.code(500).send({
-        statusCode: 500,
-        message: error.message,
-      });
-    }
-  }
-
-  /** @deprecated stub window for the pre-standalone HA integration, superseded by /api/sensors, remove in the first minor after the standalone-sensors release */
-  public getRegisteredSensorsByName(req: FastifyRequest<AuthLoginRequest & CamerasParamsRequest>, reply: FastifyReply): FastifyReply {
-    try {
-      const camera = this.service.findByName(req.params.cameraname) ?? this.service.findById(req.params.cameraname);
-      const cameraController = this.api.getCamera(camera?._id ?? '');
-
-      if (!camera || !cameraController) {
-        return reply.code(404).send({
-          statusCode: 404,
-          message: 'Camera not exists',
-        });
-      }
-
-      const sensors = cameraController.sensorController.getAllSensors().map((sensor) => ({
-        type: sensor.type,
-        pluginId: sensor.pluginId,
-        requiresFrames: sensor.data.requiresFrames,
-      }));
-
-      return reply.code(200).send({ sensors });
-    } catch (error: any) {
-      return reply.code(500).send({
-        statusCode: 500,
-        message: error.message,
-      });
-    }
-  }
-
-  /**
-   * @deprecated stub window for the pre-standalone HA integration, superseded by
-   * POST /api/sensors/:id/command, remove in the first minor after the standalone-sensors release
-   */
-  public async commandSensorByName(
-    req: FastifyRequest<AuthLoginRequest & CameraSensorCommandParamsRequest & CameraSensorCommandRequest>,
-    reply: FastifyReply,
-  ): Promise<FastifyReply> {
-    try {
-      const camera = this.service.findByName(req.params.cameraname) ?? this.service.findById(req.params.cameraname);
-      const cameraController = this.api.getCamera(camera?._id ?? '');
-
-      if (!camera || !cameraController) {
-        return reply.code(404).send({
-          statusCode: 404,
-          message: 'Camera not exists',
-        });
-      }
-
-      // sensor ids are persistent entity ids now, the route param keeps its old name for the stub window
-      const sensor = cameraController.sensorController.getAllSensors().find((s) => s.id === req.params.stableId);
-
-      if (!sensor) {
-        return reply.code(404).send({
-          statusCode: 404,
-          message: 'Sensor not exists',
-        });
-      }
-
-      if (!isWritableSensor(sensor.type, sensor.pluginId)) {
-        return reply.code(400).send({
-          statusCode: 400,
-          message: 'Sensor is read-only',
-        });
-      }
-
-      await sensor.updateValue(req.body.property, req.body.value);
-
-      return reply.code(204).send();
     } catch (error: any) {
       return reply.code(500).send({
         statusCode: 500,

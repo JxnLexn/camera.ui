@@ -35,7 +35,7 @@ import type {
   SensorLike,
   VideoStreamInfo,
 } from '@camera.ui/sdk';
-import type { DetectionEventMessage, SensorJSON } from '@camera.ui/sdk/internal';
+import type { DetectionEventMessage } from '@camera.ui/sdk/internal';
 import type { CameraUiAPI } from '../api.js';
 import type { SourceCodecInfo } from './codecCache.js';
 import type { Go2RtcApi } from '../go2rtc/api/index.js';
@@ -281,16 +281,6 @@ export class CameraController extends CameraDevice implements CameraDeviceInterf
   @RPCMethod
   public async streamUrl(sourceId: string): Promise<string | undefined> {
     return this.cameraDeviceProxy?.streamUrl?.(sourceId);
-  }
-
-  @RPCMethod
-  public async registerSensor(sensor: SensorJSON, pluginId: string): Promise<boolean> {
-    return this.sensorController.registerSensor(sensor, pluginId);
-  }
-
-  @RPCMethod
-  public unregisterSensor(sensorId: string): void {
-    this.sensorController.unregisterSensor(sensorId);
   }
 
   @RPCMethod

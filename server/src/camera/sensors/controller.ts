@@ -1,20 +1,17 @@
-import { RPCClass, RPCMethod } from '@camera.ui/rpc';
 import { container } from 'tsyringe';
 
 import { NamespaceManager } from '../../rpc/namespaces.js';
 
 import type { Promisify, RPCClient } from '@camera.ui/rpc';
 import type { SensorLike, SensorType } from '@camera.ui/sdk';
-import type { SensorJSON } from '@camera.ui/sdk/internal';
 import type { InternalEventBus, SensorLifecyclePayload } from '../../internal-bus.js';
 import type { DetectionCoordinatorInterface } from '../../rpc/interfaces/detection.js';
-import type { SensorRefreshedState, SensorWriteMessage, StoredSensorData } from '../../rpc/interfaces/sensor.js';
+import type { SensorRefreshedState, SensorWriteMessage } from '../../rpc/interfaces/sensor.js';
 import type { SensorRegistry } from '../../sensors/registry.js';
 import type { ServerSensor } from '../../sensors/sensor.js';
 import type { CameraController } from '../controller.js';
 import type { FrameWorker } from '../decoder/worker.js';
 
-@RPCClass
 export class SensorController {
   private readonly registry: SensorRegistry;
   private readonly disposables: (() => void | Promise<void>)[] = [];
@@ -32,10 +29,6 @@ export class SensorController {
   }
 
   public async init(): Promise<void> {
-    const legacyNs = NamespaceManager.legacySensorNamespaces(this.cameraController.id);
-    const closeProxy = await this.proxy.registerHandler(legacyNs.sensorRpc, this, { isolatedConnection: true });
-    this.disposables.push(closeProxy);
-
     // Coordinator-published write batches for detection-sensor properties —
     // worker owns the state, we only mirror.
     const writeNs = NamespaceManager.sensorCameraViewNamespaces(this.cameraController.id);
@@ -127,28 +120,5 @@ export class SensorController {
     this.detectionCoordinatorProxy.reconcileSensorTriggers(activeSensorIds).catch((error: unknown) => {
       this.cameraController.logger.warn('Failed to reconcile sensor triggers:', error);
     });
-  }
-
-  /** @deprecated stub window for pre-standalone plugins, remove in the first minor after the standalone-sensors release */
-  @RPCMethod
-  public registerSensor(sensor: SensorJSON, pluginId: string): boolean {
-    this.cameraController.logger.warn(`Plugin "${pluginId}" registered sensor "${sensor.name}" via the legacy camera API. Update the plugin, sensors stay unavailable.`);
-    return false;
-  }
-
-  /** @deprecated stub window for pre-standalone plugins, remove in the first minor after the standalone-sensors release */
-  @RPCMethod
-  public unregisterSensor(_sensorId: string): void {}
-
-  /** @deprecated stub window for pre-standalone plugins, remove in the first minor after the standalone-sensors release */
-  @RPCMethod
-  public getSensors(_pluginId?: string): StoredSensorData[] {
-    return [];
-  }
-
-  /** @deprecated stub window for pre-standalone plugins, remove in the first minor after the standalone-sensors release */
-  @RPCMethod
-  public getSensorStates(): Record<string, SensorRefreshedState> {
-    return {};
   }
 }

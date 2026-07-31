@@ -16,8 +16,6 @@ import {
   scopedPluginParamsSchema,
   scopedSensorParamsSchema,
   cameraSensorConfigParamsSchema,
-  legacyCameraSensorCommandParamsSchema,
-  legacyCameraSensorCommandSchema,
   snapshotQuerySchema,
   streamParamsSchema,
 } from '../schemas/cameras.schema.js';
@@ -146,50 +144,6 @@ export const CamerasRoute: FastifyPluginAsync = async (app: FastifyInstance): Pr
       tags: ['Cameras'],
       summary: 'Get ready-to-use RTSP URLs for all stream sources of a camera',
       params: cameraParamsSchema,
-    },
-  });
-
-  // stub window: the three legacy sensor routes below go away in the first minor after the standalone-sensors release
-  app.withTypeProvider<ZodTypeProvider>().route({
-    url: '/:cameraname/sensors',
-    method: 'GET',
-    preValidation: [validJWTNeeded],
-    handler: camerasController.getSensorsByName.bind(camerasController),
-    schema: {
-      tags: ['Cameras'],
-      summary: 'Get the current sensor states for a camera',
-      deprecated: true,
-      description: 'Superseded by /api/sensors. Kept one release for pre-standalone clients, then removed.',
-      params: cameraParamsSchema,
-    },
-  });
-
-  app.withTypeProvider<ZodTypeProvider>().route({
-    url: '/:cameraname/sensors/registered',
-    method: 'GET',
-    preValidation: [validJWTNeeded],
-    handler: camerasController.getRegisteredSensorsByName.bind(camerasController),
-    schema: {
-      tags: ['Cameras'],
-      summary: 'Get all registered sensor types for a camera, including currently unassigned providers',
-      deprecated: true,
-      description: 'Superseded by /api/sensors. Kept one release for pre-standalone clients, then removed.',
-      params: cameraParamsSchema,
-    },
-  });
-
-  app.withTypeProvider<ZodTypeProvider>().route({
-    url: '/:cameraname/sensors/:stableId/command',
-    method: 'POST',
-    preValidation: [validJWTNeeded, onlyAdminCanDoThisAction],
-    handler: camerasController.commandSensorByName.bind(camerasController),
-    schema: {
-      tags: ['Cameras'],
-      summary: 'Send a control command to a camera sensor',
-      deprecated: true,
-      description: 'Superseded by POST /api/sensors/:id/command. Kept one release for pre-standalone clients, then removed.',
-      params: legacyCameraSensorCommandParamsSchema,
-      body: legacyCameraSensorCommandSchema,
     },
   });
 

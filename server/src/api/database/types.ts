@@ -354,7 +354,7 @@ export interface DBSensorHistoryEntry {
   timestamp: number;
 }
 
-/** @deprecated stub window, pre-standalone shape read only by the v2.1.0 migration, remove with it */
+// pre-standalone shape, read only by the v2.1.0 migration
 export interface DBVirtualSensor {
   readonly _id: string;
   cameraId: string;
