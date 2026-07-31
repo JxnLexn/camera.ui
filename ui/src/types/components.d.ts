@@ -320,6 +320,7 @@ declare module 'vue' {
     'IMdi:bug': typeof import('~icons/mdi/bug')['default']
     'IMdi:cancel': typeof import('~icons/mdi/cancel')['default']
     'IMdi:car': typeof import('~icons/mdi/car')['default']
+    'IMdi:cast': typeof import('~icons/mdi/cast')['default']
     'IMdi:cctv': typeof import('~icons/mdi/cctv')['default']
     'IMdi:cctvOff': typeof import('~icons/mdi/cctv-off')['default']
     'IMdi:check': typeof import('~icons/mdi/check')['default']

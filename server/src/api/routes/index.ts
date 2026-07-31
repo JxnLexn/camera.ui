@@ -3,6 +3,7 @@ import { AuthRoute } from './auth.routes.js';
 import { AutomationsRoute } from './automations.routes.js';
 import { BackupRoute } from './backup.routes.js';
 import { CamerasRoute } from './cameras.routes.js';
+import { CastRoute } from './cast.routes.js';
 import { ConfigRoute } from './config.routes.js';
 import { DownloadRoute } from './download.routes.js';
 import { FilesRoute } from './files.routes.js';
@@ -39,6 +40,7 @@ export class FastifyRoutes {
     await this.app.register(AuthRoute, { prefix: '/api/auth' });
     await this.app.register(BackupRoute, { prefix: '/api/backup' });
     await this.app.register(CamerasRoute, { prefix: '/api/cameras' });
+    await this.app.register(CastRoute, { prefix: '/api/cast' });
     await this.app.register(ConfigRoute, { prefix: '/api/config' });
     await this.app.register(DownloadRoute, { prefix: '/api/download' });
     await this.app.register(FilesRoute, { prefix: '/api/files' });

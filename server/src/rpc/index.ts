@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { container } from 'tsyringe';
 
 import { WorkersService } from '../api/services/workers.service.js';
+import { CastManager } from '../manager/castManager.js';
 import { CoreManager } from '../manager/coreManager.js';
 import { DeviceManager } from '../manager/deviceManager.js';
 import { DiscoveryManager } from '../manager/discoveryManager.js';
@@ -23,6 +24,7 @@ export class ProxyServer {
   public server: NATS;
   public proxy!: RPCClient;
 
+  public castManager!: CastManager;
   public coreManager!: CoreManager;
   public deviceManager!: DeviceManager;
   public discoveryManager!: DiscoveryManager;
@@ -59,6 +61,7 @@ export class ProxyServer {
 
     if (!this.workerMode) {
       this.api = container.resolve<CameraUiAPI>('api');
+      this.castManager = new CastManager();
       this.coreManager = new CoreManager();
       this.deviceManager = new DeviceManager();
       this.discoveryManager = new DiscoveryManager();
@@ -141,6 +144,7 @@ export class ProxyServer {
     await this.proxy.connect();
 
     if (!this.workerMode) {
+      await this.castManager.register();
       await this.coreManager.register();
       await this.deviceManager.register();
       await this.discoveryManager.register();
@@ -152,6 +156,7 @@ export class ProxyServer {
 
   public async close(): Promise<void> {
     if (!this.workerMode) {
+      await safeAsync(this.castManager.destroy());
       await safeAsync(this.terminalManager.destroy());
       await safeAsync(this.downloadManager.destroy());
       await safeAsync(this.discoveryManager.destroy());

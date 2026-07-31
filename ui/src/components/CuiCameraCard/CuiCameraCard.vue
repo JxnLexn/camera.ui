@@ -670,6 +670,20 @@
           </Button>
 
           <Button
+            v-if="castTargets.length && hasPermission(undefined, 'admin')"
+            v-tooltip.top="{ value: $t('components.player.cast') }"
+            fluid
+            text
+            severity="contrast"
+            class="cui-icon-lg not-hover:text-surface-400"
+            @click="castMenuRef?.toggleMenu"
+          >
+            <template #icon>
+              <i-mdi:cast width="100%" height="100%" />
+            </template>
+          </Button>
+
+          <Button
             v-if="!isDisabled"
             v-tooltip.top="{ value: $t('components.player.options') }"
             fluid
@@ -714,6 +728,18 @@
         },
       }"
     ></CuiMenu>
+
+    <CuiMenu
+      ref="castMenuRef"
+      :items="castMenuItems"
+      :popover="{
+        pt: {
+          content: {
+            class: 'p-0! rounded-xl! overflow-hidden!',
+          },
+        },
+      }"
+    ></CuiMenu>
   </div>
 </template>
 
@@ -732,6 +758,7 @@ import { NvrPlaybackKey, NvrPlaybackMapKey } from '@camera.ui/nvr';
 import VueZoomable from 'vue-zoomable';
 
 import { CamerasQuery } from '@/api/routes/cameras.js';
+import { castFn } from '@/api/routes/cast.js';
 import { startIntercomService, stopIntercomService } from '@/common/intercomService.js';
 import { enterNativePip, nativePipActive, registerAutoPipCandidate, unregisterAutoPipCandidate } from '@/common/pipService.js';
 import { randomLetter } from '@/common/utils.js';
@@ -769,6 +796,8 @@ const log = useLogger();
 const router = useRouter();
 const drawer = useCuiCameraDrawer();
 const dialog = useCuiDialog();
+const toast = useCuiToast();
+const notificationsSocket = useNotificationsSocket();
 const { mdBreakpoint } = useSharedCuiBreakpoint();
 const { isPipSupported, isAndroid } = useSharedCuiUserAgent();
 const { height: windowHeight } = useSharedWindowSize();
@@ -839,6 +868,7 @@ const speedOptions = [0.25, 0.5, 1, 2, 4, 8];
 const showDescription = ref(false);
 
 const streamMenuRef = useTemplateRef<InstanceType<typeof CuiMenu>>('streamMenuRef');
+const castMenuRef = useTemplateRef<InstanceType<typeof CuiMenu>>('castMenuRef');
 const detectionCanvasRef = useTemplateRef<InstanceType<typeof CuiBBoxPlayground>>('detectionCanvasRef');
 const ptzRef = useTemplateRef<InstanceType<typeof CuiPTZControl>>('ptzRef');
 const playerContainerRef = useTemplateRef('playerContainerRef');
@@ -1223,6 +1253,29 @@ const streamMenuItems = computed<MenuItem[]>(() => {
 });
 
 const streamMenuActive = computed(() => streamMenuItems.value.some((item) => item.toggle && item.toggleState));
+
+const castTargets = notificationsSocket.castTargets;
+
+const castMenuItems = computed<MenuItem[]>(() =>
+  castTargets.value.map((target) => ({
+    key: target.deviceId,
+    label: target.name,
+    onClick: () => sendCast(target.deviceId, target.name),
+  })),
+);
+
+async function sendCast(deviceId: string, name: string): Promise<void> {
+  const id = camera.value?._id;
+  if (!id) return;
+  const timestamp = nvrCurrentTimestamp.value;
+  const startMs = nvrPlaybackVisible.value && timestamp > 0 ? Math.round(timestamp / 1000) : undefined;
+  try {
+    await castFn({ deviceId, cameraId: id, startMs });
+    toast.add({ severity: 'success', detail: t('components.player.cast_sent', { name }), life: 2500 });
+  } catch {
+    toast.add({ severity: 'error', detail: t('components.player.cast_failed'), life: 3000 });
+  }
+}
 
 const cardPt = computed<PassThrough<CardPassThroughOptions>>(() => {
   const basePt: PassThrough<CardPassThroughOptions> = {

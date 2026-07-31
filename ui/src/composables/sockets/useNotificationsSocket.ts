@@ -1,19 +1,23 @@
 import { Badge } from '@capawesome/capacitor-badge';
 
+import { listCastTargetsFn } from '@/api/routes/cast.js';
 import { isCapacitor } from '@/connection/index.js';
 import { setFaviconBadge } from '@/utils/faviconBadge.js';
 
+import type { CastTarget } from '@/api/routes/cast.js';
 import type { SocketChannel } from '@/connection/index.js';
 import type { StoredNotification } from '@shared/types';
 
 export interface NotificationsSocketState {
   notifications: StoredNotification[];
+  castTargets: CastTarget[];
 }
 
 const HISTORY_LIMIT = 100;
 
 const state = reactive<NotificationsSocketState>({
   notifications: [],
+  castTargets: [],
 });
 
 let scope: ReturnType<typeof effectScope> | null = null;
@@ -45,8 +49,13 @@ function ensureChannel(): SocketChannel {
       state.notifications = data;
     });
 
+    ch.on<CastTarget[]>('castTargets', (data) => {
+      state.castTargets = data;
+    });
+
     ch.onReady(() => {
       fetchNotifications();
+      fetchCastTargets();
     });
 
     watch(
@@ -90,6 +99,16 @@ async function setNativeBadge(count: number): Promise<void> {
   const { isElectronApp, electron } = useElectron();
   if (isElectronApp && electron) {
     electron.send('set-badge-count', count);
+  }
+}
+
+async function fetchCastTargets(): Promise<void> {
+  const role = useAuthStore().user?.role;
+  if (role !== 'admin' && role !== 'master') return;
+  try {
+    state.castTargets = await listCastTargetsFn();
+  } catch {
+    // older server without the cast route
   }
 }
 
@@ -148,6 +167,7 @@ export function useNotificationsSocket() {
     notifications: computed(() => state.notifications),
     notificationCount: computed(() => state.notifications.length),
     unreadCount: computed(() => state.notifications.filter((n) => n.seenAt == null).length),
+    castTargets: computed(() => state.castTargets),
 
     connect,
     disconnect,
@@ -165,4 +185,5 @@ export function resetNotificationsSocket(): void {
   scope = null;
   channel = null;
   state.notifications = [];
+  state.castTargets = [];
 }
