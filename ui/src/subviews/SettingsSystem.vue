@@ -149,7 +149,7 @@
 <script setup lang="ts">
 import { compareVersions } from 'compare-versions';
 
-import { ApiQuery } from '@/api/routes/api.js';
+import { ApiQuery, apiInfo as fetchApiInfo } from '@/api/routes/api.js';
 import { downloadCertFn, ServerQuery } from '@/api/routes/server.js';
 import { asyncComponent } from '@/common/asyncComponent.js';
 import { isCapacitor } from '@/connection/index.js';
@@ -189,6 +189,8 @@ const loadingCert = ref(false);
 const isUpdatingElectron = ref(false);
 const isCheckingForElectronVersion = ref(false);
 const isCheckingForElectronUpdates = ref(false);
+
+let refreshRun = 0;
 
 const isElectronBuild = computed(() => apiInfo.value?.electron ?? false);
 
@@ -367,6 +369,23 @@ async function installElectronUpdate() {
   }
 }
 
+async function refreshAfterReconnect(): Promise<void> {
+  const run = ++refreshRun;
+
+  for (let attempt = 0; attempt < 30; attempt++) {
+    try {
+      await fetchApiInfo({ signal: AbortSignal.timeout(5000) });
+      if (run !== refreshRun) return;
+      apiQuery.queryClient.invalidateQueries({ queryKey: ['api'] });
+      serverQuery.queryClient.invalidateQueries({ queryKey: ['version'] });
+      return;
+    } catch {
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+      if (run !== refreshRun || !isOnline.value) return;
+    }
+  }
+}
+
 watch(
   apiInfo,
   () => {
@@ -395,9 +414,12 @@ watch([isOnline, restarting], ([online, restart], [wasOnline, wasRestart]) => {
   const restartEnded = wasRestart && !restart && online;
 
   if (reconnected || restartEnded) {
-    apiQuery.queryClient.invalidateQueries({ queryKey: ['api'] });
-    serverQuery.queryClient.invalidateQueries({ queryKey: ['version'] });
+    refreshAfterReconnect();
   }
+});
+
+onBeforeUnmount(() => {
+  refreshRun++;
 });
 
 onMounted(() => {
