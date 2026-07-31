@@ -29,6 +29,8 @@ Virtual sensors carry over automatically.
 
 - **Restart and similar buttons work behind Home Assistant and other proxies.** Pressing Restart through the Home Assistant panel failed with "Unsupported Media Type" because some proxies tag empty requests with a content type the server rejected. The server now accepts them.
 
+- **The Home Assistant integration survives reloads without a camera.ui restart.** With camera.ui in Docker, the network announcement also carried Docker's internal bridge addresses. Home Assistant could store one of those, and the next reload of the integration or restart of Home Assistant then failed to connect until camera.ui was restarted. Announcements now only carry real network addresses.
+
 - **Dragging cameras with a mouse works on touch screen PCs.** On a computer with both a touch screen and a mouse, reordering cameras on the home page and building a CamView grid only worked by touch, the mouse could not grab the cards. Mouse and touch now both work on such devices.
 
 - **Connecting a server whose account uses two-factor authentication works again.** The code step when adding such a server, or when finishing a pending 2FA challenge later, always failed even with the right code.

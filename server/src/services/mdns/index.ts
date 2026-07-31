@@ -1,3 +1,4 @@
+import { fetchViableNetworkAddresses } from '@camera.ui/common/network';
 import { getResponder } from '@homebridge/ciao';
 import { container } from 'tsyringe';
 
@@ -25,11 +26,15 @@ export class MdnsService {
       const dbs = container.resolve<Database>('dbs');
       const instanceId = dbs.settingsDB.get('settings')?.instanceId ?? '';
 
+      // docker/vm bridge addresses must not end up in the announcement
+      const addresses = fetchViableNetworkAddresses().map((viable) => viable.address);
+
       this.responder = getResponder();
       this.service = this.responder.createService({
         name: 'camera-ui',
         type: 'camera-ui',
         port: this.configService.config.port,
+        restrictedAddresses: addresses.length ? addresses : undefined,
         txt: {
           version: ConfigService.VERSION,
           id: instanceId,
