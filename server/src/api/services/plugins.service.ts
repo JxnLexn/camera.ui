@@ -1,6 +1,7 @@
 import { move, pathExists, readJson, remove } from 'fs-extra/esm';
 
 import { sleep, uuidv4 } from '@camera.ui/common/utils';
+import { readdir } from 'node:fs/promises';
 import { tmpdir, userInfo } from 'node:os';
 import { join } from 'node:path';
 import { container, delay, registry } from 'tsyringe';
@@ -20,6 +21,9 @@ import type { LoggerService } from '../../services/logger/index.js';
 import type { DBPlugin } from '../database/types.js';
 import type { PluginsProgress } from '../types/index.js';
 import type { SocketService } from '../websocket/index.js';
+
+const VENV_DIR = /^python(-electron)?-\d+\.\d+-/;
+const REQUIREMENTS_LOCK = 'requirements-lock.txt';
 
 @registry([
   {
@@ -298,6 +302,10 @@ export class PluginsService {
 
       await this.extrackBundeledPlugin(log, targetDir);
 
+      if (update && backedUp) {
+        await this.keepPythonEnv(log, backupTempDir, targetDir);
+      }
+
       log.step('Cleaning up');
       await remove(backupTempDir);
       log.done();
@@ -342,6 +350,23 @@ export class PluginsService {
     // installPlugin handles its own error/restore output, so it stays outside the try above.
     await this.installPlugin(log, pluginName, version, targetDir, true);
     return true;
+  }
+
+  private async keepPythonEnv(log: InstallLogger, backupTempDir: string, targetDir: string): Promise<void> {
+    const entries = await readdir(backupTempDir, { withFileTypes: true }).catch(() => []);
+    const kept = entries.filter((entry) => (entry.isDirectory() && VENV_DIR.test(entry.name)) || entry.name === REQUIREMENTS_LOCK);
+
+    if (!kept.length) {
+      return;
+    }
+
+    log.step('Keeping Python environment');
+
+    for (const entry of kept) {
+      await move(join(backupTempDir, entry.name), join(targetDir, entry.name), { overwrite: true });
+    }
+
+    log.done();
   }
 
   private async uninstallPlugin(log: InstallLogger, pluginName: string, targetDir: string): Promise<void> {

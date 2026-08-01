@@ -496,6 +496,24 @@ export class PythonInstaller {
 
     if (!existsSync(this.venvPath)) {
       await this.createVenv();
+      await this.removeStaleVenvs();
+    }
+  }
+
+  private async removeStaleVenvs(): Promise<void> {
+    const parent = dirname(this.venvPath!);
+    const current = basename(this.venvPath!);
+    const ownVenv = new RegExp(`^${this.pythonDir}-\\d+\\.\\d+-`);
+
+    const entries = await readdir(parent, { withFileTypes: true }).catch(() => []);
+
+    for (const entry of entries) {
+      if (!entry.isDirectory() || entry.name === current || !ownVenv.test(entry.name)) {
+        continue;
+      }
+
+      this.logger.trace(`Removing stale venv: ${entry.name}`);
+      await remove(join(parent, entry.name));
     }
   }
 
