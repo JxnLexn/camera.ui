@@ -633,12 +633,17 @@ export interface InterfaceSettinges {
   landingPage: string;
 }
 
+export interface SensorsSettings {
+  hideCameraBound: boolean;
+}
+
 export interface UiSettingsLocalStorage {
   cameras: CamerasSettings;
   camview: CamviewSettings;
   config: ConfigSettings;
   console: ConsoleSettings;
   interface: InterfaceSettinges;
+  sensors: SensorsSettings;
 }
 
 export interface ThemeLocalStorage {

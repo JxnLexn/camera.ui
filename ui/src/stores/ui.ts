@@ -30,6 +30,9 @@ const defaultUiSettings: UiSettingsLocalStorage & LoggerLocalStorage = {
     navbarStayCollapsed: true,
     landingPage: '/home',
   },
+  sensors: {
+    hideCameraBound: true,
+  },
   'cui-logger-debug': 1,
   'cui-logger-recording': 1,
 };

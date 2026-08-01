@@ -19,15 +19,35 @@
         </InputIcon>
         <InputText v-model="searchQuery" :placeholder="t('views.sensors.search')" class="w-full" />
       </IconField>
+
+      <Button v-tooltip.left="{ value: t('views.sensors.settings') }" severity="secondary" outlined class="cui-button shrink-0" @click="menuRef?.toggleMenu($event)">
+        <template #icon>
+          <i-carbon:settings class="w-4.5 h-4.5" />
+        </template>
+      </Button>
+
+      <CuiMenu
+        ref="menuRef"
+        :items="menuItems"
+        :auto-hide="false"
+        :popover="{
+          pt: {
+            root: { class: 'w-[22rem]' },
+            content: {
+              class: 'p-0! rounded-xl! overflow-hidden!',
+            },
+          },
+        }"
+      />
     </div>
 
     <div v-if="isLoading" class="flex flex-1 min-h-0 flex-col items-center justify-center w-full gap-4 py-16">
       <ProgressSpinner stroke-width="5" class="w-[30px] h-[30px]" />
     </div>
 
-    <div v-else-if="!sensors.length" class="flex flex-1 min-h-0 flex-col items-center justify-center w-full gap-4 py-20">
+    <div v-else-if="!rows.length" class="flex flex-1 min-h-0 flex-col items-center justify-center w-full gap-4 py-20">
       <i-material-symbols:home-iot-device-outline class="w-12 h-12 text-muted" />
-      <span class="text-muted text-sm">{{ t('views.sensors.no_sensors') }}</span>
+      <span class="text-muted text-sm">{{ sensors.length ? t('views.sensors.no_matches') : t('views.sensors.no_sensors') }}</span>
     </div>
 
     <div v-else class="flex min-h-0 flex-col">
@@ -200,6 +220,9 @@ const dialog = useCuiDialog();
 const { t } = useI18n();
 const { smBreakpoint } = useSharedCuiBreakpoint();
 
+const uiStore = useUiStore();
+const { uiSettings } = storeToRefs(uiStore);
+
 const { data: sensorsData, isBusy: isLoading } = sensorsQuery.getSensorsQuery();
 const { data: camerasData } = camerasQuery.getCamerasQuery({ page: 1, pageSize: -1 });
 const { mutateAsync: createVirtualSensor, isPending: isCreating } = sensorsQuery.createVirtualSensorQuery();
@@ -220,12 +243,28 @@ const tablePtOptions: PassThrough<DataTablePassThroughOptions> = {
   },
 };
 
+const menuRef = useTemplateRef('menuRef');
+
 const searchQuery = ref('');
 const showHidden = ref(false);
 
 const isAdmin = computed(() => hasPermission(undefined, 'admin'));
 
 const sensors = computed(() => sensorsData.value ?? []);
+
+const cameraBoundCount = computed(() => sensors.value.filter((sensor) => sensor.assignmentLocked).length);
+
+const menuItems = computed(() => [
+  {
+    key: 'hideCameraBound',
+    label: t('views.sensors.hide_camera_bound'),
+    description: t('views.sensors.hide_camera_bound_hint'),
+    badge: cameraBoundCount.value ? String(cameraBoundCount.value) : undefined,
+    toggle: true,
+    toggleState: uiSettings.value.sensors.hideCameraBound,
+    onClick: () => (uiSettings.value.sensors.hideCameraBound = !uiSettings.value.sensors.hideCameraBound),
+  },
+]);
 
 const cameraOptions = computed(() => (camerasData.value?.result ?? []).map((camera) => ({ label: camera.name, value: camera._id })));
 
@@ -243,6 +282,7 @@ const rows = computed<SensorRow[]>(() => {
         .filter(Boolean)
         .join(', '),
     }))
+    .filter((row) => !uiSettings.value.sensors.hideCameraBound || !row.sensor.assignmentLocked)
     .filter((row) => !query || [row.label, row.typeLabel, row.pluginLabel, row.assignedLabel].some((value) => value.toLowerCase().includes(query)))
     .sort((a, b) => a.label.localeCompare(b.label));
 });

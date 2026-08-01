@@ -6,6 +6,8 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
+- **The Sensors page hides camera sensors by default.** Cameras that bring their own sensors, motion, battery, PTZ and the like, used to bury the sensors you actually manage. The new settings button next to the search field brings them back into the list.
+
 - **Incompatible plugins are stopped with a clear message instead of failing.** A plugin built for a different camera.ui plugin API no longer starts into cryptic errors: its card now says whether the plugin or camera.ui needs the update, and you get a notification. Installing a version that can't run on your server is refused with the reason, and the store marks plugins that need a newer camera.ui.
 
 ### Changed
