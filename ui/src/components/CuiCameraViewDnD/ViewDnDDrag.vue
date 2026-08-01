@@ -1,5 +1,5 @@
 <template>
-  <div ref="boxRef">
+  <div ref="boxRef" @dragstart="onNativeDragStart">
     <div :ref="drag" :style="collect.style">
       <Button
         :disabled="isDropped"
@@ -50,6 +50,12 @@ const [collect, drag] = useDrag(() => ({
 const isDragging = computed(() => collect.value.isDragging);
 // the touch backend renders no native preview, mouse drags on it need the custom one too
 const needsCustomPreview = computed(() => isDragging.value && isTouch.value);
+
+function onNativeDragStart(event: DragEvent): void {
+  if (isTouch.value) {
+    event.preventDefault();
+  }
+}
 
 function removeDragPreview(): void {
   if (dragPreview.value && document.body.contains(dragPreview.value)) {

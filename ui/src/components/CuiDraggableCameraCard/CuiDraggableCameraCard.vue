@@ -11,6 +11,7 @@
         viewTransitionName: viewTransition ? `camera-card-${camera.name.replace(/[^a-zA-Z0-9-_]/g, '-')}` : undefined,
       }"
       :draggable="canDrag && !isTouch"
+      @dragstart="onNativeDragStart"
     >
       <div v-if="camera.disabled" class="absolute inset-0 z-2 flex items-center justify-center bg-black/80 pointer-events-none">
         <i-fluent:video-off-32-filled class="w-8 h-8 text-white/60" />
@@ -88,7 +89,7 @@ import type { CuiDraggableCameraCardEmits, CuiDraggableCameraCardProps, DragItem
 
 const props = defineProps<CuiDraggableCameraCardProps>();
 
-defineEmits<CuiDraggableCameraCardEmits>();
+const emit = defineEmits<CuiDraggableCameraCardEmits>();
 
 const { x: mouseX, y: mouseY } = useSharedMouse();
 const { isTouch } = useSharedCuiUserAgent();
@@ -130,6 +131,7 @@ const [collect, drag] = useDrag(() => ({
     if (!didDrop) {
       props.moveCard(droppedId, originalIndex);
     }
+    emit('drag-end');
   },
 }));
 
@@ -219,6 +221,12 @@ function updateDragPreview() {
 
 function setRef(el: any) {
   card.value = drag(drop(el));
+}
+
+function onNativeDragStart(event: DragEvent) {
+  if (isTouch.value) {
+    event.preventDefault();
+  }
 }
 
 watch(needsCustomPreview, (newValue) => {

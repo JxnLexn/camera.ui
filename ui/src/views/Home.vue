@@ -59,6 +59,7 @@
                   @open-console="openConsoleDialog(camera.name)"
                   @open-settings="drawer.open({ cameraName: camera.name })"
                   @click="onCardClick(camera)"
+                  @drag-end="onCardDragEnd"
                 />
               </TransitionGroup>
             </DndProvider>
@@ -89,6 +90,7 @@
                     @open-console="openConsoleDialog(camera.name)"
                     @open-settings="drawer.open({ cameraName: camera.name })"
                     @click="onCardClick(camera)"
+                    @drag-end="onCardDragEnd"
                   />
                 </TransitionGroup>
               </DndProvider>
@@ -213,6 +215,8 @@ interface CameraGroup {
   cameras: DBCamera[];
 }
 
+const CLICK_AFTER_DRAG_GRACE = 300;
+
 const CameraConsoleDialog = asyncComponent(() => import('@/components/CuiDialog/templates/CameraConsole/CameraConsole.vue'));
 
 const camerasQuery = new CamerasQuery();
@@ -233,6 +237,8 @@ const { uiSettings } = storeToRefs(uiStore);
 const { data: cameras, isLoading: camerasLoading } = camerasQuery.getCamerasQuery({ page: 1, pageSize: -1 });
 
 const snapshotRefs = shallowRef<Record<string, InstanceType<typeof CuiCameraSnapshot>>>({});
+
+let lastDragEnd = 0;
 
 const isLoading = computed(() => camerasLoading.value);
 const isAdmin = computed(() => hasPermission(undefined, 'admin'));
@@ -364,7 +370,14 @@ function toggleSelectAll() {
   selectedIds.value = allSelected.value ? new Set() : new Set(sortedCameras.value.map((camera) => camera._id));
 }
 
+function onCardDragEnd() {
+  lastDragEnd = Date.now();
+}
+
 function onCardClick(camera: DBCamera) {
+  // the mouse release that ends a drag is followed by a click on the card below
+  if (Date.now() - lastDragEnd < CLICK_AFTER_DRAG_GRACE) return;
+
   if (!selectionMode.value) {
     router.push(`/cameras/${camera.name}`);
     return;

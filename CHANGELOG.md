@@ -14,6 +14,8 @@ All notable changes to this project will be documented in this file.
 
 ### Fixed
 
+- **Dragging cameras on a PC with a touch screen behaves like a normal drag now.** The card showed the not-allowed cursor, then hung on the pointer after releasing the mouse and only dropped on a second click, which also opened that camera. Dragging cameras into a CamView had the same problem.
+
 - **The worker decoder can be set back to "Same as server".** Saving it failed with "Validation failed", and the previous choice would have stayed in place even if it had saved.
 
 - **No more timeout warning after changing frames per second or the decoder.** Both settings restart the frame worker, and the log complained 30 seconds later that the worker had not accepted them. It had, through the restart.

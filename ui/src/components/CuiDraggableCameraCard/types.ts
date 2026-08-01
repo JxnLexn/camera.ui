@@ -16,6 +16,7 @@ export interface CuiDraggableCameraCardEmits {
   (e: 'open-console'): void;
   (e: 'open-settings'): void;
   (e: 'click'): void;
+  (e: 'drag-end'): void;
 }
 
 export interface DragItem {
