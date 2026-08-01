@@ -509,7 +509,7 @@
 <script setup lang="ts">
 import { useCameraStorage, useSensors, useSensorStorage } from '@camera.ui/browser';
 import { canCreateCameras, canProvideSensorsToAnyCameras, isHub, SensorType } from '@camera.ui/sdk';
-import { getAccessorySensorTypes, getAssignmentKey, getCoreSensorTypes, getDetectionSensorTypes, isSingleProviderType } from '@shared/types';
+import { getAccessorySensorTypes, getAssignmentKey, getCoreSensorTypes, getDetectionSensorTypes, isSingleProviderType, VIRTUAL_SENSOR_OWNER_ID } from '@shared/types';
 
 import { CamerasQuery } from '@/api/routes/cameras.js';
 import { PluginsQuery } from '@/api/routes/plugins.js';
@@ -581,7 +581,8 @@ const selectedAccessoryPluginName = computed(() => {
 const selectedAccessoryPluginId = computed(() => {
   if (!selectedAccessorySensorId.value) return '';
   const sensor = accessorySensorsForType.value.find((s) => s.id === selectedAccessorySensorId.value);
-  return sensor?.pluginId || '';
+  if (!sensor || sensor.pluginId === VIRTUAL_SENSOR_OWNER_ID) return '';
+  return sensor.pluginId;
 });
 
 const accessoriesExtensions = computed<PluginExtension[]>(() => {
@@ -595,6 +596,11 @@ const availableAccessoryTypes = computed<SensorType[]>(() => {
       if (ext.contract.provides.includes(type)) {
         types.add(type);
       }
+    }
+  }
+  for (const sensor of allSensors.value) {
+    if (ACCESSORIES_SENSOR_TYPES.includes(sensor.type)) {
+      types.add(sensor.type);
     }
   }
   return Array.from(types)
@@ -646,9 +652,8 @@ const assignedAccessoryPluginIds = computed<string[]>(() => {
 
 const accessorySensorsForType = computed<ReactiveSensor[]>(() => {
   const assigned = new Set(assignedAccessoryPluginIds.value);
-  if (!assigned.size) return [];
   return allSensors.value
-    .filter((s) => s.type === selectedAccessoryType.value && assigned.has(s.pluginId))
+    .filter((s) => s.type === selectedAccessoryType.value && (assigned.has(s.pluginId) || s.pluginId === VIRTUAL_SENSOR_OWNER_ID))
     .sort((a, b) => a.displayName.value.localeCompare(b.displayName.value));
 });
 

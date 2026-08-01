@@ -22,6 +22,8 @@ All notable changes to this project will be documented in this file.
 
 - **The camera drawer only shows the sensors of the plugin you picked.** Under Detection, Core and Accessories the sensor list held every sensor of that type on the camera, so a Reolink camera with CoreML enabled showed both plugins' object sensors no matter which plugin was selected, and the settings below could belong to the other plugin.
 
+- **Virtual sensors assigned to a camera show up in its drawer.** A virtual sensor assigned on the Sensors page stayed invisible under Accessories, because that list was built from the camera's plugins and a virtual sensor has none.
+
 - **Object assist no longer sticks to a detector that doesn't need it.** Assist adds labels to a camera or plugin that detects objects without video frames. Switching the object detector to one that works on frames left the old assist plugin assigned, invisible in the drawer and silently active again after switching back.
 
 ## [2.0.24]
