@@ -311,7 +311,10 @@ export const frameWorkerSettingsSchema = zod.object({
   fps: zod.number().min(0, 'Minimum 0 fps').max(30, 'Maximum 30 fps'),
   hqSnapshots: zod.boolean().default(false),
   decoder: frameWorkerDecoderSchema.optional(),
-  workerDecoder: frameWorkerDecoderSchema.optional(),
+  workerDecoder: frameWorkerDecoderSchema
+    .nullable()
+    .transform((decoder) => decoder ?? undefined)
+    .optional(),
 });
 
 export const cameraTypeSchema = zod.union([zod.literal('camera'), zod.literal('doorbell')]);

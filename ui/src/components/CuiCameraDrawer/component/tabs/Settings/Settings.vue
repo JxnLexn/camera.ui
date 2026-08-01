@@ -1336,12 +1336,12 @@
 
           <Field
             v-slot="{ errors }"
-            :model-value="cameraForm.frameWorkerSettings.workerDecoder?.hardware ?? 'inherit'"
-            name="frameWorkerSettings.workerDecoder.hardware"
+            :model-value="cameraForm.frameWorkerSettings.workerDecoder ?? null"
+            name="frameWorkerSettings.workerDecoder"
             as="div"
             class="flex flex-col field-gap"
           >
-            <label for="frameWorkerSettings.workerDecoder.hardware" class="cui-label">{{ $t('components.form.label.worker_decoder_hardware') }}</label>
+            <label for="frameWorkerSettings.workerDecoder" class="cui-label">{{ $t('components.form.label.worker_decoder_hardware') }}</label>
             <InputGroup>
               <Select
                 :model-value="cameraForm.frameWorkerSettings.workerDecoder?.hardware ?? 'inherit'"
@@ -1356,29 +1356,22 @@
             <Message v-if="!errors.length" severity="secondary" variant="simple" size="small" class="cui-input-hint">{{
               $t('components.form.hint.worker_decoder_hardware')
             }}</Message>
-          </Field>
 
-          <Field
-            v-if="workerDecoderDeviceVisible"
-            v-slot="{ errors }"
-            :model-value="cameraForm.frameWorkerSettings.workerDecoder?.device ?? ''"
-            name="frameWorkerSettings.workerDecoder.device"
-            as="div"
-            class="flex flex-col field-gap"
-          >
-            <label for="frameWorkerSettings.workerDecoder.device" class="cui-label">{{ $t('components.form.label.worker_decoder_device') }}</label>
-            <InputGroup>
-              <InputText
-                :model-value="cameraForm.frameWorkerSettings.workerDecoder?.device ?? ''"
-                :invalid="errors.length > 0"
-                :loading="isLoading"
-                type="text"
-                @update:model-value="(e) => setWorkerDecoderDevice(e ?? '')"
-              />
-            </InputGroup>
-            <Message v-if="!errors.length" severity="secondary" variant="simple" size="small" class="cui-input-hint">{{
-              $t('components.form.hint.decoder_device')
-            }}</Message>
+            <template v-if="workerDecoderDeviceVisible">
+              <label for="frameWorkerSettings.workerDecoder.device" class="cui-label">{{ $t('components.form.label.worker_decoder_device') }}</label>
+              <InputGroup>
+                <InputText
+                  :model-value="cameraForm.frameWorkerSettings.workerDecoder?.device ?? ''"
+                  :invalid="errors.length > 0"
+                  :loading="isLoading"
+                  type="text"
+                  @update:model-value="(e) => setWorkerDecoderDevice(e ?? '')"
+                />
+              </InputGroup>
+              <Message v-if="!errors.length" severity="secondary" variant="simple" size="small" class="cui-input-hint">{{
+                $t('components.form.hint.decoder_device')
+              }}</Message>
+            </template>
           </Field>
 
           <div class="w-full flex flex-col gap-2">

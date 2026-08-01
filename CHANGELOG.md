@@ -12,6 +12,10 @@ All notable changes to this project will be documented in this file.
 
 - **The old sensor compatibility paths are gone.** 2.0.23 kept the pre-rework sensor API alive for one release so outdated plugins and the old Home Assistant integration kept partly working. That window is over: update your plugins and the Home Assistant integration if you haven't yet.
 
+### Fixed
+
+- **The worker decoder can be set back to "Same as server".** Saving it failed with "Validation failed", and the previous choice would have stayed in place even if it had saved.
+
 ## [2.0.24]
 
 ### Changed
