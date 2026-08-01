@@ -27,6 +27,7 @@ import type { CameraInputSettings } from '@camera.ui/sdk/internal';
 import type { CameraUiAPI } from '../../api.js';
 import type { Go2RtcApi } from '../../go2rtc/api/index.js';
 import type { CreateStreamData, Go2RTCProbe } from '../../go2rtc/types.js';
+import type { SensorRegistry } from '../../sensors/registry.js';
 import type { DeepPartial } from '../../types.js';
 import type { DBCamera } from '../database/types.js';
 
@@ -361,6 +362,10 @@ export class CamerasService {
       }
     }
 
+    if (this.clearInvalidObjectAssist(camera)) {
+      mutated = true;
+    }
+
     if (mutated) {
       await this.dbs.camerasDB.put(camera._id, camera);
       this.api.updateCamera(this.transformCamera(camera));
@@ -394,6 +399,10 @@ export class CamerasService {
         (camera.assignments as Record<string, unknown>)[assignmentType] = undefined;
         mutated = true;
       }
+    }
+
+    if (this.clearInvalidObjectAssist(camera)) {
+      mutated = true;
     }
 
     if (mutated) {
@@ -446,6 +455,8 @@ export class CamerasService {
         }
       }
     }
+
+    this.clearInvalidObjectAssist(camera);
 
     const transformedCamera = this.transformCamera(camera);
     await this.dbs.camerasDB.put(camera._id, camera);
@@ -506,6 +517,8 @@ export class CamerasService {
         (camera.assignments as Record<string, unknown>)[key] = assignments.filter((p) => p.name !== plugin.pluginName);
       }
     }
+
+    this.clearInvalidObjectAssist(camera);
 
     const transformedCamera = this.transformCamera(camera);
 
@@ -824,6 +837,23 @@ export class CamerasService {
 
   private isMultiProviderType(type: string): boolean {
     return MULTI_PROVIDER_ASSIGNMENT_TYPES.has(type);
+  }
+
+  private clearInvalidObjectAssist(camera: DBCamera): boolean {
+    const assist = camera.assignments.objectAssist;
+    const object = camera.assignments.object;
+
+    if (!assist || Array.isArray(assist)) return false;
+
+    if (object && !Array.isArray(object) && object.name !== assist.name) {
+      const registry = container.resolve<SensorRegistry>('sensorRegistry');
+      const sensor = registry.getAllSensors({ connectedOnly: true, cameraId: camera._id, pluginId: object.id }).find((s) => s.type === SensorType.Object);
+      // provider not running, its frame need is unknown and the assignment stays untouched
+      if (!sensor?.data.requiresFrames) return false;
+    }
+
+    camera.assignments.objectAssist = undefined;
+    return true;
   }
 
   private migrateAssignments(camera: DBCamera): DBCamera {

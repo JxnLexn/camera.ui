@@ -634,8 +634,22 @@ const assignedAccessoryPlugins = computed<string[]>(() => {
   return pluginNames.sort((a, b) => pluginOrder.indexOf(a) - pluginOrder.indexOf(b));
 });
 
+const assignedAccessoryPluginIds = computed<string[]>(() => {
+  if (!selectedAccessoryType.value) return [];
+  const key = getAssignmentKey(selectedAccessoryType.value) as keyof typeof camera.value.assignments;
+  const assignments = camera.value.assignments[key];
+
+  if (Array.isArray(assignments)) return assignments.map((a) => a.id);
+  if (assignments && typeof assignments === 'object' && 'id' in assignments) return [assignments.id];
+  return [];
+});
+
 const accessorySensorsForType = computed<ReactiveSensor[]>(() => {
-  return allSensors.value.filter((s) => s.type === selectedAccessoryType.value).sort((a, b) => a.displayName.value.localeCompare(b.displayName.value));
+  const assigned = new Set(assignedAccessoryPluginIds.value);
+  if (!assigned.size) return [];
+  return allSensors.value
+    .filter((s) => s.type === selectedAccessoryType.value && assigned.has(s.pluginId))
+    .sort((a, b) => a.displayName.value.localeCompare(b.displayName.value));
 });
 
 const extensionStorage = useCameraStorage(cameraDevice, selectedPlugin);
@@ -718,8 +732,10 @@ const detectionPluginsForType = computed<PluginExtension[]>(() => {
 });
 
 const detectionSensorsForType = computed<ReactiveSensor[]>(() => {
+  const pluginName = selectedDetectionPlugin.value;
+  if (!pluginName) return [];
   return allSensors.value
-    .filter((s) => s.type === selectedDetectionType.value && s.id !== objectAssistSensor.value?.id)
+    .filter((s) => s.type === selectedDetectionType.value && getPluginNameFromId(s.pluginId) === pluginName)
     .sort((a, b) => a.displayName.value.localeCompare(b.displayName.value));
 });
 
@@ -794,7 +810,11 @@ const corePluginsForType = computed<PluginExtension[]>(() => {
 });
 
 const coreSensorsForType = computed<ReactiveSensor[]>(() => {
-  return allSensors.value.filter((s) => s.type === selectedCoreType.value).sort((a, b) => a.displayName.value.localeCompare(b.displayName.value));
+  const pluginName = selectedCorePlugin.value;
+  if (!pluginName) return [];
+  return allSensors.value
+    .filter((s) => s.type === selectedCoreType.value && getPluginNameFromId(s.pluginId) === pluginName)
+    .sort((a, b) => a.displayName.value.localeCompare(b.displayName.value));
 });
 
 const selectedCoreSensorPluginName = computed(() => {
@@ -979,12 +999,6 @@ function initCategorySelection(): void {
       } else {
         selectedDetectionPlugin.value = undefined;
       }
-      // Auto-select first sensor (use nextTick for async sensor loading)
-      nextTick(() => {
-        if (detectionSensorsForType.value.length && !selectedDetectionSensorId.value) {
-          selectedDetectionSensorId.value = detectionSensorsForType.value[0].id;
-        }
-      });
       break;
     }
     case 'core': {
@@ -999,12 +1013,6 @@ function initCategorySelection(): void {
       } else {
         selectedCorePlugin.value = undefined;
       }
-      // Auto-select first sensor (use nextTick for async sensor loading)
-      nextTick(() => {
-        if (coreSensorsForType.value.length && !selectedCoreSensorId.value) {
-          selectedCoreSensorId.value = coreSensorsForType.value[0].id;
-        }
-      });
       break;
     }
     case 'accessories':
@@ -1016,12 +1024,6 @@ function initCategorySelection(): void {
       nextTick(() => {
         if (assignedAccessoryPlugins.value.length && !selectedAccessoryPluginForConfig.value) {
           selectedAccessoryPluginForConfig.value = assignedAccessoryPlugins.value[0];
-        }
-      });
-      // Auto-select first sensor of the selected type (use nextTick for async sensor loading)
-      nextTick(() => {
-        if (accessorySensorsForType.value.length && !selectedAccessorySensorId.value) {
-          selectedAccessorySensorId.value = accessorySensorsForType.value[0].id;
         }
       });
       break;
@@ -1061,7 +1063,6 @@ async function onAccessoryPluginsChange(value: string | number | object | undefi
         pluginname: oldPlugin,
         type: selectedAccessoryType.value,
       });
-      selectedAccessorySensorId.value = undefined;
     }
 
     if (newPlugin) {
@@ -1098,14 +1099,6 @@ async function onAccessoryPluginsChange(value: string | number | object | undefi
       pluginname: pluginName,
       type: selectedAccessoryType.value,
     });
-
-    // Reset sensor selection if we disabled the plugin that owns the currently selected sensor
-    if (selectedAccessorySensorId.value) {
-      const sensor = accessorySensorsForType.value.find((s) => s.id === selectedAccessorySensorId.value);
-      if (sensor && getPluginNameFromId(sensor.pluginId || '') === pluginName) {
-        selectedAccessorySensorId.value = undefined;
-      }
-    }
 
     // Reset plugin for config if we disabled it
     if (selectedAccessoryPluginForConfig.value === pluginName) {
@@ -1497,9 +1490,6 @@ watch(selectedHubPlugin, async (newValue, oldValue) => {
 });
 
 watch(selectedDetectionType, () => {
-  // Reset sensor selection when type changes
-  selectedDetectionSensorId.value = undefined;
-
   // Update selected plugin based on current assignment
   if (selectedDetectionType.value) {
     const assignment = getDetectionAssignment(selectedDetectionType.value);
@@ -1512,13 +1502,6 @@ watch(selectedDetectionType, () => {
     selectedDetectionPlugin.value = undefined;
   }
   updateSelectedPlugin();
-
-  // Auto-select first sensor
-  nextTick(() => {
-    if (detectionSensorsForType.value.length) {
-      selectedDetectionSensorId.value = detectionSensorsForType.value[0].id;
-    }
-  });
 });
 
 watch(selectedDetectionPlugin, async (newValue, oldValue) => {
@@ -1529,7 +1512,6 @@ watch(selectedDetectionPlugin, async (newValue, oldValue) => {
       // Deselected - disable the extension
       await disableExtension({ cameraname: camera.value.name, pluginname: oldValue, type: selectedDetectionType.value });
       schemaRef.value?.reset();
-      selectedDetectionSensorId.value = undefined;
     } else if (newValue) {
       // Selected - enable the extension (this will also disable the previous one if any)
       if (currentAssignment?.name !== newValue) {
@@ -1540,15 +1522,18 @@ watch(selectedDetectionPlugin, async (newValue, oldValue) => {
     }
 
     nextTick(() => updateSelectedPlugin(newValue));
-
-    // Auto-select first sensor after plugin selection
-    nextTick(() => {
-      if (detectionSensorsForType.value.length) {
-        selectedDetectionSensorId.value = detectionSensorsForType.value[0].id;
-      }
-    });
   }
 });
+
+// the sensor chips follow the selected plugin, keep the selection on a sensor that is actually listed
+watch(
+  detectionSensorsForType,
+  (sensors) => {
+    if (selectedDetectionSensorId.value && sensors.some((s) => s.id === selectedDetectionSensorId.value)) return;
+    selectedDetectionSensorId.value = sensors[0]?.id;
+  },
+  { immediate: true },
+);
 
 watch(objectAssistAssignmentName, (name) => (selectedObjectAssistPlugin.value = name), { immediate: true });
 
@@ -1563,9 +1548,6 @@ watch(selectedObjectAssistPlugin, async (newValue, oldValue) => {
 });
 
 watch(selectedCoreType, () => {
-  // Reset sensor selection when type changes
-  selectedCoreSensorId.value = undefined;
-
   // Update selected plugin based on current assignment
   if (selectedCoreType.value) {
     const assignment = getCoreAssignment(selectedCoreType.value);
@@ -1578,13 +1560,6 @@ watch(selectedCoreType, () => {
     selectedCorePlugin.value = undefined;
   }
   updateSelectedPlugin();
-
-  // Auto-select first sensor
-  nextTick(() => {
-    if (coreSensorsForType.value.length) {
-      selectedCoreSensorId.value = coreSensorsForType.value[0].id;
-    }
-  });
 });
 
 watch(selectedCorePlugin, async (newValue, oldValue) => {
@@ -1594,7 +1569,6 @@ watch(selectedCorePlugin, async (newValue, oldValue) => {
     if (!newValue && oldValue) {
       await disableExtension({ cameraname: camera.value.name, pluginname: oldValue, type: selectedCoreType.value });
       schemaRef.value?.reset();
-      selectedCoreSensorId.value = undefined;
     } else if (newValue) {
       if (currentAssignment?.name !== newValue) {
         await enableExtension({ cameraname: camera.value.name, pluginname: newValue, type: selectedCoreType.value });
@@ -1604,15 +1578,17 @@ watch(selectedCorePlugin, async (newValue, oldValue) => {
     }
 
     nextTick(() => updateSelectedPlugin(newValue));
-
-    // Auto-select first sensor after plugin selection
-    nextTick(() => {
-      if (coreSensorsForType.value.length) {
-        selectedCoreSensorId.value = coreSensorsForType.value[0].id;
-      }
-    });
   }
 });
+
+watch(
+  coreSensorsForType,
+  (sensors) => {
+    if (selectedCoreSensorId.value && sensors.some((s) => s.id === selectedCoreSensorId.value)) return;
+    selectedCoreSensorId.value = sensors[0]?.id;
+  },
+  { immediate: true },
+);
 
 watch([selectedDetectionSensorId, selectedDetectionSensorPluginId], async ([sensorId, pluginId]) => {
   if (sensorId && pluginId) {
@@ -1627,21 +1603,22 @@ watch([selectedCoreSensorId, selectedCoreSensorPluginId], async ([sensorId, plug
 });
 
 watch(selectedAccessoryType, () => {
-  // Reset sensor selection when type changes
-  selectedAccessorySensorId.value = undefined;
-
   // Set plugin for config (first assigned plugin for this type)
   if (assignedAccessoryPlugins.value.length) {
     selectedAccessoryPluginForConfig.value = assignedAccessoryPlugins.value[0];
   } else {
     selectedAccessoryPluginForConfig.value = undefined;
   }
-
-  // Auto-select first sensor of the new type
-  if (accessorySensorsForType.value.length) {
-    selectedAccessorySensorId.value = accessorySensorsForType.value[0].id;
-  }
 });
+
+watch(
+  accessorySensorsForType,
+  (sensors) => {
+    if (selectedAccessorySensorId.value && sensors.some((s) => s.id === selectedAccessorySensorId.value)) return;
+    selectedAccessorySensorId.value = sensors[0]?.id;
+  },
+  { immediate: true },
+);
 
 watch(selectedAccessoryPluginForConfig, async (newValue) => {
   if (newValue) {
