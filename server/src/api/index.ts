@@ -362,7 +362,7 @@ export class Server {
 
   private get natsProxyOptions(): ProxyOptions {
     return {
-      upstream: `wss://localhost:${this.proxyServer.server.wsPort}`,
+      upstream: `wss://127.0.0.1:${this.proxyServer.server.wsPort}`,
       prefix: '/api/proxy',
       target: 'nats',
       tls: {

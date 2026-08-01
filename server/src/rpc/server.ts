@@ -90,7 +90,7 @@ export class NATS {
     // };
 
     this.config = {
-      host: 'localhost',
+      host: '127.0.0.1',
       port: 0,
       server_name: options?.serverName ?? 'camera.ui-server',
       // tls: tlsConfig,
@@ -161,7 +161,7 @@ export class NATS {
     if (this.clusterAmount > 0) {
       this.config.cluster = {
         name: 'camera.ui-cluster',
-        host: 'localhost',
+        host: '127.0.0.1',
         port: 0,
         routes: [],
         authorization: {
@@ -229,13 +229,13 @@ export class NATS {
     this._clusterPort ||= (await reservePorts({ type: 'tcp' }))[0];
     this._wsPort ||= (await reservePorts({ type: 'tcp' }))[0];
 
-    this._endpoints = [`nats://localhost:${this._serverPort}`];
+    this._endpoints = [`nats://127.0.0.1:${this._serverPort}`];
 
     const config: NatsConfig = {
       ...this.config,
       port: this._serverPort,
       websocket: {
-        host: 'localhost',
+        host: '127.0.0.1',
         port: this.wsPort,
         no_tls: false,
         tls: {
@@ -249,7 +249,7 @@ export class NATS {
       this._leafAcceptorPort ||= (await reservePorts({ type: 'tcp' }))[0];
       config.cluster = {
         name: 'camera.ui-cluster',
-        host: 'localhost',
+        host: '127.0.0.1',
         port: this._clusterPort,
         routes: [],
         authorization: { timeout: 5, ...this.auth.cluster },
@@ -292,7 +292,7 @@ export class NATS {
     this._leafAcceptorClusterPort ||= (await reservePorts({ type: 'tcp' }))[0];
 
     const config: NatsConfig = {
-      host: 'localhost',
+      host: '127.0.0.1',
       port: this._leafAcceptorPort,
       server_name: 'camera.ui-leaf-acceptor',
       authorization: this.config.authorization,
@@ -301,9 +301,9 @@ export class NATS {
       write_deadline: this.config.write_deadline,
       cluster: {
         name: 'camera.ui-cluster',
-        host: 'localhost',
+        host: '127.0.0.1',
         port: this._leafAcceptorClusterPort,
-        routes: [`nats://${this.auth.cluster.user}:${this.auth.cluster.password}@localhost:${this._clusterPort}`],
+        routes: [`nats://${this.auth.cluster.user}:${this.auth.cluster.password}@127.0.0.1:${this._clusterPort}`],
         authorization: { timeout: 5, ...this.auth.cluster },
       },
     };
@@ -330,7 +330,7 @@ export class NATS {
 
     for (let i = 0; i < this.clusterAmount; i++) {
       const _clusterPort = (await reservePorts({ type: 'tcp' }))[0];
-      this._endpoints.push(`nats://localhost:${_clusterPort}`);
+      this._endpoints.push(`nats://127.0.0.1:${_clusterPort}`);
 
       const config = {
         ...this.config,
@@ -339,7 +339,7 @@ export class NATS {
         cluster: {
           ...this.config.cluster,
           port: (await reservePorts({ type: 'tcp' }))[0],
-          routes: [`nats://${this.config.cluster.authorization.user}:${this.config.cluster.authorization.password}@localhost:${this._clusterPort}`],
+          routes: [`nats://${this.config.cluster.authorization.user}:${this.config.cluster.authorization.password}@127.0.0.1:${this._clusterPort}`],
         },
       };
 

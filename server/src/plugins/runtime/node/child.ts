@@ -33,6 +33,7 @@ export class PluginChild {
   private channel?: Channel;
 
   private displayName: string;
+  private endpoints: string[];
   private api?: PluginAPI;
   private plugin?: BasePlugin;
   private closeProxy?: () => Promise<void>;
@@ -45,9 +46,12 @@ export class PluginChild {
 
   private stopped = false;
   constructor() {
+    this.endpoints = process.env.PROXY_ENDPOINTS!.split(',');
+
     this.proxy = createRPCClient({
       name: NamespaceManager.pluginNamespaces(process.env.PLUGIN_ID!).pluginChild,
-      servers: process.env.PROXY_ENDPOINTS!.split(','),
+      servers: this.endpoints,
+      waitOnFirstConnect: false,
       auth: {
         user: process.env.PROXY_USER!,
         password: process.env.PROXY_PASSWORD!,
@@ -93,7 +97,7 @@ export class PluginChild {
       await this.proxy.connect();
       await this.onStart();
     } catch (error: any) {
-      this.logger.error(`Failed to connect to proxy server: ${error.message}`);
+      this.logger.error(`camera.ui not reachable on ${this.endpoints.join(', ')}: ${error?.message ?? error}`);
       process.exit(1);
     }
   }

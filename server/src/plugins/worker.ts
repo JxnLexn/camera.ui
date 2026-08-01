@@ -196,11 +196,7 @@ export class PluginWorker {
       if (this.isRemote || this.status !== PLUGIN_STATUS.STARTING || this.shuttingDown) {
         return;
       }
-      this.runtime.logger.error(
-        `Plugin ${this.plugin.displayName} did not become ready within ${LOCAL_READY_TIMEOUT_MS / 1000}s, killing the process. ` +
-          // eslint-disable-next-line @stylistic/indent-binary-ops
-          'The process started but never reported back — a hanging import or driver initialization is the usual cause.',
-      );
+      this.runtime.logger.error(`Plugin ${this.plugin.displayName} did not become ready within ${LOCAL_READY_TIMEOUT_MS / 1000}s, killing the process. `);
       this.setStatus(PLUGIN_STATUS.ERROR);
       await this.doTeardown();
       reject(new Error(`Plugin ${this.plugin.displayName} did not become ready in time`));

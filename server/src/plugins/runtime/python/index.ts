@@ -56,10 +56,13 @@ export class PythonPluginRuntime extends BasePluginRuntime {
 
       this.worker = spawn(this.py.pluginPythonPath, args, {
         env: {
+          ...this.processEnv(),
           PYTHONUNBUFFERED: '1',
           PYTHONPATH: this.createPythonPath(),
           ...caCertEnv,
           ...this.getEnv(),
+          PYTHONHOME: undefined,
+          PYTHONSTARTUP: undefined,
         },
         cwd: this.plugin.mainPath,
         windowsHide: true,

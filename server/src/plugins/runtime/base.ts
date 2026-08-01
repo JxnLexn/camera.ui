@@ -10,10 +10,10 @@ import { CLOUD_SERVICE_URL } from '../../services/config/constants.js';
 
 import type { LogEntry } from '@camera.ui/common/logger';
 import type { ChildProcess } from 'node:child_process';
-import type { SensorRegistry } from '../../sensors/registry.js';
 import type { CameraUiAPI } from '../../api.js';
 import type { ProcInfo } from '../../api/database/checks.js';
 import type { ProxyServer } from '../../rpc/index.js';
+import type { SensorRegistry } from '../../sensors/registry.js';
 import type { ConfigService } from '../../services/config/index.js';
 import type { LoggerService } from '../../services/logger/index.js';
 import type { LogManager } from '../../services/logger/logManager.js';
@@ -192,6 +192,28 @@ export abstract class BasePluginRuntime extends EventEmitter {
     for (const line of lines) {
       this.processLogLine(line);
     }
+  }
+
+  protected processEnv(): Record<string, string> {
+    const env = { ...process.env } as Record<string, string>;
+
+    delete env.CAMERA_UI_STORAGE_PATH;
+    delete env.CAMERA_UI_DATABASE_PATH;
+    delete env.CAMERA_UI_USERS_STORAGE_PATH;
+    delete env.CAMERA_UI_PLUGINS_STORAGE_PATH;
+    delete env.CAMERA_UI_PLUGINS_INSTALL_PATH;
+    delete env.CAMERA_UI_PLUGINS_PJSON_FILE;
+    delete env.CAMERA_UI_CONFIG_FILE;
+    delete env.CAMERA_UI_SECRETS_FILE;
+    delete env.CAMERA_UI_LOG_FILE;
+    delete env.CAMERA_UI_GO2RTC_CONFIG_FILE;
+    delete env.CAMERA_UI_GO2RTC_BINARY;
+    delete env.CAMERA_UI_CLOUD_BINARY;
+    delete env.CAMERA_UI_PORT;
+    delete env.CAMERA_UI_INSECURE_PORT;
+    delete env.CAMERA_UI_UI_PORT;
+
+    return env;
   }
 
   protected getEnv(): Record<string, string | undefined> {

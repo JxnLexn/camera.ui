@@ -20,7 +20,12 @@ from _camera_ui_tools.camera_ui_common import (
     LoggerService,
     SignalHandler,
 )
-from _camera_ui_tools.camera_ui_rpc import CloseHandler, RPCClient, create_rpc_client
+from _camera_ui_tools.camera_ui_rpc import (
+    CloseHandler,
+    PrivateChannel,
+    RPCClient,
+    create_rpc_client,
+)
 from _camera_ui_tools.camera_ui_sdk import API_EVENT, BasePlugin, Camera
 from _camera_ui_tools.camera_ui_sdk import CameraDevice as CameraDeviceInterface
 from plugins.runtime.python.config_db import (
@@ -48,23 +53,36 @@ setproctitle.setproctitle(f"camera.ui - {process_name}")
 
 SHUTDOWN_LISTENER_TIMEOUT = 1.5
 RPC_TEARDOWN_TIMEOUT = 1.0
+CONNECT_DEADLINE = 15.0
 
 
 class PluginChild:
     def __init__(self) -> None:
+        self.endpoints = os.environ["PROXY_ENDPOINTS"].split(",")
+        self._connect_error: str | None = None
+        self._connect_failed = asyncio.Event()
+
         self.proxy: RPCClient = create_rpc_client(
             {
                 "name": NamespaceManager.plugin_namespaces(os.environ["PLUGIN_ID"]).plugin_child,
-                "servers": os.environ["PROXY_ENDPOINTS"].split(","),
+                "servers": self.endpoints,
                 "auth": {
                     "user": os.environ["PROXY_USER"],
                     "password": os.environ["PROXY_PASSWORD"],
                 },
                 "reconnected_cb": self._on_rpc_reconnected,
+                "error_cb": self._on_rpc_error,
             }
         )
 
-        for key in ["PROXY_USER", "PROXY_PASSWORD", "PROXY_ENDPOINTS", "PROXY_CERT", "PROXY_KEY", "PROXY_CA"]:
+        for key in [
+            "PROXY_USER",
+            "PROXY_PASSWORD",
+            "PROXY_ENDPOINTS",
+            "PROXY_CERT",
+            "PROXY_KEY",
+            "PROXY_CA",
+        ]:
             if key in os.environ:
                 del os.environ[key]
 
@@ -84,6 +102,7 @@ class PluginChild:
 
         self.api: PluginAPI | None = None
         self.plugin: BasePlugin | None = None
+        self.channel: PrivateChannel | None = None
         self.close_proxy: CloseHandler | None = None
         self.file_server: PluginFileServer | None = None
         self.plugin_db: PluginConfigDb | None = None
@@ -102,7 +121,13 @@ class PluginChild:
     async def run(self) -> None:
         try:
             self.signal_handler.setup_handlers()
-            await self.proxy.connect()
+
+            try:
+                await self.connect_proxy()
+            except Exception as error:
+                self.logger.error(str(error))
+                raise SystemExit(1) from None
+
             await self.on_start()
             await self.signal_handler.shutdown_event.wait()
         except asyncio.CancelledError:
@@ -112,6 +137,31 @@ class PluginChild:
             raise
         finally:
             await self.stop_plugin()
+
+    async def connect_proxy(self) -> None:
+        connecting = asyncio.ensure_future(self.proxy.connect())
+        failed = asyncio.ensure_future(self._connect_failed.wait())
+
+        try:
+            await asyncio.wait(
+                {connecting, failed},
+                timeout=CONNECT_DEADLINE,
+                return_when=asyncio.FIRST_COMPLETED,
+            )
+
+            if connecting.done():
+                await connecting
+                return
+
+            reason = self._connect_error or f"no answer within {CONNECT_DEADLINE:.0f}s"
+            raise RuntimeError(f"camera.ui not reachable on {', '.join(self.endpoints)}: {reason}")
+        finally:
+            for task in (connecting, failed):
+                task.cancel()
+
+    async def _on_rpc_error(self, error: Exception) -> None:
+        self._connect_error = f"{type(error).__name__}: {error}" if str(error) else type(error).__name__
+        self._connect_failed.set()
 
     async def _on_rpc_reconnected(self) -> None:
         if self.stopped or self.api is None:
@@ -228,6 +278,9 @@ class PluginChild:
             await self.proxy.disconnect()
 
     async def send_message(self, message: ProcessResponse) -> None:
+        if not self.channel:
+            return
+
         await self.channel.send(message)
 
     async def on_message(self, message: ProcessMessage) -> None:
@@ -267,7 +320,11 @@ class PluginChild:
 
         for camera in cameras:
             camera_logger = self.logger.create_logger(
-                {"suffix": camera["name"], "target_id": camera["_id"], "target_type": "camera"}
+                {
+                    "suffix": camera["name"],
+                    "target_id": camera["_id"],
+                    "target_type": "camera",
+                }
             )
             cameras_devices.append(
                 CameraDeviceProxy(

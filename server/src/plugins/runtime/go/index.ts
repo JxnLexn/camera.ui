@@ -21,7 +21,7 @@ export class GoPluginRuntime extends BasePluginRuntime {
       this.logger.debug(`Spawning Go plugin: ${binaryPath}`);
 
       this.worker = spawn(binaryPath, processNames, {
-        env: this.getEnv(),
+        env: { ...this.processEnv(), ...this.getEnv() },
         cwd: this.plugin.mainPath,
         windowsHide: true,
       });

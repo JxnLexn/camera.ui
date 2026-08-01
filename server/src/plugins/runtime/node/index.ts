@@ -34,7 +34,7 @@ export class NodePluginRuntime extends BasePluginRuntime {
 
       this.worker = fork(nodePluginPath, [...processNames], {
         env: {
-          ...this.cleanedProcessEnv(),
+          ...this.processEnv(),
           ...this.getEnv(),
           NODE_PATH: this.createNodePath(),
           ...(IS_DEV && !IS_ELECTRON ? { TSX_TSCONFIG_PATH: serverTsconfigPath } : {}),
@@ -78,27 +78,5 @@ export class NodePluginRuntime extends BasePluginRuntime {
     }
 
     return paths.join(delimiter);
-  }
-
-  private cleanedProcessEnv(): Record<string, string> {
-    const env = { ...process.env } as Record<string, string>;
-
-    delete env.CAMERA_UI_STORAGE_PATH;
-    delete env.CAMERA_UI_DATABASE_PATH;
-    delete env.CAMERA_UI_USERS_STORAGE_PATH;
-    delete env.CAMERA_UI_PLUGINS_STORAGE_PATH;
-    delete env.CAMERA_UI_PLUGINS_INSTALL_PATH;
-    delete env.CAMERA_UI_PLUGINS_PJSON_FILE;
-    delete env.CAMERA_UI_CONFIG_FILE;
-    delete env.CAMERA_UI_SECRETS_FILE;
-    delete env.CAMERA_UI_LOG_FILE;
-    delete env.CAMERA_UI_GO2RTC_CONFIG_FILE;
-    delete env.CAMERA_UI_GO2RTC_BINARY;
-    delete env.CAMERA_UI_CLOUD_BINARY;
-    delete env.CAMERA_UI_PORT;
-    delete env.CAMERA_UI_INSECURE_PORT;
-    delete env.CAMERA_UI_UI_PORT;
-
-    return env;
   }
 }
