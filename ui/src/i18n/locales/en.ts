@@ -581,7 +581,6 @@ export default {
       name: 'Name',
       native: 'Native',
       no_accessories: 'No accessories available',
-      no_config: 'No configuration available',
       no_sensors: 'No sensors available',
       sensor_display_name: 'Sensor Name',
       no_plugins_available: 'No plugins available',

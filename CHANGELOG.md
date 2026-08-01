@@ -12,6 +12,8 @@ All notable changes to this project will be documented in this file.
 
 - **The old sensor compatibility paths are gone.** 2.0.23 kept the pre-rework sensor API alive for one release so outdated plugins and the old Home Assistant integration kept partly working. That window is over: update your plugins and the Home Assistant integration if you haven't yet.
 
+- **The plugin tab in the camera drawer stopped jumping around.** While something loaded, whole blocks were swapped for a spinner and the chips greyed out; now the section that is loading shows a small spinner next to its title and the chips stay usable. Sections without settings are gone instead of saying "No configuration available", the category row keeps its order with a Camera entry that is simply inactive for cameras without a camera plugin, and the plugin that is actually in use is marked right away instead of a moment later.
+
 ### Fixed
 
 - **Dragging cameras on a PC with a touch screen behaves like a normal drag now.** The card showed the not-allowed cursor, then hung on the pointer after releasing the mouse and only dropped on a second click, which also opened that camera. Dragging cameras into a CamView had the same problem.

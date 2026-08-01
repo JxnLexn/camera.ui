@@ -1,34 +1,119 @@
 <template>
   <div class="p-4 flex flex-col gap-2">
-    <div v-if="categoriesLoading" class="w-full flex items-center justify-center py-8">
-      <ProgressSpinner class="w-[30px] h-[30px] m-0" stroke-width="5" />
+    <SectionLabel :label="$t('components.camera_options.categories')" :loading="categoriesLoading" />
+
+    <CuiChipGroup v-model="selectedExtension" mandatory @update:model-value="updateSelectedPlugin()">
+      <CuiChip v-for="extension in EXTENSION_TYPES" :key="extension" size="small" :disabled="extension === 'cameraController' && !hasCameraTab" :value="extension">
+        {{ $t(`components.camera_options.chip_${extension}`) }}
+      </CuiChip>
+    </CuiChipGroup>
+
+    <Divider class="m-0 py-3" />
+
+    <div v-if="selectedExtension === 'cameraController'" class="flex flex-col gap-2">
+      <template v-if="!cameraTabPlugins.length">
+        <SectionLabel :label="$t('components.camera_options.chip_plugins')" :loading="contentLoading" />
+        <span v-if="!contentLoading" class="text-sm text-muted text-center min-h-[30px]">{{ $t('components.camera_options.no_plugins_enabled') }}</span>
+      </template>
+
+      <template v-else>
+        <SectionLabel :label="$t('components.camera_options.chip_plugins')" :loading="extensionConfigLoading" />
+
+        <CuiChipGroup v-model="selectedPlugin" :disabled="isExtensionsLoading" mandatory class="min-h-[30px]">
+          <CuiChip
+            v-for="extension in cameraTabPlugins"
+            :key="extension.pluginName"
+            size="small"
+            :disabled="!isPluginEnabled(extension.pluginName) || configPatchLoading"
+            :value="extension.pluginName"
+          >
+            {{ extension.displayName }}
+          </CuiChip>
+        </CuiChipGroup>
+
+        <template v-if="pluginSettings">
+          <Divider class="m-0 py-3" />
+
+          <SectionLabel :label="$t('components.camera_options.plugin_settings')" />
+
+          <CuiSchema
+            ref="schemaRef"
+            :key="selectedPlugin"
+            :schema-form="{ schema: pluginSettings.schema, config: pluginSettings.config }"
+            :loading="configPatchLoading"
+            @on-form-submit="(configData: PluginConfig) => onFormSubmit(selectedPlugin, configData)"
+            @on-submit="(state) => onSubmit(state, selectedPlugin)"
+            @on-action="(state) => onAction(state, selectedPlugin)"
+          />
+        </template>
+      </template>
     </div>
 
-    <template v-else>
-      <span class="cui-label">{{ $t('components.camera_options.categories') }}</span>
+    <div v-else-if="selectedExtension === 'hub'" class="flex flex-col gap-2">
+      <template v-if="!hubExtensions.length">
+        <SectionLabel :label="$t('components.camera_options.chip_plugins')" :loading="contentLoading" />
+        <span v-if="!contentLoading" class="text-sm text-muted text-center min-h-[30px]">{{ $t('components.camera_options.no_plugins_enabled') }}</span>
+      </template>
 
-      <CuiChipGroup v-model="selectedExtension" :disabled="isExtensionsLoading" mandatory @update:model-value="updateSelectedPlugin()">
-        <CuiChip v-for="extension in extensionTypes" :key="extension" size="small" :disabled="configPatchLoading" :value="extension">
-          {{ $t(`components.camera_options.chip_${extension}`) }}
-        </CuiChip>
-      </CuiChipGroup>
+      <template v-else>
+        <SectionLabel :label="$t('components.camera_options.chip_plugins')" :loading="extensionConfigLoading" />
 
-      <Divider class="m-0 py-3" />
+        <CuiChipGroup v-model="selectedHubPlugin" :disabled="isExtensionsLoading" mandatory class="min-h-[30px]">
+          <CuiChip
+            v-for="extension in hubExtensions"
+            :key="extension.pluginName"
+            size="small"
+            :disabled="!isPluginEnabled(extension.pluginName) || configPatchLoading"
+            :value="extension.pluginName"
+          >
+            {{ extension.displayName }}
+          </CuiChip>
+        </CuiChipGroup>
 
-      <div v-if="selectedExtension === 'cameraController'" class="flex flex-col gap-2">
-        <template v-if="!cameraTabPlugins.length">
-          <span class="cui-label">{{ $t('components.camera_options.chip_plugins') }}</span>
-          <span class="text-sm text-muted text-center min-h-[30px]">{{ $t('components.camera_options.no_plugins_enabled') }}</span>
+        <template v-if="pluginSettings">
+          <Divider class="m-0 py-3" />
+
+          <SectionLabel :label="$t('components.camera_options.plugin_settings')" />
+
+          <CuiSchema
+            ref="schemaRef"
+            :key="selectedPlugin"
+            :schema-form="{ schema: pluginSettings.schema, config: pluginSettings.config }"
+            :loading="configPatchLoading"
+            @on-form-submit="(configData: PluginConfig) => onFormSubmit(selectedPlugin, configData)"
+            @on-submit="(state) => onSubmit(state, selectedPlugin)"
+            @on-action="(state) => onAction(state, selectedPlugin)"
+          />
         </template>
+      </template>
+    </div>
 
-        <template v-else>
-          <span class="cui-label">{{ $t('components.camera_options.chip_plugins') }}</span>
+    <div v-else-if="selectedExtension === 'detection'" class="flex flex-col gap-2">
+      <template v-if="!availableDetectionTypes.length">
+        <SectionLabel :label="$t('components.camera_options.sensor_types')" :loading="contentLoading" />
+        <span v-if="!contentLoading" class="text-sm text-muted text-center min-h-[30px]">{{ $t('components.camera_options.no_plugins_enabled') }}</span>
+      </template>
 
-          <CuiChipGroup v-model="selectedPlugin" :disabled="isExtensionsLoading" mandatory class="min-h-[30px]">
+      <template v-else>
+        <SectionLabel :label="$t('components.camera_options.sensor_types')" :loading="contentLoading" />
+
+        <CuiChipGroup v-model="selectedDetectionType" mandatory class="min-h-[30px]">
+          <CuiChip v-for="type in availableDetectionTypes" :key="type" size="small" :value="type">
+            {{ $t(`components.camera_options.sensor_type_${type}`) }}
+          </CuiChip>
+        </CuiChipGroup>
+
+        <template v-if="detectionPluginsForType.length">
+          <Divider class="m-0 py-3" />
+
+          <SectionLabel :label="$t('components.camera_options.chip_plugins')" :loading="detectionExtensionConfigLoading" />
+
+          <CuiChipGroup v-model="selectedDetectionPlugin" :disabled="isExtensionsLoading" class="min-h-[30px]">
             <CuiChip
-              v-for="extension in cameraTabPlugins"
+              v-for="extension in detectionPluginsForType"
               :key="extension.pluginName"
               size="small"
+              filter
               :disabled="!isPluginEnabled(extension.pluginName) || configPatchLoading"
               :value="extension.pluginName"
             >
@@ -36,384 +121,27 @@
             </CuiChip>
           </CuiChipGroup>
 
-          <Divider class="m-0 py-3" />
-
-          <span class="cui-label">{{ $t('components.camera_options.plugin_settings') }}</span>
-
-          <div v-if="!selectedPlugin || !extensionConfig?.schema?.length" class="w-full flex items-center justify-center my-5">
-            <ProgressSpinner v-if="extensionConfigLoading" class="w-[30px] h-[30px] m-0" stroke-width="5" />
-            <span v-else class="text-sm text-muted text-center">{{ $t('components.camera_options.no_config') }}</span>
-          </div>
-
-          <CuiSchema
-            v-else
-            ref="schemaRef"
-            :key="selectedPlugin"
-            :schema-form="{ schema: extensionConfig.schema, config: extensionConfig.config }"
-            :loading="configPatchLoading"
-            @on-form-submit="(configData: PluginConfig) => onFormSubmit(selectedPlugin, configData)"
-            @on-submit="(state) => onSubmit(state, selectedPlugin)"
-            @on-action="(state) => onAction(state, selectedPlugin)"
-          />
-        </template>
-      </div>
-
-      <div v-else-if="selectedExtension === 'hub'" class="flex flex-col gap-2">
-        <template v-if="!hubExtensions.length">
-          <span class="cui-label">{{ $t('components.camera_options.chip_plugins') }}</span>
-          <span class="text-sm text-muted text-center min-h-[30px]">{{ $t('components.camera_options.no_plugins_enabled') }}</span>
-        </template>
-
-        <template v-else>
-          <span class="cui-label">{{ $t('components.camera_options.chip_plugins') }}</span>
-
-          <CuiChipGroup v-model="selectedHubPlugin" :disabled="isExtensionsLoading" mandatory class="min-h-[30px]">
-            <CuiChip
-              v-for="extension in hubExtensions"
-              :key="extension.pluginName"
-              size="small"
-              :disabled="!isPluginEnabled(extension.pluginName) || configPatchLoading"
-              :value="extension.pluginName"
-            >
-              {{ extension.displayName }}
-            </CuiChip>
-          </CuiChipGroup>
-
-          <Divider class="m-0 py-3" />
-
-          <span class="cui-label">{{ $t('components.camera_options.plugin_settings') }}</span>
-
-          <div v-if="!selectedPlugin || !extensionConfig?.schema?.length" class="w-full flex items-center justify-center my-5">
-            <ProgressSpinner v-if="extensionConfigLoading" class="w-[30px] h-[30px] m-0" stroke-width="5" />
-            <span v-else class="text-sm text-muted text-center">{{ $t('components.camera_options.no_config') }}</span>
-          </div>
-
-          <CuiSchema
-            v-else
-            ref="schemaRef"
-            :key="selectedPlugin"
-            :schema-form="{ schema: extensionConfig.schema, config: extensionConfig.config }"
-            :loading="configPatchLoading"
-            @on-form-submit="(configData: PluginConfig) => onFormSubmit(selectedPlugin, configData)"
-            @on-submit="(state) => onSubmit(state, selectedPlugin)"
-            @on-action="(state) => onAction(state, selectedPlugin)"
-          />
-        </template>
-      </div>
-
-      <div v-else-if="selectedExtension === 'detection'" class="flex flex-col gap-2">
-        <template v-if="!availableDetectionTypes.length">
-          <span class="cui-label">{{ $t('components.camera_options.sensor_types') }}</span>
-          <span class="text-sm text-muted text-center min-h-[30px]">{{ $t('components.camera_options.no_plugins_enabled') }}</span>
-        </template>
-
-        <template v-else>
-          <span class="cui-label">{{ $t('components.camera_options.sensor_types') }}</span>
-
-          <CuiChipGroup v-model="selectedDetectionType" :disabled="isExtensionsLoading" mandatory class="min-h-[30px]">
-            <CuiChip v-for="type in availableDetectionTypes" :key="type" size="small" :disabled="configPatchLoading" :value="type">
-              {{ $t(`components.camera_options.sensor_type_${type}`) }}
-            </CuiChip>
-          </CuiChipGroup>
-
-          <template v-if="detectionPluginsForType.length">
+          <template v-if="detectionPluginSettings">
             <Divider class="m-0 py-3" />
 
-            <span class="cui-label">{{ $t('components.camera_options.chip_plugins') }}</span>
+            <SectionLabel :label="$t('components.camera_options.plugin_settings')" />
 
-            <CuiChipGroup v-model="selectedDetectionPlugin" :disabled="isExtensionsLoading" class="min-h-[30px]">
-              <CuiChip
-                v-for="extension in detectionPluginsForType"
-                :key="extension.pluginName"
-                size="small"
-                filter
-                :disabled="!isPluginEnabled(extension.pluginName) || configPatchLoading"
-                :value="extension.pluginName"
-              >
-                {{ extension.displayName }}
-              </CuiChip>
-            </CuiChipGroup>
-
-            <template v-if="selectedDetectionPlugin && selectedDetectionPlugin !== camera.pluginInfo?.name">
-              <Divider class="m-0 py-3" />
-
-              <span class="cui-label">{{ $t('components.camera_options.plugin_settings') }}</span>
-
-              <div v-if="!detectionExtensionConfig?.schema?.length" class="w-full flex items-center justify-center my-5">
-                <ProgressSpinner v-if="detectionExtensionConfigLoading" class="w-[30px] h-[30px] m-0" stroke-width="5" />
-                <span v-else class="text-sm text-muted text-center">{{ $t('components.camera_options.no_config') }}</span>
-              </div>
-
-              <CuiSchema
-                v-else
-                :key="`detection-plugin-${selectedDetectionPlugin}`"
-                :schema-form="{ schema: detectionExtensionConfig.schema, config: detectionExtensionConfig.config }"
-                :loading="configPatchLoading"
-                @on-form-submit="(configData: PluginConfig) => onDetectionPluginFormSubmit(configData)"
-                @on-submit="(state) => onDetectionPluginSubmit(state)"
-                @on-action="(state) => onDetectionPluginAction(state)"
-              />
-            </template>
-
-            <Divider class="m-0 py-3" />
-
-            <span class="cui-label">{{ $t('components.camera_options.sensors') }}</span>
-
-            <CuiChipGroup v-if="detectionSensorsForType.length" v-model="selectedDetectionSensorId" :disabled="isExtensionsLoading" mandatory class="min-h-[30px]">
-              <CuiChip v-for="sensor in detectionSensorsForType" :key="sensor.id" size="small" :disabled="configPatchLoading" :value="sensor.id">
-                {{ sensor.displayName.value }}
-                <template #append>
-                  <Button
-                    :text="selectedAccessorySensorId !== sensor.id"
-                    rounded
-                    :severity="selectedAccessorySensorId === sensor.id ? 'primary' : 'secondary'"
-                    class="cui-icon-sm text-white"
-                    @click.stop="openRenameSensorDialog(sensor)"
-                  >
-                    <template #icon>
-                      <i-mdi:pencil width="100%" height="100%" />
-                    </template>
-                  </Button>
-                </template>
-              </CuiChip>
-            </CuiChipGroup>
-
-            <span v-else class="text-sm text-muted text-center min-h-[30px]">{{ $t('components.camera_options.no_sensors') }}</span>
-
-            <template v-if="selectedDetectionSensorId">
-              <Divider class="m-0 py-3" />
-
-              <span class="cui-label">{{ $t('components.camera_options.sensor_settings') }}</span>
-
-              <div v-if="!selectedDetectionSensorPluginName || !detectionSensorConfig?.schema?.length" class="w-full flex items-center justify-center my-5">
-                <ProgressSpinner v-if="detectionSensorConfigLoading" class="w-[30px] h-[30px] m-0" stroke-width="5" />
-                <span v-else class="text-sm text-muted text-center">{{ $t('components.camera_options.no_config') }}</span>
-              </div>
-
-              <CuiSchema
-                v-else
-                :key="`sensor-${selectedDetectionSensorId}`"
-                :schema-form="{ schema: detectionSensorConfig.schema, config: detectionSensorConfig.config }"
-                :loading="configPatchLoading"
-                @on-form-submit="(configData: PluginConfig) => onDetectionFormSubmit(configData)"
-                @on-submit="(state) => onDetectionSubmit(state)"
-                @on-action="(state) => onDetectionAction(state)"
-              />
-            </template>
-          </template>
-
-          <template v-if="showObjectAssist">
-            <Divider class="m-0 py-3" />
-
-            <span class="cui-label">{{ $t('components.camera_options.object_assist') }}</span>
-
-            <CuiChipGroup v-model="selectedObjectAssistPlugin" :disabled="isExtensionsLoading" class="min-h-[30px]">
-              <CuiChip
-                v-for="extension in objectAssistPlugins"
-                :key="extension.pluginName"
-                size="small"
-                filter
-                :disabled="!isPluginEnabled(extension.pluginName) || configPatchLoading"
-                :value="extension.pluginName"
-              >
-                {{ extension.displayName }}
-              </CuiChip>
-            </CuiChipGroup>
-
-            <template v-if="objectAssistSensorId">
-              <Divider class="m-0 py-3" />
-
-              <span class="cui-label">{{ $t('components.camera_options.sensor_settings') }}</span>
-
-              <div v-if="!objectAssistSensorConfig?.schema?.length" class="w-full flex items-center justify-center my-5">
-                <ProgressSpinner v-if="objectAssistSensorConfigLoading" class="w-[30px] h-[30px] m-0" stroke-width="5" />
-                <span v-else class="text-sm text-muted text-center">{{ $t('components.camera_options.no_config') }}</span>
-              </div>
-
-              <CuiSchema
-                v-else
-                :key="`object-assist-${objectAssistSensorId}`"
-                :schema-form="{ schema: objectAssistSensorConfig.schema, config: objectAssistSensorConfig.config }"
-                :loading="configPatchLoading"
-                @on-form-submit="(configData: PluginConfig) => onObjectAssistFormSubmit(configData)"
-                @on-submit="(state) => onObjectAssistSubmit(state)"
-                @on-action="(state) => onObjectAssistAction(state)"
-              />
-            </template>
-          </template>
-        </template>
-      </div>
-
-      <div v-else-if="selectedExtension === 'core'" class="flex flex-col gap-2">
-        <template v-if="!availableCoreTypes.length">
-          <span class="cui-label">{{ $t('components.camera_options.sensor_types') }}</span>
-          <span class="text-sm text-muted text-center min-h-[30px]">{{ $t('components.camera_options.no_plugins_enabled') }}</span>
-        </template>
-
-        <template v-else>
-          <span class="cui-label">{{ $t('components.camera_options.sensor_types') }}</span>
-
-          <CuiChipGroup v-model="selectedCoreType" :disabled="isExtensionsLoading" mandatory class="min-h-[30px]">
-            <CuiChip v-for="type in availableCoreTypes" :key="type" size="small" :disabled="configPatchLoading" :value="type">
-              {{ $t(`components.camera_options.sensor_type_${type}`) }}
-            </CuiChip>
-          </CuiChipGroup>
-
-          <template v-if="corePluginsForType.length">
-            <Divider class="m-0 py-3" />
-
-            <span class="cui-label">{{ $t('components.camera_options.chip_plugins') }}</span>
-
-            <CuiChipGroup v-model="selectedCorePlugin" :disabled="isExtensionsLoading" class="min-h-[30px]">
-              <CuiChip
-                v-for="extension in corePluginsForType"
-                :key="extension.pluginName"
-                size="small"
-                filter
-                :disabled="!isPluginEnabled(extension.pluginName) || configPatchLoading"
-                :value="extension.pluginName"
-              >
-                {{ extension.displayName }}
-              </CuiChip>
-            </CuiChipGroup>
-
-            <template v-if="selectedCorePlugin && selectedCorePlugin !== camera.pluginInfo?.name">
-              <Divider class="m-0 py-3" />
-
-              <span class="cui-label">{{ $t('components.camera_options.plugin_settings') }}</span>
-
-              <div v-if="!coreExtensionConfig?.schema?.length" class="w-full flex items-center justify-center my-5">
-                <ProgressSpinner v-if="coreExtensionConfigLoading" class="w-[30px] h-[30px] m-0" stroke-width="5" />
-                <span v-else class="text-sm text-muted text-center">{{ $t('components.camera_options.no_config') }}</span>
-              </div>
-
-              <CuiSchema
-                v-else
-                :key="`core-plugin-${selectedCorePlugin}`"
-                :schema-form="{ schema: coreExtensionConfig.schema, config: coreExtensionConfig.config }"
-                :loading="configPatchLoading"
-                @on-form-submit="(configData: PluginConfig) => onCorePluginFormSubmit(configData)"
-                @on-submit="(state) => onCorePluginSubmit(state)"
-                @on-action="(state) => onCorePluginAction(state)"
-              />
-            </template>
-
-            <Divider class="m-0 py-3" />
-
-            <span class="cui-label">{{ $t('components.camera_options.sensors') }}</span>
-
-            <CuiChipGroup v-if="coreSensorsForType.length" v-model="selectedCoreSensorId" :disabled="isExtensionsLoading" mandatory class="min-h-[30px]">
-              <CuiChip v-for="sensor in coreSensorsForType" :key="sensor.id" size="small" :disabled="configPatchLoading" :value="sensor.id">
-                {{ sensor.displayName.value }}
-                <template #append>
-                  <Button
-                    :text="selectedAccessorySensorId !== sensor.id"
-                    rounded
-                    :severity="selectedAccessorySensorId === sensor.id ? 'primary' : 'secondary'"
-                    class="cui-icon-sm text-white"
-                    @click.stop="openRenameSensorDialog(sensor)"
-                  >
-                    <template #icon>
-                      <i-mdi:pencil width="100%" height="100%" />
-                    </template>
-                  </Button>
-                </template>
-              </CuiChip>
-            </CuiChipGroup>
-
-            <span v-else class="text-sm text-muted text-center min-h-[30px]">{{ $t('components.camera_options.no_sensors') }}</span>
-
-            <template v-if="selectedCoreSensorId">
-              <Divider class="m-0 py-3" />
-
-              <span class="cui-label">{{ $t('components.camera_options.sensor_settings') }}</span>
-
-              <div v-if="!selectedCoreSensorPluginName || !coreSensorConfig?.schema?.length" class="w-full flex items-center justify-center my-5">
-                <ProgressSpinner v-if="coreSensorConfigLoading" class="w-[30px] h-[30px] m-0" stroke-width="5" />
-                <span v-else class="text-sm text-muted text-center">{{ $t('components.camera_options.no_config') }}</span>
-              </div>
-
-              <CuiSchema
-                v-else
-                :key="`sensor-${selectedCoreSensorId}`"
-                :schema-form="{ schema: coreSensorConfig.schema, config: coreSensorConfig.config }"
-                :loading="configPatchLoading"
-                @on-form-submit="(configData: PluginConfig) => onControlFormSubmit(configData)"
-                @on-submit="(state) => onControlSubmit(state)"
-                @on-action="(state) => onControlAction(state)"
-              />
-            </template>
-          </template>
-        </template>
-      </div>
-
-      <div v-else-if="selectedExtension === 'accessories'" class="flex flex-col gap-2">
-        <template v-if="!availableAccessoryTypes.length">
-          <span class="cui-label">{{ $t('components.camera_options.sensor_types') }}</span>
-          <span class="text-sm text-muted text-center min-h-[30px]">{{ $t('components.camera_options.no_plugins_enabled') }}</span>
-        </template>
-
-        <template v-else>
-          <span class="cui-label">{{ $t('components.camera_options.sensor_types') }}</span>
-
-          <CuiChipGroup v-model="selectedAccessoryType" :disabled="isExtensionsLoading" mandatory class="min-h-[30px]">
-            <CuiChip v-for="type in availableAccessoryTypes" :key="type" size="small" :disabled="configPatchLoading" :value="type">
-              {{ $t(`components.camera_options.sensor_type_${type}`) }}
-            </CuiChip>
-          </CuiChipGroup>
-
-          <template v-if="accessoryPluginsForType.length">
-            <Divider class="m-0 py-3" />
-
-            <span class="cui-label">{{ $t('components.camera_options.chip_plugins') }}</span>
-
-            <CuiChipGroup
-              :model-value="isAccessorySingleProvider ? assignedAccessoryPlugins[0] : assignedAccessoryPlugins"
-              :disabled="isExtensionsLoading"
-              :multiple="!isAccessorySingleProvider"
-              class="min-h-[30px]"
-              @update:model-value="onAccessoryPluginsChange"
-            >
-              <CuiChip
-                v-for="extension in accessoryPluginsForType"
-                :key="extension.pluginName"
-                size="small"
-                filter
-                :disabled="!isPluginEnabled(extension.pluginName) || configPatchLoading"
-                :value="extension.pluginName"
-              >
-                {{ extension.displayName }}
-              </CuiChip>
-            </CuiChipGroup>
-
-            <template v-if="selectedAccessoryPluginForConfig && selectedAccessoryPluginForConfig !== camera.pluginInfo?.name">
-              <Divider class="m-0 py-3" />
-
-              <span class="cui-label">{{ $t('components.camera_options.plugin_settings') }}</span>
-
-              <div v-if="!accessoryExtensionConfig?.schema?.length" class="w-full flex items-center justify-center my-5">
-                <ProgressSpinner v-if="accessoryExtensionConfigLoading" class="w-[30px] h-[30px] m-0" stroke-width="5" />
-                <span v-else class="text-sm text-muted text-center">{{ $t('components.camera_options.no_config') }}</span>
-              </div>
-
-              <CuiSchema
-                v-else
-                :key="`accessory-plugin-${selectedAccessoryPluginForConfig}`"
-                :schema-form="{ schema: accessoryExtensionConfig.schema, config: accessoryExtensionConfig.config }"
-                :loading="configPatchLoading"
-                @on-form-submit="(configData: PluginConfig) => onAccessoryPluginFormSubmit(configData)"
-                @on-submit="(state) => onAccessoryPluginSubmit(state)"
-                @on-action="(state) => onAccessoryPluginAction(state)"
-              />
-            </template>
+            <CuiSchema
+              :key="`detection-plugin-${selectedDetectionPlugin}`"
+              :schema-form="{ schema: detectionPluginSettings.schema, config: detectionPluginSettings.config }"
+              :loading="configPatchLoading"
+              @on-form-submit="(configData: PluginConfig) => onDetectionPluginFormSubmit(configData)"
+              @on-submit="(state) => onDetectionPluginSubmit(state)"
+              @on-action="(state) => onDetectionPluginAction(state)"
+            />
           </template>
 
           <Divider class="m-0 py-3" />
 
-          <span class="cui-label">{{ $t('components.camera_options.sensors') }}</span>
+          <SectionLabel :label="$t('components.camera_options.sensors')" :loading="detectionSensorConfigLoading" />
 
-          <CuiChipGroup v-if="accessorySensorsForType.length" v-model="selectedAccessorySensorId" :disabled="isExtensionsLoading" mandatory class="min-h-[30px]">
-            <CuiChip v-for="sensor in accessorySensorsForType" :key="sensor.id" size="small" :disabled="configPatchLoading" :value="sensor.id">
+          <CuiChipGroup v-if="detectionSensorsForType.length" v-model="selectedDetectionSensorId" mandatory class="min-h-[30px]">
+            <CuiChip v-for="sensor in detectionSensorsForType" :key="sensor.id" size="small" :value="sensor.id">
               {{ sensor.displayName.value }}
               <template #append>
                 <Button
@@ -431,78 +159,293 @@
             </CuiChip>
           </CuiChipGroup>
 
-          <span v-else class="text-sm text-muted text-center min-h-[30px]">{{ $t('components.camera_options.no_sensors') }}</span>
+          <span v-else-if="!contentLoading" class="text-sm text-muted text-center min-h-[30px]">{{ $t('components.camera_options.no_sensors') }}</span>
 
-          <template v-if="selectedAccessorySensorId">
+          <template v-if="detectionSensorSettings">
             <Divider class="m-0 py-3" />
 
-            <span class="cui-label">{{ $t('components.camera_options.sensor_settings') }}</span>
-
-            <div v-if="!selectedAccessoryPluginName || !sensorConfig?.schema?.length" class="w-full flex items-center justify-center my-5">
-              <ProgressSpinner v-if="sensorConfigLoading" class="w-[30px] h-[30px] m-0" stroke-width="5" />
-              <span v-else class="text-sm text-muted text-center">{{ $t('components.camera_options.no_config') }}</span>
-            </div>
+            <SectionLabel :label="$t('components.camera_options.sensor_settings')" />
 
             <CuiSchema
-              v-else
-              :key="`sensor-${selectedAccessorySensorId}`"
-              :schema-form="{ schema: sensorConfig.schema, config: sensorConfig.config }"
+              :key="`sensor-${selectedDetectionSensorId}`"
+              :schema-form="{ schema: detectionSensorSettings.schema, config: detectionSensorSettings.config }"
               :loading="configPatchLoading"
-              @on-form-submit="(configData: PluginConfig) => onAccessoryFormSubmit(configData)"
-              @on-submit="(state) => onAccessorySubmit(state)"
-              @on-action="(state) => onAccessoryAction(state)"
+              @on-form-submit="(configData: PluginConfig) => onDetectionFormSubmit(configData)"
+              @on-submit="(state) => onDetectionSubmit(state)"
+              @on-action="(state) => onDetectionAction(state)"
             />
           </template>
         </template>
-      </div>
 
-      <div v-else-if="selectedExtension === 'more'" class="flex flex-col gap-2">
-        <span class="cui-label">{{ $t('components.camera_options.manage_plugins') }}</span>
+        <template v-if="showObjectAssist">
+          <Divider class="m-0 py-3" />
 
-        <div v-if="extensionsListLoading || !filteredExtensions.length" class="w-full flex items-center justify-center">
-          <ProgressSpinner v-if="extensionsListLoading" class="w-[30px] h-[30px] m-0" stroke-width="5" />
-          <span v-else class="text-sm text-muted text-center">{{ $t('components.camera_options.no_plugins_found') }}</span>
-        </div>
+          <SectionLabel :label="$t('components.camera_options.object_assist')" :loading="objectAssistSensorConfigLoading" />
 
-        <div v-else class="w-full h-full">
-          <div
-            v-for="filteredCameraExtension in filteredExtensions"
-            :key="filteredCameraExtension.pluginName"
-            v-tooltip.top="{ value: isPluginEnabled(filteredCameraExtension.pluginName) === undefined ? $t('components.form.tooltip.disabled') : '' }"
-            class="cui-list-item"
-          >
-            <CuiListItem
-              :disabled="isExtensionsLoading || !isPluginEnabled(filteredCameraExtension.pluginName)"
-              class="h-14"
-              @click="$router.push(`/plugins/${filteredCameraExtension.pluginName}`)"
+          <CuiChipGroup v-model="selectedObjectAssistPlugin" :disabled="isExtensionsLoading" class="min-h-[30px]">
+            <CuiChip
+              v-for="extension in objectAssistPlugins"
+              :key="extension.pluginName"
+              size="small"
+              filter
+              :disabled="!isPluginEnabled(extension.pluginName) || configPatchLoading"
+              :value="extension.pluginName"
             >
-              <span>{{ filteredCameraExtension.displayName }}</span>
+              {{ extension.displayName }}
+            </CuiChip>
+          </CuiChipGroup>
 
+          <template v-if="objectAssistSettings">
+            <Divider class="m-0 py-3" />
+
+            <SectionLabel :label="$t('components.camera_options.sensor_settings')" />
+
+            <CuiSchema
+              :key="`object-assist-${objectAssistSensorId}`"
+              :schema-form="{ schema: objectAssistSettings.schema, config: objectAssistSettings.config }"
+              :loading="configPatchLoading"
+              @on-form-submit="(configData: PluginConfig) => onObjectAssistFormSubmit(configData)"
+              @on-submit="(state) => onObjectAssistSubmit(state)"
+              @on-action="(state) => onObjectAssistAction(state)"
+            />
+          </template>
+        </template>
+      </template>
+    </div>
+
+    <div v-else-if="selectedExtension === 'core'" class="flex flex-col gap-2">
+      <template v-if="!availableCoreTypes.length">
+        <SectionLabel :label="$t('components.camera_options.sensor_types')" :loading="contentLoading" />
+        <span v-if="!contentLoading" class="text-sm text-muted text-center min-h-[30px]">{{ $t('components.camera_options.no_plugins_enabled') }}</span>
+      </template>
+
+      <template v-else>
+        <SectionLabel :label="$t('components.camera_options.sensor_types')" :loading="contentLoading" />
+
+        <CuiChipGroup v-model="selectedCoreType" mandatory class="min-h-[30px]">
+          <CuiChip v-for="type in availableCoreTypes" :key="type" size="small" :value="type">
+            {{ $t(`components.camera_options.sensor_type_${type}`) }}
+          </CuiChip>
+        </CuiChipGroup>
+
+        <template v-if="corePluginsForType.length">
+          <Divider class="m-0 py-3" />
+
+          <SectionLabel :label="$t('components.camera_options.chip_plugins')" :loading="coreExtensionConfigLoading" />
+
+          <CuiChipGroup v-model="selectedCorePlugin" :disabled="isExtensionsLoading" class="min-h-[30px]">
+            <CuiChip
+              v-for="extension in corePluginsForType"
+              :key="extension.pluginName"
+              size="small"
+              filter
+              :disabled="!isPluginEnabled(extension.pluginName) || configPatchLoading"
+              :value="extension.pluginName"
+            >
+              {{ extension.displayName }}
+            </CuiChip>
+          </CuiChipGroup>
+
+          <template v-if="corePluginSettings">
+            <Divider class="m-0 py-3" />
+
+            <SectionLabel :label="$t('components.camera_options.plugin_settings')" />
+
+            <CuiSchema
+              :key="`core-plugin-${selectedCorePlugin}`"
+              :schema-form="{ schema: corePluginSettings.schema, config: corePluginSettings.config }"
+              :loading="configPatchLoading"
+              @on-form-submit="(configData: PluginConfig) => onCorePluginFormSubmit(configData)"
+              @on-submit="(state) => onCorePluginSubmit(state)"
+              @on-action="(state) => onCorePluginAction(state)"
+            />
+          </template>
+
+          <Divider class="m-0 py-3" />
+
+          <SectionLabel :label="$t('components.camera_options.sensors')" :loading="coreSensorConfigLoading" />
+
+          <CuiChipGroup v-if="coreSensorsForType.length" v-model="selectedCoreSensorId" mandatory class="min-h-[30px]">
+            <CuiChip v-for="sensor in coreSensorsForType" :key="sensor.id" size="small" :value="sensor.id">
+              {{ sensor.displayName.value }}
               <template #append>
-                <ToggleSwitch
-                  :model-value="cameraExtensions?.some((plugin: PluginExtension) => plugin.pluginName === filteredCameraExtension.pluginName)"
-                  :disabled="isExtensionsLoading || !isPluginEnabled(filteredCameraExtension.pluginName)"
-                  @update:model-value="toggleExtension(filteredCameraExtension)"
-                />
+                <Button
+                  :text="selectedAccessorySensorId !== sensor.id"
+                  rounded
+                  :severity="selectedAccessorySensorId === sensor.id ? 'primary' : 'secondary'"
+                  class="cui-icon-sm text-white"
+                  @click.stop="openRenameSensorDialog(sensor)"
+                >
+                  <template #icon>
+                    <i-mdi:pencil width="100%" height="100%" />
+                  </template>
+                </Button>
               </template>
-            </CuiListItem>
-          </div>
-        </div>
+            </CuiChip>
+          </CuiChipGroup>
 
-        <div class="cui-list-item">
-          <CuiListItem class="h-14" @click="$router.push(`/plugins`)">
-            <span>{{ $t('components.camera_options.more_plugins') }}</span>
+          <span v-else-if="!contentLoading" class="text-sm text-muted text-center min-h-[30px]">{{ $t('components.camera_options.no_sensors') }}</span>
+
+          <template v-if="coreSensorSettings">
+            <Divider class="m-0 py-3" />
+
+            <SectionLabel :label="$t('components.camera_options.sensor_settings')" />
+
+            <CuiSchema
+              :key="`sensor-${selectedCoreSensorId}`"
+              :schema-form="{ schema: coreSensorSettings.schema, config: coreSensorSettings.config }"
+              :loading="configPatchLoading"
+              @on-form-submit="(configData: PluginConfig) => onControlFormSubmit(configData)"
+              @on-submit="(state) => onControlSubmit(state)"
+              @on-action="(state) => onControlAction(state)"
+            />
+          </template>
+        </template>
+      </template>
+    </div>
+
+    <div v-else-if="selectedExtension === 'accessories'" class="flex flex-col gap-2">
+      <template v-if="!availableAccessoryTypes.length">
+        <SectionLabel :label="$t('components.camera_options.sensor_types')" :loading="contentLoading" />
+        <span v-if="!contentLoading" class="text-sm text-muted text-center min-h-[30px]">{{ $t('components.camera_options.no_plugins_enabled') }}</span>
+      </template>
+
+      <template v-else>
+        <SectionLabel :label="$t('components.camera_options.sensor_types')" :loading="contentLoading" />
+
+        <CuiChipGroup v-model="selectedAccessoryType" mandatory class="min-h-[30px]">
+          <CuiChip v-for="type in availableAccessoryTypes" :key="type" size="small" :value="type">
+            {{ $t(`components.camera_options.sensor_type_${type}`) }}
+          </CuiChip>
+        </CuiChipGroup>
+
+        <template v-if="accessoryPluginsForType.length">
+          <Divider class="m-0 py-3" />
+
+          <SectionLabel :label="$t('components.camera_options.chip_plugins')" :loading="accessoryExtensionConfigLoading" />
+
+          <CuiChipGroup
+            :model-value="isAccessorySingleProvider ? assignedAccessoryPlugins[0] : assignedAccessoryPlugins"
+            :disabled="isExtensionsLoading"
+            :multiple="!isAccessorySingleProvider"
+            class="min-h-[30px]"
+            @update:model-value="onAccessoryPluginsChange"
+          >
+            <CuiChip
+              v-for="extension in accessoryPluginsForType"
+              :key="extension.pluginName"
+              size="small"
+              filter
+              :disabled="!isPluginEnabled(extension.pluginName) || configPatchLoading"
+              :value="extension.pluginName"
+            >
+              {{ extension.displayName }}
+            </CuiChip>
+          </CuiChipGroup>
+
+          <template v-if="accessoryPluginSettings">
+            <Divider class="m-0 py-3" />
+
+            <SectionLabel :label="$t('components.camera_options.plugin_settings')" />
+
+            <CuiSchema
+              :key="`accessory-plugin-${selectedAccessoryPluginForConfig}`"
+              :schema-form="{ schema: accessoryPluginSettings.schema, config: accessoryPluginSettings.config }"
+              :loading="configPatchLoading"
+              @on-form-submit="(configData: PluginConfig) => onAccessoryPluginFormSubmit(configData)"
+              @on-submit="(state) => onAccessoryPluginSubmit(state)"
+              @on-action="(state) => onAccessoryPluginAction(state)"
+            />
+          </template>
+        </template>
+
+        <Divider class="m-0 py-3" />
+
+        <SectionLabel :label="$t('components.camera_options.sensors')" :loading="sensorConfigLoading" />
+
+        <CuiChipGroup v-if="accessorySensorsForType.length" v-model="selectedAccessorySensorId" mandatory class="min-h-[30px]">
+          <CuiChip v-for="sensor in accessorySensorsForType" :key="sensor.id" size="small" :value="sensor.id">
+            {{ sensor.displayName.value }}
             <template #append>
-              <Button text rounded severity="secondary" class="cui-icon-md">
+              <Button
+                :text="selectedAccessorySensorId !== sensor.id"
+                rounded
+                :severity="selectedAccessorySensorId === sensor.id ? 'primary' : 'secondary'"
+                class="cui-icon-sm text-white"
+                @click.stop="openRenameSensorDialog(sensor)"
+              >
                 <template #icon>
-                  <i-majesticons:open width="100%" height="100%" />
+                  <i-mdi:pencil width="100%" height="100%" />
                 </template>
               </Button>
+            </template>
+          </CuiChip>
+        </CuiChipGroup>
+
+        <span v-else-if="!contentLoading" class="text-sm text-muted text-center min-h-[30px]">{{ $t('components.camera_options.no_sensors') }}</span>
+
+        <template v-if="accessorySensorSettings">
+          <Divider class="m-0 py-3" />
+
+          <SectionLabel :label="$t('components.camera_options.sensor_settings')" />
+
+          <CuiSchema
+            :key="`sensor-${selectedAccessorySensorId}`"
+            :schema-form="{ schema: accessorySensorSettings.schema, config: accessorySensorSettings.config }"
+            :loading="configPatchLoading"
+            @on-form-submit="(configData: PluginConfig) => onAccessoryFormSubmit(configData)"
+            @on-submit="(state) => onAccessorySubmit(state)"
+            @on-action="(state) => onAccessoryAction(state)"
+          />
+        </template>
+      </template>
+    </div>
+
+    <div v-else-if="selectedExtension === 'more'" class="flex flex-col gap-2">
+      <SectionLabel :label="$t('components.camera_options.manage_plugins')" :loading="extensionsListLoading" />
+
+      <span v-if="!filteredExtensions.length && !extensionsListLoading" class="text-sm text-muted text-center min-h-[30px]">{{
+        $t('components.camera_options.no_plugins_found')
+      }}</span>
+
+      <div v-else class="w-full h-full">
+        <div
+          v-for="filteredCameraExtension in filteredExtensions"
+          :key="filteredCameraExtension.pluginName"
+          v-tooltip.top="{ value: isPluginEnabled(filteredCameraExtension.pluginName) === undefined ? $t('components.form.tooltip.disabled') : '' }"
+          class="cui-list-item"
+        >
+          <CuiListItem
+            :disabled="isExtensionsLoading || !isPluginEnabled(filteredCameraExtension.pluginName)"
+            class="h-14"
+            @click="$router.push(`/plugins/${filteredCameraExtension.pluginName}`)"
+          >
+            <span>{{ filteredCameraExtension.displayName }}</span>
+
+            <template #append>
+              <ToggleSwitch
+                :model-value="cameraExtensions?.some((plugin: PluginExtension) => plugin.pluginName === filteredCameraExtension.pluginName)"
+                :disabled="isExtensionsLoading || !isPluginEnabled(filteredCameraExtension.pluginName)"
+                @update:model-value="toggleExtension(filteredCameraExtension)"
+              />
             </template>
           </CuiListItem>
         </div>
       </div>
-    </template>
+
+      <div class="cui-list-item">
+        <CuiListItem class="h-14" @click="$router.push(`/plugins`)">
+          <span>{{ $t('components.camera_options.more_plugins') }}</span>
+          <template #append>
+            <Button text rounded severity="secondary" class="cui-icon-md">
+              <template #icon>
+                <i-majesticons:open width="100%" height="100%" />
+              </template>
+            </Button>
+          </template>
+        </CuiListItem>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -526,6 +469,8 @@ import type { PluginExtension } from '@shared/types';
 import type { CameraOptionsTabEmits, CameraOptionsTabProps } from '../../types.js';
 
 type ExtensionTypes = 'hub' | 'detection' | 'core' | 'accessories' | 'cameraController' | 'more';
+
+const EXTENSION_TYPES: ExtensionTypes[] = ['cameraController', 'hub', 'detection', 'core', 'accessories', 'more'];
 
 const DETECTION_SENSOR_TYPES = getDetectionSensorTypes().filter((type: SensorType) => type !== SensorType.ObjectAssist);
 const CORE_SENSOR_TYPES = getCoreSensorTypes();
@@ -553,11 +498,10 @@ const { mutateAsync: disableExtension, isPending: disableExtensionPending } = ca
 const { mutateAsync: activateExtension, isPending: activateExtensionPending } = camerasQuery.activateCameraExtensionQuery();
 const { mutateAsync: deactivateExtension, isPending: deactivateExtensionPending } = camerasQuery.deactivateCameraExtensionQuery();
 
-const { sensors: allSensors } = useSensors(cameraDevice);
+const { sensors: allSensors, isLoading: sensorsLoading } = useSensors(cameraDevice);
 
 const schemaRef = useTemplateRef<InstanceType<typeof CuiSchema>>('schemaRef');
-const selectedExtension = ref<ExtensionTypes>('hub');
-const extensionTypes = ref<ExtensionTypes[]>(['hub', 'detection', 'core', 'accessories', 'more']);
+const selectedExtension = ref<ExtensionTypes>();
 const selectedPlugin = ref('');
 const selectedHubPlugin = ref<string>();
 const selectedDetectionType = ref<SensorType>();
@@ -628,14 +572,11 @@ const assignedAccessoryPlugins = computed<string[]>(() => {
   let pluginNames: string[] = [];
 
   if (Array.isArray(assignments)) {
-    // Multi-provider: return all assigned plugin names
     pluginNames = assignments.map((a) => a.name);
   } else if (assignments && typeof assignments === 'object' && 'name' in assignments) {
-    // Single-provider: return as single-element array
     pluginNames = [assignments.name];
   }
 
-  // Sort to match the order of accessoryPluginsForType
   const pluginOrder = accessoryPluginsForType.value.map((p) => p.pluginName);
   return pluginNames.sort((a, b) => pluginOrder.indexOf(a) - pluginOrder.indexOf(b));
 });
@@ -665,7 +606,15 @@ const sensorStorage = useSensorStorage(selectedAccessorySensorId, selectedAccess
 const sensorConfig = sensorStorage.config;
 const sensorConfigLoading = sensorStorage.isLoading;
 
+const pluginSettings = computed(() => (selectedPlugin.value && extensionConfig.value?.schema?.length ? extensionConfig.value : undefined));
+
+const accessorySensorSettings = computed(() =>
+  selectedAccessorySensorId.value && selectedAccessoryPluginName.value && sensorConfig.value?.schema?.length ? sensorConfig.value : undefined,
+);
+
 const categoriesLoading = computed(() => pluginsLoading.value || extensionsListLoading.value || cameraExtensionsLoading.value || cameraSensorsLoading.value);
+
+const contentLoading = computed(() => categoriesLoading.value || isExtensionsLoading.value || sensorsLoading.value);
 
 const isExtensionsLoading = computed(
   () =>
@@ -706,6 +655,8 @@ const cameraTabPlugins = computed<PluginExtension[]>(() => {
   }
   return [];
 });
+
+const hasCameraTab = computed(() => cameraTabPlugins.value.length > 0);
 
 const detectionExtensions = computed<PluginExtension[]>(() => {
   return cameraExtensions.value?.filter((p) => DETECTION_SENSOR_TYPES.some((type: SensorType) => p.contract.provides.includes(type))) || [];
@@ -844,6 +795,15 @@ const detectionSensorStorage = useSensorStorage(selectedDetectionSensorId, selec
 const detectionSensorConfig = detectionSensorStorage.config;
 const detectionSensorConfigLoading = detectionSensorStorage.isLoading;
 
+const detectionPluginSettings = computed(() => {
+  if (!selectedDetectionPlugin.value || selectedDetectionPlugin.value === camera.value.pluginInfo?.name) return undefined;
+  return detectionExtensionConfig.value?.schema?.length ? detectionExtensionConfig.value : undefined;
+});
+
+const detectionSensorSettings = computed(() =>
+  selectedDetectionSensorId.value && selectedDetectionSensorPluginName.value && detectionSensorConfig.value?.schema?.length ? detectionSensorConfig.value : undefined,
+);
+
 const objectAssistSensor = computed<ReactiveSensor | undefined>(() => {
   const pluginName = selectedObjectAssistPlugin.value;
   if (!pluginName || pluginName === getDetectionAssignment(SensorType.Object)?.name) return undefined;
@@ -857,6 +817,8 @@ const objectAssistSensorStorage = useSensorStorage(objectAssistSensorId, objectA
 const objectAssistSensorConfig = objectAssistSensorStorage.config;
 const objectAssistSensorConfigLoading = objectAssistSensorStorage.isLoading;
 
+const objectAssistSettings = computed(() => (objectAssistSensorId.value && objectAssistSensorConfig.value?.schema?.length ? objectAssistSensorConfig.value : undefined));
+
 const selectedCorePluginName = computed(() => selectedCorePlugin.value ?? '');
 const coreExtensionStorage = useCameraStorage(cameraDevice, selectedCorePluginName);
 const coreExtensionConfig = coreExtensionStorage.config;
@@ -866,10 +828,24 @@ const coreSensorStorage = useSensorStorage(selectedCoreSensorId, selectedCoreSen
 const coreSensorConfig = coreSensorStorage.config;
 const coreSensorConfigLoading = coreSensorStorage.isLoading;
 
+const corePluginSettings = computed(() => {
+  if (!selectedCorePlugin.value || selectedCorePlugin.value === camera.value.pluginInfo?.name) return undefined;
+  return coreExtensionConfig.value?.schema?.length ? coreExtensionConfig.value : undefined;
+});
+
+const coreSensorSettings = computed(() =>
+  selectedCoreSensorId.value && selectedCoreSensorPluginName.value && coreSensorConfig.value?.schema?.length ? coreSensorConfig.value : undefined,
+);
+
 const selectedAccessoryPluginForConfigName = computed(() => selectedAccessoryPluginForConfig.value ?? '');
 const accessoryExtensionStorage = useCameraStorage(cameraDevice, selectedAccessoryPluginForConfigName);
 const accessoryExtensionConfig = accessoryExtensionStorage.config;
 const accessoryExtensionConfigLoading = accessoryExtensionStorage.isLoading;
+
+const accessoryPluginSettings = computed(() => {
+  if (!selectedAccessoryPluginForConfig.value || selectedAccessoryPluginForConfig.value === camera.value.pluginInfo?.name) return undefined;
+  return accessoryExtensionConfig.value?.schema?.length ? accessoryExtensionConfig.value : undefined;
+});
 
 const filteredExtensions = computed<PluginExtension[]>(() => {
   const _plugins = plugins.value?.result || [];
@@ -950,7 +926,6 @@ async function updateSelectedPlugin(pluginName?: string): Promise<void> {
         const assignment = selectedDetectionType.value ? getDetectionAssignment(selectedDetectionType.value) : undefined;
         const assignedPluginName = isPluginEnabled(assignment);
         selectedPlugin.value = assignedPluginName || '';
-        // Sync selectedDetectionPlugin so the chip shows as checked
         selectedDetectionPlugin.value = assignedPluginName || undefined;
         break;
       }
@@ -958,12 +933,10 @@ async function updateSelectedPlugin(pluginName?: string): Promise<void> {
         const assignment = selectedCoreType.value ? getCoreAssignment(selectedCoreType.value) : undefined;
         const assignedPluginName = isPluginEnabled(assignment);
         selectedPlugin.value = assignedPluginName || '';
-        // Sync selectedCorePlugin so the chip shows as checked
         selectedCorePlugin.value = assignedPluginName || undefined;
         break;
       }
       case 'accessories':
-        // For accessories, we use sensorConfig not extensionConfig
         selectedPlugin.value = '';
         break;
       default:
@@ -972,7 +945,6 @@ async function updateSelectedPlugin(pluginName?: string): Promise<void> {
     }
   }
 
-  // Fetch config if a plugin is selected (excluding accessories which use sensor storage)
   if (selectedPlugin.value && selectedExtension.value !== 'accessories' && isPluginEnabled(selectedPlugin.value)) {
     await extensionStorage.getConfig();
   }
@@ -981,7 +953,6 @@ async function updateSelectedPlugin(pluginName?: string): Promise<void> {
 function initCategorySelection(): void {
   switch (selectedExtension.value) {
     case 'cameraController':
-      // Auto-select first plugin from cameraTabPlugins
       if (cameraTabPlugins.value.length && !selectedPlugin.value) {
         selectedPlugin.value = cameraTabPlugins.value[0].pluginName;
       }
@@ -993,11 +964,9 @@ function initCategorySelection(): void {
       }
       break;
     case 'detection': {
-      // Set first available detection type if none selected or invalid
       if (availableDetectionTypes.value.length && (!selectedDetectionType.value || !availableDetectionTypes.value.includes(selectedDetectionType.value))) {
         selectedDetectionType.value = availableDetectionTypes.value[0];
       }
-      // Set selected plugin based on current assignment
       const assignment = selectedDetectionType.value ? getDetectionAssignment(selectedDetectionType.value) : undefined;
       if (assignment && isPluginEnabled(assignment.name)) {
         selectedDetectionPlugin.value = assignment.name;
@@ -1007,11 +976,9 @@ function initCategorySelection(): void {
       break;
     }
     case 'core': {
-      // Set first available control type if none selected or invalid
       if (availableCoreTypes.value.length && (!selectedCoreType.value || !availableCoreTypes.value.includes(selectedCoreType.value))) {
         selectedCoreType.value = availableCoreTypes.value[0];
       }
-      // Set selected plugin based on current assignment
       const controlAssignment = selectedCoreType.value ? getCoreAssignment(selectedCoreType.value) : undefined;
       if (controlAssignment && isPluginEnabled(controlAssignment.name)) {
         selectedCorePlugin.value = controlAssignment.name;
@@ -1021,11 +988,9 @@ function initCategorySelection(): void {
       break;
     }
     case 'accessories':
-      // Set first available accessory type if none selected or invalid
       if (availableAccessoryTypes.value.length && (!selectedAccessoryType.value || !availableAccessoryTypes.value.includes(selectedAccessoryType.value))) {
         selectedAccessoryType.value = availableAccessoryTypes.value[0];
       }
-      // Set plugin for config (first assigned plugin for this type)
       nextTick(() => {
         if (assignedAccessoryPlugins.value.length && !selectedAccessoryPluginForConfig.value) {
           selectedAccessoryPluginForConfig.value = assignedAccessoryPlugins.value[0];
@@ -1040,11 +1005,9 @@ async function toggleExtension(extension: PluginExtension): Promise<void> {
     const isActive = cameraExtensions.value.some((p) => p.pluginName === extension.pluginName);
 
     if (isActive) {
-      // Deactivate: single API call removes plugin and all assignments
       await deactivateExtension({ cameraname: camera.value.name, pluginname: extension.pluginName });
       schemaRef.value?.reset();
     } else {
-      // Activate: single API call adds plugin and enables all assignments
       await activateExtension({ cameraname: camera.value.name, pluginname: extension.pluginName });
     }
   }
@@ -1055,7 +1018,6 @@ async function onAccessoryPluginsChange(value: string | number | object | undefi
 
   const oldSelection = assignedAccessoryPlugins.value;
 
-  // Handle single-provider mode (value is string or undefined)
   if (isAccessorySingleProvider.value) {
     const newPlugin = value as string | undefined;
     const oldPlugin = oldSelection[0];
@@ -1076,7 +1038,6 @@ async function onAccessoryPluginsChange(value: string | number | object | undefi
         pluginname: newPlugin,
         type: selectedAccessoryType.value,
       });
-      // Set plugin for config
       selectedAccessoryPluginForConfig.value = newPlugin;
     } else {
       selectedAccessoryPluginForConfig.value = undefined;
@@ -1084,7 +1045,6 @@ async function onAccessoryPluginsChange(value: string | number | object | undefi
     return;
   }
 
-  // Multi-provider mode (value is array)
   const newSelection = (value as string[]) || [];
 
   const added = newSelection.filter((p) => !oldSelection.includes(p));
@@ -1105,13 +1065,11 @@ async function onAccessoryPluginsChange(value: string | number | object | undefi
       type: selectedAccessoryType.value,
     });
 
-    // Reset plugin for config if we disabled it
     if (selectedAccessoryPluginForConfig.value === pluginName) {
       selectedAccessoryPluginForConfig.value = undefined;
     }
   }
 
-  // Set plugin for config (first assigned plugin or newly added)
   if (added.length && !selectedAccessoryPluginForConfig.value) {
     selectedAccessoryPluginForConfig.value = added[0];
   } else if (newSelection.length && !selectedAccessoryPluginForConfig.value) {
@@ -1494,35 +1452,35 @@ watch(selectedHubPlugin, async (newValue, oldValue) => {
   }
 });
 
-watch(selectedDetectionType, () => {
-  // Update selected plugin based on current assignment
-  if (selectedDetectionType.value) {
-    const assignment = getDetectionAssignment(selectedDetectionType.value);
-    if (assignment && isPluginEnabled(assignment.name)) {
-      selectedDetectionPlugin.value = assignment.name;
+watch(
+  selectedDetectionType,
+  () => {
+    if (selectedDetectionType.value) {
+      const assignment = getDetectionAssignment(selectedDetectionType.value);
+      if (assignment && isPluginEnabled(assignment.name)) {
+        selectedDetectionPlugin.value = assignment.name;
+      } else {
+        selectedDetectionPlugin.value = undefined;
+      }
     } else {
       selectedDetectionPlugin.value = undefined;
     }
-  } else {
-    selectedDetectionPlugin.value = undefined;
-  }
-  updateSelectedPlugin();
-});
+    updateSelectedPlugin();
+  },
+  { flush: 'sync' },
+);
 
 watch(selectedDetectionPlugin, async (newValue, oldValue) => {
   if (newValue !== oldValue && selectedDetectionType.value) {
     const currentAssignment = getDetectionAssignment(selectedDetectionType.value);
 
     if (!newValue && oldValue) {
-      // Deselected - disable the extension
       await disableExtension({ cameraname: camera.value.name, pluginname: oldValue, type: selectedDetectionType.value });
       schemaRef.value?.reset();
     } else if (newValue) {
-      // Selected - enable the extension (this will also disable the previous one if any)
       if (currentAssignment?.name !== newValue) {
         await enableExtension({ cameraname: camera.value.name, pluginname: newValue, type: selectedDetectionType.value });
       }
-      // Fetch plugin config for Plugin Settings
       await detectionExtensionStorage.getConfig();
     }
 
@@ -1530,14 +1488,13 @@ watch(selectedDetectionPlugin, async (newValue, oldValue) => {
   }
 });
 
-// the sensor chips follow the selected plugin, keep the selection on a sensor that is actually listed
 watch(
   detectionSensorsForType,
   (sensors) => {
     if (selectedDetectionSensorId.value && sensors.some((s) => s.id === selectedDetectionSensorId.value)) return;
     selectedDetectionSensorId.value = sensors[0]?.id;
   },
-  { immediate: true },
+  { immediate: true, flush: 'sync' },
 );
 
 watch(objectAssistAssignmentName, (name) => (selectedObjectAssistPlugin.value = name), { immediate: true });
@@ -1552,20 +1509,23 @@ watch(selectedObjectAssistPlugin, async (newValue, oldValue) => {
   }
 });
 
-watch(selectedCoreType, () => {
-  // Update selected plugin based on current assignment
-  if (selectedCoreType.value) {
-    const assignment = getCoreAssignment(selectedCoreType.value);
-    if (assignment && isPluginEnabled(assignment.name)) {
-      selectedCorePlugin.value = assignment.name;
+watch(
+  selectedCoreType,
+  () => {
+    if (selectedCoreType.value) {
+      const assignment = getCoreAssignment(selectedCoreType.value);
+      if (assignment && isPluginEnabled(assignment.name)) {
+        selectedCorePlugin.value = assignment.name;
+      } else {
+        selectedCorePlugin.value = undefined;
+      }
     } else {
       selectedCorePlugin.value = undefined;
     }
-  } else {
-    selectedCorePlugin.value = undefined;
-  }
-  updateSelectedPlugin();
-});
+    updateSelectedPlugin();
+  },
+  { flush: 'sync' },
+);
 
 watch(selectedCorePlugin, async (newValue, oldValue) => {
   if (newValue !== oldValue && selectedCoreType.value) {
@@ -1578,7 +1538,6 @@ watch(selectedCorePlugin, async (newValue, oldValue) => {
       if (currentAssignment?.name !== newValue) {
         await enableExtension({ cameraname: camera.value.name, pluginname: newValue, type: selectedCoreType.value });
       }
-      // Fetch plugin config for Plugin Settings
       await coreExtensionStorage.getConfig();
     }
 
@@ -1592,7 +1551,7 @@ watch(
     if (selectedCoreSensorId.value && sensors.some((s) => s.id === selectedCoreSensorId.value)) return;
     selectedCoreSensorId.value = sensors[0]?.id;
   },
-  { immediate: true },
+  { immediate: true, flush: 'sync' },
 );
 
 watch([selectedDetectionSensorId, selectedDetectionSensorPluginId], async ([sensorId, pluginId]) => {
@@ -1607,14 +1566,17 @@ watch([selectedCoreSensorId, selectedCoreSensorPluginId], async ([sensorId, plug
   }
 });
 
-watch(selectedAccessoryType, () => {
-  // Set plugin for config (first assigned plugin for this type)
-  if (assignedAccessoryPlugins.value.length) {
-    selectedAccessoryPluginForConfig.value = assignedAccessoryPlugins.value[0];
-  } else {
-    selectedAccessoryPluginForConfig.value = undefined;
-  }
-});
+watch(
+  selectedAccessoryType,
+  () => {
+    if (assignedAccessoryPlugins.value.length) {
+      selectedAccessoryPluginForConfig.value = assignedAccessoryPlugins.value[0];
+    } else {
+      selectedAccessoryPluginForConfig.value = undefined;
+    }
+  },
+  { flush: 'sync' },
+);
 
 watch(
   accessorySensorsForType,
@@ -1622,7 +1584,7 @@ watch(
     if (selectedAccessorySensorId.value && sensors.some((s) => s.id === selectedAccessorySensorId.value)) return;
     selectedAccessorySensorId.value = sensors[0]?.id;
   },
-  { immediate: true },
+  { immediate: true, flush: 'sync' },
 );
 
 watch(selectedAccessoryPluginForConfig, async (newValue) => {
@@ -1638,30 +1600,15 @@ watch(selectedAccessorySensorId, async (newValue) => {
 });
 
 watch(
-  cameraTabPlugins,
-  (plugins) => {
-    const hasCameraTab = extensionTypes.value.indexOf('cameraController') !== -1;
-
-    if (plugins.length && !hasCameraTab) {
-      // Add Camera tab at the beginning
-      extensionTypes.value.unshift('cameraController');
-      // If no extension is selected yet, select Camera tab
-      if (!selectedExtension.value || selectedExtension.value === 'hub') {
-        selectedExtension.value = 'cameraController';
-        if (plugins.length && !selectedPlugin.value) {
-          selectedPlugin.value = plugins[0].pluginName;
-        }
-      }
-    } else if (!plugins.length && hasCameraTab) {
-      // Remove Camera tab if no plugins
-      extensionTypes.value = extensionTypes.value.filter((t) => t !== 'cameraController');
-      // Switch to hub if currently on Camera tab
-      if (selectedExtension.value === 'cameraController') {
-        selectedExtension.value = 'hub';
-      }
+  [hasCameraTab, categoriesLoading],
+  ([hasCamera, loading]) => {
+    if (hasCamera) {
+      selectedExtension.value ??= 'cameraController';
+    } else if (!loading && (!selectedExtension.value || selectedExtension.value === 'cameraController')) {
+      selectedExtension.value = 'hub';
     }
   },
-  { immediate: true },
+  { immediate: true, flush: 'sync' },
 );
 
 onBeforeMount(async () => {
