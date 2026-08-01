@@ -216,11 +216,11 @@ export class FrameWorker extends Subscribed {
           if (property === 'frameWorkerSettings') {
             const newSettings = newData as CameraFrameWorkerSettings;
             const oldSettings = oldData as CameraFrameWorkerSettings;
-            this.pushChildUpdate('frame worker settings', this.frameWorkerChildProxy.updateFrameWorkerSettings(this.resolveFrameWorkerSettings(newSettings)));
-            // fps and decoder live inside the running decode session, restart to apply
             if (newSettings.fps !== oldSettings.fps || !isEqual(this.effectiveDecoder(newSettings), this.effectiveDecoder(oldSettings), true)) {
               this.restart();
+              return;
             }
+            this.pushChildUpdate('frame worker settings', this.frameWorkerChildProxy.updateFrameWorkerSettings(this.resolveFrameWorkerSettings(newSettings)));
             return;
           }
 

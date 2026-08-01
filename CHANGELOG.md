@@ -16,6 +16,8 @@ All notable changes to this project will be documented in this file.
 
 - **The worker decoder can be set back to "Same as server".** Saving it failed with "Validation failed", and the previous choice would have stayed in place even if it had saved.
 
+- **No more timeout warning after changing frames per second or the decoder.** Both settings restart the frame worker, and the log complained 30 seconds later that the worker had not accepted them. It had, through the restart.
+
 ## [2.0.24]
 
 ### Changed
