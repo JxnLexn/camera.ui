@@ -20,6 +20,7 @@ export interface TransformedSensor {
   cameraBound: boolean;
   assignmentLocked: boolean;
   connected: boolean;
+  requiresFrames: boolean;
   assignedCameraIds: string[];
   exposed: boolean;
   hidden: boolean;
@@ -124,6 +125,7 @@ export class SensorsService {
       cameraBound: SENSOR_TYPE_CONFIG[record.type]?.cameraBound ?? false,
       assignmentLocked: record.boundCameraId !== undefined,
       connected: this.registry.isConnected(record._id),
+      requiresFrames: data.requiresFrames ?? false,
       assignedCameraIds: data.assignedCameraIds,
       exposed: record.exposed,
       hidden: record.hidden ?? false,

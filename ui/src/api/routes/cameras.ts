@@ -18,12 +18,6 @@ import type {
 import type { AxiosResponse } from 'axios';
 import type { AckResponse } from '..';
 
-export interface RegisteredCameraSensor {
-  type: SensorType;
-  pluginId?: string;
-  requiresFrames?: boolean;
-}
-
 export async function createCameraFn({ cameraData }: { cameraData: CreateCameraInput }): Promise<DBCamera> {
   const response: AxiosResponse<DBCamera> = await api.post('/cameras', cameraData);
   return response.data;
@@ -99,11 +93,6 @@ export async function patchCameraFn({ cameraname, cameraData }: { cameraname: st
 export async function getCameraExtensionsFn({ cameraname, signal }: { cameraname: string; signal: AbortSignal }): Promise<PluginExtension[]> {
   const response: AxiosResponse<PluginExtension[]> = await api.get(`/cameras/${cameraname}/extensions`, { signal });
   return response.data;
-}
-
-export async function getCameraRegisteredSensorsFn({ cameraname, signal }: { cameraname: string; signal: AbortSignal }): Promise<RegisteredCameraSensor[]> {
-  const response: AxiosResponse<{ sensors: RegisteredCameraSensor[] }> = await api.get(`/cameras/${cameraname}/sensors/registered`, { signal });
-  return response.data.sensors;
 }
 
 export async function getCameraExtensionConfigFn({
@@ -303,10 +292,6 @@ export class CamerasQuery {
       enabled: true,
     },
     {
-      name: 'getCameraRegisteredSensorsQuery',
-      enabled: true,
-    },
-    {
       name: 'getCameraExtensionConfigQuery',
       enabled: true,
     },
@@ -375,14 +360,6 @@ export class CamerasQuery {
       queryKey: ['camerasExtensions', cameraname],
       queryFn: ({ signal }) => getCameraExtensionsFn({ cameraname: unref(cameraname), signal }),
       enabled: () => this.queryActivator.value.some((query) => query.name === 'getCameraExtensionsQuery' && query.enabled),
-    });
-  }
-
-  public getCameraRegisteredSensorsQuery(cameraname: string | Ref<string> | ComputedRef<string>) {
-    return useQueryEnhanced({
-      queryKey: ['camerasRegisteredSensors', cameraname],
-      queryFn: ({ signal }) => getCameraRegisteredSensorsFn({ cameraname: unref(cameraname), signal }),
-      enabled: () => this.queryActivator.value.some((query) => query.name === 'getCameraRegisteredSensorsQuery' && query.enabled),
     });
   }
 

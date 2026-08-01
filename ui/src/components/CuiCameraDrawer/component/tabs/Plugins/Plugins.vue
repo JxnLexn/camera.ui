@@ -513,6 +513,7 @@ import { getAccessorySensorTypes, getAssignmentKey, getCoreSensorTypes, getDetec
 
 import { CamerasQuery } from '@/api/routes/cameras.js';
 import { PluginsQuery } from '@/api/routes/plugins.js';
+import { SensorsQuery } from '@/api/routes/sensors.js';
 import { pluginMessageResponseTypeToToastType } from '@/common/utils.js';
 import PluginSchemaDialog from '@/components/CuiDialog/templates/PluginSchema/PluginSchema.vue';
 import RenameSensorDialog from '@/components/CuiDialog/templates/RenameSensor/RenameSensor.vue';
@@ -532,6 +533,7 @@ const ACCESSORIES_SENSOR_TYPES = getAccessorySensorTypes();
 
 const camerasQuery = new CamerasQuery();
 const pluginsQuery = new PluginsQuery();
+const sensorsQuery = new SensorsQuery();
 
 const props = defineProps<CameraOptionsTabProps>();
 
@@ -544,7 +546,7 @@ const { camera, cameraDevice, loading } = toRefs(props);
 
 const { data: plugins, isBusy: pluginsLoading } = pluginsQuery.getPluginsQuery({ page: 1, pageSize: -1 });
 const { data: cameraExtensions, isBusy: cameraExtensionsLoading, suspense: cameraExtensionsSuspense } = camerasQuery.getCameraExtensionsQuery(camera.value.name);
-const { data: registeredSensors, isBusy: registeredSensorsLoading } = camerasQuery.getCameraRegisteredSensorsQuery(camera.value.name);
+const { data: cameraSensors, isBusy: cameraSensorsLoading } = sensorsQuery.getCameraSensorsQuery(camera.value._id);
 const { data: extensionsList, isBusy: extensionsListLoading } = pluginsQuery.getPluginsExtensionsQuery({ page: 1, pageSize: -1 });
 const { mutateAsync: enableExtension, isPending: enableExtensionPending } = camerasQuery.enableCameraExtensionQuery();
 const { mutateAsync: disableExtension, isPending: disableExtensionPending } = camerasQuery.disableCameraExtensionQuery();
@@ -644,7 +646,7 @@ const sensorStorage = useSensorStorage(selectedAccessorySensorId, selectedAccess
 const sensorConfig = sensorStorage.config;
 const sensorConfigLoading = sensorStorage.isLoading;
 
-const categoriesLoading = computed(() => pluginsLoading.value || extensionsListLoading.value || cameraExtensionsLoading.value || registeredSensorsLoading.value);
+const categoriesLoading = computed(() => pluginsLoading.value || extensionsListLoading.value || cameraExtensionsLoading.value || cameraSensorsLoading.value);
 
 const isExtensionsLoading = computed(
   () =>
@@ -736,16 +738,16 @@ const objectAssistAssignmentName = computed(() => {
 const objectSensorIsExternal = computed(() => {
   const assignment = getDetectionAssignment(SensorType.Object);
   if (!assignment) return false;
-  const sensor = (registeredSensors.value ?? []).find((s) => s.type === SensorType.Object && getPluginNameFromId(s.pluginId || '') === assignment.name);
+  const sensor = (cameraSensors.value ?? []).find((s) => s.connected && s.type === SensorType.Object && getPluginNameFromId(s.pluginId) === assignment.name);
   return sensor?.requiresFrames === false;
 });
 
 const objectAssistPlugins = computed<PluginExtension[]>(() => {
   const objectPluginName = getDetectionAssignment(SensorType.Object)?.name;
   const frameBased = new Set(
-    (registeredSensors.value ?? [])
-      .filter((s) => s.type === SensorType.Object && s.requiresFrames === true)
-      .map((s) => getPluginNameFromId(s.pluginId || ''))
+    (cameraSensors.value ?? [])
+      .filter((s) => s.type === SensorType.Object && s.requiresFrames)
+      .map((s) => getPluginNameFromId(s.pluginId))
       .filter((name) => name !== undefined),
   );
   const ex = cameraExtensions.value?.filter((p) => p.pluginName !== objectPluginName && frameBased.has(p.pluginName)) || [];
@@ -864,12 +866,12 @@ const filteredExtensions = computed<PluginExtension[]>(() => {
 
 function pluginProvidesTypeHere(p: PluginExtension, type: SensorType): boolean {
   if (p.pluginName !== camera.value.pluginInfo?.name) return true;
-  return (registeredSensors.value ?? []).some((s) => s.type === type && getPluginNameFromId(s.pluginId || '') === p.pluginName);
+  return (cameraSensors.value ?? []).some((s) => s.type === type && getPluginNameFromId(s.pluginId) === p.pluginName);
 }
 
 function typeHasContent(type: SensorType): boolean {
   if (allSensors.value.some((s) => s.type === type)) return true;
-  if ((registeredSensors.value ?? []).some((s) => s.type === type)) return true;
+  if ((cameraSensors.value ?? []).some((s) => s.type === type)) return true;
   return (cameraExtensions.value ?? []).some((p) => p.contract.provides.includes(type) && p.pluginName !== camera.value.pluginInfo?.name);
 }
 

@@ -39,7 +39,10 @@ export class SensorsQuery {
   private t = i18n.global.t;
   private toast = useCuiToast();
 
-  private queryActivator = ref<{ name: MethodKeys<SensorsQuery>; enabled: boolean }[]>([{ name: 'getSensorsQuery', enabled: true }]);
+  private queryActivator = ref<{ name: MethodKeys<SensorsQuery>; enabled: boolean }[]>([
+    { name: 'getSensorsQuery', enabled: true },
+    { name: 'getCameraSensorsQuery', enabled: true },
+  ]);
 
   public getSensorsQuery() {
     return useQueryEnhanced({
@@ -47,6 +50,15 @@ export class SensorsQuery {
       queryFn: ({ signal }) => getSensorsFn({ signal }),
       placeholderData: (previousData: any) => previousData,
       enabled: () => this.queryActivator.value.some((q) => q.name === 'getSensorsQuery' && q.enabled),
+    });
+  }
+
+  public getCameraSensorsQuery(cameraId: string | Ref<string> | ComputedRef<string>) {
+    return useQueryEnhanced({
+      queryKey: ['sensorsList', cameraId],
+      queryFn: ({ signal }) => getSensorsFn({ signal, cameraId: unref(cameraId) }),
+      placeholderData: (previousData: any) => previousData,
+      enabled: () => this.queryActivator.value.some((q) => q.name === 'getCameraSensorsQuery' && q.enabled),
     });
   }
 
