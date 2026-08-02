@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 
 ## [2.1.1]
 
+### Added
+
+- **Push notifications are end-to-end encrypted.** Camera name, detection text and the snapshot are sealed on your server and only your phone can unlock them, not camera.ui cloud, not Google or Apple. Update the app, then press Resync in Settings, Notifications once per phone. Android notifications also get the Mute buttons the iPhone already had.
+
 ### Fixed
 
 - **Switching the detector for a camera really switches it.** Picking another plugin for Object, Motion or any other detection type left the previous one running. Only the plugin you picked feeds the camera now, and a detection plugin that is enabled but not picked stays out of the picture instead of analyzing frames for nothing.
