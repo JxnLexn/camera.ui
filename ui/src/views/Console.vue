@@ -107,10 +107,10 @@
 
 <script setup lang="ts">
 import { buildExport, Logger } from '@camera.ui/logger';
-import { Capacitor } from '@capacitor/core';
 
 import { copyToClipboard } from '@/common/utils.js';
 import { TOPNAVBAR_HEIGHT } from '@/components/CuiTopNavbar/types.js';
+import { isCapacitor } from '@/connection/index.js';
 import { getConnection, isConnectionBooted } from '@/connection/instance.js';
 
 import type CuiMenu from '@/components/CuiMenu/CuiMenu.vue';
@@ -158,6 +158,13 @@ const mobileSearchInput = useTemplateRef<{ $el: HTMLElement }>('mobileSearchInpu
 const levelMenuRef = useTemplateRef<InstanceType<typeof CuiMenu>>('levelMenuRef');
 
 const recording = ref(Logger.isRecording());
+
+const nativePlatform = ref('web');
+if (isCapacitor) {
+  import('@capacitor/core')
+    .then(({ Capacitor }) => (nativePlatform.value = Capacitor.getPlatform()))
+    .catch(() => {});
+}
 
 let offEntries: (() => void) | undefined;
 let offFlags: (() => void) | undefined;
@@ -239,7 +246,7 @@ function refresh(): void {
 
 function diagnosticContext(): Record<string, unknown> {
   return {
-    platform: Capacitor.getPlatform(),
+    platform: nativePlatform.value,
     userAgent: navigator.userAgent,
     url: window.location.href,
     generatedAt: new Date().toISOString(),

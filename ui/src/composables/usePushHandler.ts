@@ -1,5 +1,3 @@
-import { Capacitor } from '@capacitor/core';
-
 import { CLOUD_SERVICE_URL } from '@/common/constants.js';
 import { intentFromTapData, writePendingIntent } from '@/common/pushIntent';
 import { bounceToCloudFrontend, getCurrentServerId, isCapacitor } from '@/connection/index.js';
@@ -32,6 +30,7 @@ export function usePushHandler(): void {
 
   (async () => {
     const { FirebaseMessaging, Importance } = await import('@capacitor-firebase/messaging');
+    const { Capacitor } = await import('@capacitor/core');
 
     if (Capacitor.getPlatform() === 'android') {
       try {

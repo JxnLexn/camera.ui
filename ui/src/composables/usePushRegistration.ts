@@ -21,6 +21,8 @@ type PushRegistrations = Record<string, PerServerRegistration>;
 
 const _registering = ref(false);
 
+let _pushCrypto: Promise<{ plugin: PushCryptoPlugin | null }> | null = null;
+
 export function usePushRegistration() {
   const registerForPush = async (): Promise<void> => {
     if (!isCapacitor || _registering.value) return;
@@ -48,7 +50,10 @@ export function usePushRegistration() {
 
       await writeRegistration(serverId, { deviceId: device.id, enabledAt: Date.now() });
     } catch (err) {
+      // rethrow so the settings view can toast: a register that dies on a
+      // stalled connection used to fail silently after the 30s http timeout
       log.warn('failed to enable push for server:', err);
+      throw err;
     } finally {
       _registering.value = false;
     }
@@ -112,20 +117,23 @@ async function removeRegistration(serverId: string): Promise<void> {
   await writeRegistrations(regs);
 }
 
-async function pushCrypto(): Promise<PushCryptoPlugin | null> {
-  try {
-    const { Capacitor, registerPlugin } = await import('@capacitor/core');
-    if (!Capacitor.isPluginAvailable('PushCrypto')) return null;
-    return registerPlugin<PushCryptoPlugin>('PushCrypto');
-  } catch {
-    return null;
-  }
+function pushCrypto(): Promise<{ plugin: PushCryptoPlugin | null }> {
+  _pushCrypto ??= (async () => {
+    try {
+      const { Capacitor, registerPlugin } = await import('@capacitor/core');
+      if (!Capacitor.isPluginAvailable('PushCrypto')) return { plugin: null };
+      return { plugin: registerPlugin<PushCryptoPlugin>('PushCrypto') };
+    } catch {
+      return { plugin: null };
+    }
+  })();
+  return _pushCrypto;
 }
 
 async function getOrCreatePushKey(serverId: string): Promise<string | null> {
+  const { plugin } = await pushCrypto();
+  if (!plugin) return null;
   try {
-    const plugin = await pushCrypto();
-    if (!plugin) return null;
     const { key } = await plugin.getOrCreateKey({ serverId });
     return key || null;
   } catch (err) {
@@ -136,7 +144,8 @@ async function getOrCreatePushKey(serverId: string): Promise<string | null> {
 
 async function deletePushKey(serverId: string): Promise<void> {
   try {
-    await (await pushCrypto())?.deleteKey({ serverId });
+    const { plugin } = await pushCrypto();
+    await plugin?.deleteKey({ serverId });
   } catch {
     // best-effort
   }
