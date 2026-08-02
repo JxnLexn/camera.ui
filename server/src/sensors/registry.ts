@@ -7,6 +7,7 @@ import { PluginsService } from '../api/services/plugins.service.js';
 import { NamespaceManager } from '../rpc/namespaces.js';
 import { ServerSensor } from '../sensors/sensor.js';
 import {
+  DETECTION_SENSOR_TYPES,
   isVirtualSensorType,
   SENSOR_TYPE_CONFIG,
   VIRTUAL_SENSOR_DEFAULT_CAPABILITIES,
@@ -20,6 +21,7 @@ import type { Logger } from '@camera.ui/common/logger';
 import type { Promisify, RPCClient } from '@camera.ui/rpc';
 import type { ModelSpec, PluginContract, SensorLike } from '@camera.ui/sdk';
 import type { SensorJSON } from '@camera.ui/sdk/internal';
+import type { CameraUiAPI } from '../api.js';
 import type { Database } from '../api/database/index.js';
 import type { DBSensor } from '../api/database/types.js';
 import type { InternalEvent, InternalEventBus, InternalEventPayload } from '../internal-bus.js';
@@ -52,7 +54,7 @@ export class SensorRegistry {
   private readonly pluginsService: PluginsService;
   private readonly context: SensorContext;
   private readonly disposables: (() => void | Promise<void>)[] = [];
-  private operationQueue: Promise<void> = Promise.resolve();
+  private readonly operationQueues = new Map<string, Promise<void>>();
   private historyWrites = 0;
   private readonly historyLastEntry = new Map<string, { key: string; timestamp: number }>();
 
@@ -184,12 +186,12 @@ export class SensorRegistry {
     this.seedPropertyValues(record._id, { ...record.state, ...sensor.properties });
     this.context.persistState(record._id, sensor.properties);
 
-    this.logger.log(`Sensor registered: "${record.displayName ?? record.name}" (${record.type}) by plugin "${pluginId}"${created ? ' [new]' : ''}`);
+    this.logger.debug(`Sensor registered: "${record.displayName ?? record.name}" (${record.type}) by plugin "${pluginId}"${created ? ' [new]' : ''}`);
     if (created) this.announceAdded(record);
     this.announceConnected(record, true);
 
     for (const cameraId of record.assignedCameraIds) {
-      this.enqueue(() => this.pushSensorToCoordinator(record, cameraId));
+      this.enqueue(cameraId, () => this.pushSensorToCoordinator(record, cameraId));
     }
 
     return {
@@ -231,7 +233,7 @@ export class SensorRegistry {
     const record = this.records.get(sensorId);
     if (!record || !this.runtime.has(sensorId)) return;
 
-    this.logger.log(`Sensor disconnected: "${record.displayName ?? record.name}" (${record.type})`);
+    this.logger.debug(`Sensor disconnected: "${record.displayName ?? record.name}" (${record.type})`);
     this.disconnectSensor(sensorId);
   }
 
@@ -258,7 +260,7 @@ export class SensorRegistry {
     await this.dbs.sensorsDB.remove(sensorId);
     this.pruneHistory(sensorId, 0);
 
-    this.logger.log(`Sensor deleted: "${record.displayName ?? record.name}" (${record.type})`);
+    this.logger.debug(`Sensor deleted: "${record.displayName ?? record.name}" (${record.type})`);
   }
 
   public async createVirtualSensor(input: { type: SensorType; name: string; assignCameraId?: string }): Promise<DBSensor> {
@@ -287,10 +289,10 @@ export class SensorRegistry {
     this.seedPropertyValues(record._id, record.state ?? {});
     await registerVirtualSensorHost(this, record._id, record.type);
 
-    this.logger.log(`Virtual sensor created: ${record.name} (${record.type})`);
+    this.logger.debug(`Virtual sensor created: ${record.name} (${record.type})`);
     this.announceAdded(record);
     for (const cameraId of record.assignedCameraIds) {
-      this.enqueue(() => this.pushSensorToCoordinator(record, cameraId));
+      this.enqueue(cameraId, () => this.pushSensorToCoordinator(record, cameraId));
     }
 
     return record;
@@ -308,7 +310,7 @@ export class SensorRegistry {
     record.assignedCameraIds.push(cameraId);
     this.persistRecord(sensorId, () => {});
     this.announceAssignment(record, cameraId, true);
-    if (this.runtime.has(sensorId)) this.enqueue(() => this.pushSensorToCoordinator(record, cameraId));
+    if (this.runtime.has(sensorId)) this.enqueue(cameraId, () => this.pushSensorToCoordinator(record, cameraId));
   }
 
   public async unassignCamera(sensorId: string, cameraId: string): Promise<void> {
@@ -318,7 +320,7 @@ export class SensorRegistry {
     record.assignedCameraIds = record.assignedCameraIds.filter((id) => id !== cameraId);
     this.persistRecord(sensorId, () => {});
     this.announceAssignment(record, cameraId, false);
-    this.enqueue(() => this.removeSensorFromCoordinator(sensorId, cameraId));
+    this.enqueue(cameraId, () => this.removeSensorFromCoordinator(sensorId, cameraId));
   }
 
   public async setAssignedCameras(sensorId: string, cameraIds: string[]): Promise<void> {
@@ -574,14 +576,23 @@ export class SensorRegistry {
     if (record) {
       this.announceConnected(record, false);
       for (const cameraId of record.assignedCameraIds) {
-        this.enqueue(() => this.removeSensorFromCoordinator(sensorId, cameraId));
+        this.enqueue(cameraId, () => this.removeSensorFromCoordinator(sensorId, cameraId));
       }
+    }
+  }
+
+  public async syncCameraProviders(cameraId: string): Promise<void> {
+    for (const record of this.records.values()) {
+      if (!record.assignedCameraIds.includes(cameraId) || !this.runtime.has(record._id)) continue;
+      await this.enqueue(cameraId, () => this.pushSensorToCoordinator(record, cameraId));
     }
   }
 
   public async reconcileCamera(cameraId: string, maxRetries = 1): Promise<void> {
     for (const record of this.records.values()) {
       if (!record.assignedCameraIds.includes(cameraId) || !this.runtime.has(record._id)) continue;
+
+      if (!this.feedsCamera(record, cameraId)) continue;
 
       for (let attempt = 1; attempt <= maxRetries; attempt++) {
         try {
@@ -626,7 +637,14 @@ export class SensorRegistry {
   }
 
   private async pushSensorToCoordinator(record: DBSensor, cameraId: string): Promise<void> {
+    // no worker, no listener: the call would burn seconds in no-responder retries, reconcileCamera replays on start
+    if (!this.hasFrameWorker(cameraId)) return;
+
     try {
+      if (!this.feedsCamera(record, cameraId)) {
+        await this.coordinatorFor(cameraId).onSensorRemoved(record._id);
+        return;
+      }
       await this.coordinatorFor(cameraId).onSensorAdded(this.coordinatorInfoFor(record, cameraId));
     } catch {
       // worker not running, reconcileCamera replays on start
@@ -634,6 +652,8 @@ export class SensorRegistry {
   }
 
   private async removeSensorFromCoordinator(sensorId: string, cameraId: string): Promise<void> {
+    if (!this.hasFrameWorker(cameraId)) return;
+
     try {
       await this.coordinatorFor(cameraId).onSensorRemoved(sensorId);
     } catch {
@@ -655,24 +675,38 @@ export class SensorRegistry {
 
   private coordinatorSensorType(record: DBSensor, cameraId: string): SensorType {
     if (record.type !== SensorType.Object) return record.type;
-    const assignments = this.dbs.camerasDB.get(cameraId)?.assignments;
-    if (!assignments) return record.type;
-
-    const isAssigned = (key: 'object' | 'objectAssist'): boolean => {
-      const assignment = assignments[key];
-      if (Array.isArray(assignment)) return assignment.some((p) => p.id === record.pluginInfo.id);
-      return assignment?.id === record.pluginInfo.id;
-    };
-
-    if (isAssigned('object')) return SensorType.Object;
-    return isAssigned('objectAssist') ? SensorType.ObjectAssist : record.type;
+    if (this.isAssignedFor(record, cameraId, 'object')) return SensorType.Object;
+    return this.isAssignedFor(record, cameraId, 'objectAssist') ? SensorType.ObjectAssist : record.type;
   }
 
-  private enqueue<T>(fn: () => Promise<T>): Promise<T> {
-    const op = this.operationQueue.then(fn, fn);
-    this.operationQueue = op.then(
-      () => {},
-      () => {},
+  private feedsCamera(record: DBSensor, cameraId: string): boolean {
+    if (!DETECTION_SENSOR_TYPES.has(record.type)) return true;
+    if (record.type === SensorType.Object) {
+      return this.isAssignedFor(record, cameraId, 'object') || this.isAssignedFor(record, cameraId, 'objectAssist');
+    }
+    return this.isAssignedFor(record, cameraId, SENSOR_TYPE_CONFIG[record.type].assignmentKey);
+  }
+
+  private isAssignedFor(record: DBSensor, cameraId: string, assignmentKey: string): boolean {
+    const assignments = this.dbs.camerasDB.get(cameraId)?.assignments;
+    const assignment = assignments?.[assignmentKey as keyof typeof assignments];
+    if (Array.isArray(assignment)) return assignment.some((p) => p.id === record.pluginInfo.id);
+    return assignment?.id === record.pluginInfo.id;
+  }
+
+  private hasFrameWorker(cameraId: string): boolean {
+    return container.resolve<CameraUiAPI>('api').getCamera(cameraId)?.frameWorkerConnected === true;
+  }
+
+  private enqueue<T>(cameraId: string, fn: () => Promise<T>): Promise<T> {
+    const queue = this.operationQueues.get(cameraId) ?? Promise.resolve();
+    const op = queue.then(fn, fn);
+    this.operationQueues.set(
+      cameraId,
+      op.then(
+        () => {},
+        () => {},
+      ),
     );
     return op;
   }

@@ -42,6 +42,13 @@ export class SensorController {
     });
     this.disposables.push(() => settings.dispose());
 
+    const assignments = this.cameraController.onPropertyChange('assignments').subscribe(() => {
+      this.registry.syncCameraProviders(this.cameraController.id).catch((error: unknown) => {
+        this.cameraController.logger.warn('Failed to sync sensor providers:', error);
+      });
+    });
+    this.disposables.push(() => assignments.dispose());
+
     // mirror registry lifecycle into the camera's own subjects (UI drawer, homekit)
     const bus = container.resolve<InternalEventBus>('internalBus');
     const onAdded = (payload: SensorLifecyclePayload): void => {
