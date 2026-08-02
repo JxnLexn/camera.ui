@@ -12,6 +12,8 @@ All notable changes to this project will be documented in this file.
 
 ### Changed
 
+- **The phone apps use your local network at home.** They went through the internet even while the phone was on the same WiFi as the server, which made live streams slower to start and added lag. The local connection works on its own now.
+
 - **Updating a Python plugin keeps its packages.** Plugins like ONNX or CoreML re-downloaded their whole Python environment on every update, a few hundred MB each time. The environment carries over now and only packages that actually changed are installed. Uninstalling a plugin still removes everything, environment included.
 
 - **The old sensor compatibility paths are gone.** 2.0.23 kept the pre-rework sensor API alive for one release so outdated plugins and the old Home Assistant integration kept partly working. That window is over: update your plugins and the Home Assistant integration if you haven't yet.

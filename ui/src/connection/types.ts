@@ -126,6 +126,7 @@ export function isTwoFactorPending(outcome: LoginOutcome): outcome is TwoFactorP
 export interface TunnelAddresses {
   readonly internalAddresses: readonly string[];
   readonly externalAddresses: readonly string[];
+  readonly ca?: string;
 }
 
 export interface ProxyMintResult {

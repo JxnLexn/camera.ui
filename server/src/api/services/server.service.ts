@@ -1,5 +1,6 @@
 import { buildHttpsUrl, fetchViableNetworkAddresses } from '@camera.ui/common/network';
 import { APP_SERVER_NAME, mergeWith } from '@camera.ui/common/utils';
+import { readFileSync } from 'node:fs';
 import { userInfo } from 'node:os';
 import { satisfies } from 'semver';
 import { container } from 'tsyringe';
@@ -33,10 +34,11 @@ export class ServerService {
     return this.dbs.serverDB.get('server')!;
   }
 
-  public networkEndpoints(): { internalAddresses: string[]; externalAddresses: string[] } {
+  public networkEndpoints(): { internalAddresses: string[]; externalAddresses: string[]; ca?: string } {
+    const configService = container.resolve<ConfigService>('configService');
     const allAddresses = fetchViableNetworkAddresses();
     const selectedAddresses = this.info().serverAddresses ?? [];
-    const port = container.resolve<ConfigService>('configService').config.port;
+    const port = configService.config.port;
 
     const internalAddresses = allAddresses
       .filter((addr) => selectedAddresses.length === 0 || selectedAddresses.includes(addr.address))
@@ -46,7 +48,18 @@ export class ServerService {
     const externalAddresses: string[] = [];
     if (remoteStatus.externalUrl) externalAddresses.push(remoteStatus.externalUrl);
 
-    return { internalAddresses, externalAddresses };
+    return { internalAddresses, externalAddresses, ca: this.caCertificate() };
+  }
+
+  private caCertificate(): string | undefined {
+    const caFile = container.resolve<ConfigService>('configService').config.ssl.caFile;
+    if (!caFile) return undefined;
+    try {
+      const pem = readFileSync(caFile, 'utf8');
+      return pem.includes('BEGIN CERTIFICATE') ? pem : undefined;
+    } catch {
+      return undefined;
+    }
   }
 
   public async patch(infoData: Partial<DBServer> = {}): Promise<DBServer> {

@@ -1,5 +1,6 @@
 import axios from 'axios';
 
+import { trustInternalCa } from '../certTrust.js';
 import { instanceOverride } from '../instance.js';
 
 import type { Logger } from '@camera.ui/logger';
@@ -24,6 +25,7 @@ function buildPool(addresses: TunnelAddresses): Endpoint[] {
 interface PersistedPool {
   pool: Endpoint[];
   at: number;
+  ca?: string;
 }
 
 function overridePool(): Endpoint[] | null {
@@ -62,8 +64,14 @@ export function createDiscoverCloud(options: DiscoverCloudOptions): DiscoverFn {
 
   let cachedPool: Endpoint[] | null = null;
   let cachedPoolAt = 0;
+  let cachedCa: string | undefined;
   let hydrated = false;
   let remintedThisStreak = false;
+
+  async function withTrust(pool: readonly Endpoint[], ca: string | undefined): Promise<readonly Endpoint[]> {
+    await trustInternalCa(ca, pool);
+    return pool;
+  }
 
   async function ensureHydrated(): Promise<void> {
     if (hydrated) return;
@@ -76,6 +84,7 @@ export function createDiscoverCloud(options: DiscoverCloudOptions): DiscoverFn {
       if (parsed?.pool?.length && Date.now() - parsed.at < CACHED_POOL_TTL_MS) {
         cachedPool = parsed.pool;
         cachedPoolAt = parsed.at;
+        cachedCa = parsed.ca;
       }
     } catch {
       // corrupt/absent cache is non-fatal
@@ -118,7 +127,7 @@ export function createDiscoverCloud(options: DiscoverCloudOptions): DiscoverFn {
           cachedPool = null;
           cachedPoolAt = 0;
           logger?.debug('discover', `empty pool — using cached pool fallback (${fallback.length} endpoints, single-use)`);
-          return fallback;
+          return withTrust(fallback, cachedCa);
         }
         return pool;
       }
@@ -126,8 +135,9 @@ export function createDiscoverCloud(options: DiscoverCloudOptions): DiscoverFn {
       remintedThisStreak = false;
       cachedPool = pool;
       cachedPoolAt = Date.now();
-      storage?.set(poolKey, JSON.stringify({ pool, at: cachedPoolAt } satisfies PersistedPool));
-      return pool;
+      cachedCa = addresses.ca;
+      storage?.set(poolKey, JSON.stringify({ pool, at: cachedPoolAt, ca: cachedCa } satisfies PersistedPool));
+      return withTrust(pool, addresses.ca);
     } catch (err) {
       const status = axios.isAxiosError(err) ? err.response?.status : undefined;
 
@@ -144,7 +154,7 @@ export function createDiscoverCloud(options: DiscoverCloudOptions): DiscoverFn {
         cachedPool = null;
         cachedPoolAt = 0;
         logger?.debug('discover', `tunnel/check failed (${stringifyDiscoverError(err)}) — using cached pool fallback (${pool.length} endpoints, single-use)`);
-        return pool;
+        return withTrust(pool, cachedCa);
       }
       throw err;
     }

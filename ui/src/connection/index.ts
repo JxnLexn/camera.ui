@@ -13,6 +13,8 @@ export { useConnection } from './composables/useConnection.js';
 export { useHttp } from './composables/useHttp.js';
 export { useSocket } from './composables/useSocket.js';
 
+export { hasCertTrustInstaller, setCertTrustInstaller } from './certTrust.js';
+
 export { createNetworkAdapters } from './adapters/network.js';
 export { createStorageAdapter } from './adapters/storage.js';
 export { createVisibilitySource } from './adapters/visibility.js';
@@ -54,6 +56,7 @@ export type {
   TwoFactorPending,
 } from './types.js';
 
+export type { CertTrustInstaller } from './certTrust.js';
 export type { NetworkAdapters } from './adapters/network.js';
 export type { DiscoverCloudOptions } from './auth/discover.js';
 export type { BootOptions, BootResult } from './bootApp.js';

@@ -17,6 +17,7 @@ import { createApp } from 'vue';
 import { bridgeConnectionToQueryOnline, installApiErrorHandling } from '@/api/index.js';
 import AppRoot from '@/App.vue';
 import { isEmbedded } from '@/common/base.js';
+import { installCertTrustBridge } from '@/common/certTrustService.js';
 import { attemptChunkReload, markLoadStable } from '@/common/chunkReload.js';
 import { initHostSync } from '@/common/hostSync.js';
 import { bootApp, consumeAuthParam, consumeEmbedSession, isCapacitor } from '@/connection/index.js';
@@ -27,6 +28,8 @@ import { registerUiPlugins } from '@/plugins/index.js';
 import Router from '@/router/index.js';
 
 window.addEventListener('vite:preloadError', () => attemptChunkReload(() => window.location.reload()));
+
+installCertTrustBridge();
 
 const { connection } = await bootApp({
   logger: new Logger('Connection'),

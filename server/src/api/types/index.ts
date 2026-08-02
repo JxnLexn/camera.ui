@@ -160,6 +160,7 @@ export interface SessionResponse {
   status: 'OK';
   internalAddresses: string[];
   externalAddresses: string[];
+  ca?: string;
 }
 
 export interface Pagination {

@@ -119,7 +119,8 @@ export function createAuthApi(): AuthApi {
         body,
       );
     }
-    return { internalAddresses, externalAddresses };
+    const ca = typeof response.data.ca === 'string' && response.data.ca.includes('BEGIN CERTIFICATE') ? response.data.ca : undefined;
+    return { internalAddresses, externalAddresses, ca };
   }
 
   async function refreshProxy(cloudApiBase: string, proxyRefreshToken: string, signal?: AbortSignal): Promise<ProxyMintResult> {
