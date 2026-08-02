@@ -14,11 +14,10 @@ import type { ClassifierResult, ClipResult, Detection, FaceDetection, FaceResult
 import type { Frame } from 'node-av/lib';
 import type { CoreManagerInterface } from '../../rpc/interfaces/core.js';
 import type { CroppedRegion, DetectionResults, DetectionThumbnail } from '../../rpc/interfaces/detection.js';
-import type { TrackedClassifierDetection, TrackedClipEmbedding, TrackedFaceDetection, TrackedLicensePlateDetection } from './event-manager.js';
 import type { DetectionCoordinator } from './detection-coordinator.js';
 import type { DetectionPipeline } from './detection-pipeline.js';
-import type { ConsumerSpec, ScaleTarget } from './frame-scaler.js';
-import type { FrameScaler } from './frame-scaler.js';
+import type { TrackedClassifierDetection, TrackedClipEmbedding, TrackedFaceDetection, TrackedLicensePlateDetection } from './event-manager.js';
+import type { ConsumerSpec, CropFit, FrameScaler, ScaleTarget } from './frame-scaler.js';
 import type { PluginRegistry } from './plugin-registry.js';
 
 const DETECTION_THUMB_MAX_WIDTH = 640;
@@ -29,10 +28,10 @@ const DETECTION_THUMB_HQ_QUALITY = 80;
 const ATTRIBUTE_THUMB_MAX_WIDTH = 640;
 const ATTRIBUTE_THUMB_MIN_CROP = 128;
 
-const SECONDARY_CONSUMERS: { type: SensorType; key: string }[] = [
-  { type: SensorType.Face, key: 'face' },
-  { type: SensorType.LicensePlate, key: 'lpd' },
-  { type: SensorType.Clip, key: 'clip' },
+const SECONDARY_CONSUMERS: { type: SensorType; key: string; fit: CropFit }[] = [
+  { type: SensorType.Face, key: 'face', fit: 'expand' },
+  { type: SensorType.LicensePlate, key: 'lpd', fit: 'stretch' },
+  { type: SensorType.Clip, key: 'clip', fit: 'expand' },
 ];
 
 interface NvrFaceMatcher {
@@ -205,18 +204,18 @@ export class SecondaryStage {
   private collectConsumers(requireFrames: boolean): ConsumerSpec[] {
     const consumers: ConsumerSpec[] = [];
 
-    for (const { type, key } of SECONDARY_CONSUMERS) {
+    for (const { type, key, fit } of SECONDARY_CONSUMERS) {
       const plugin = this.plugins.get(type);
       if (!plugin || (requireFrames && !plugin.requiresFrames)) continue;
       if (hasSecondaryModelSpec(plugin.modelSpec) && isVideoInputSpec(plugin.modelSpec.input)) {
-        consumers.push({ key, triggerLabels: plugin.modelSpec.triggerLabels, input: plugin.modelSpec.input });
+        consumers.push({ key, triggerLabels: plugin.modelSpec.triggerLabels, input: plugin.modelSpec.input, fit });
       }
     }
 
     for (const plugin of this.plugins.getAll(SensorType.Classifier)) {
       if (requireFrames && !plugin.requiresFrames) continue;
       if (hasSecondaryModelSpec(plugin.modelSpec) && isVideoInputSpec(plugin.modelSpec.input)) {
-        consumers.push({ key: `classifier:${plugin.pluginId}`, triggerLabels: plugin.modelSpec.triggerLabels, input: plugin.modelSpec.input });
+        consumers.push({ key: `classifier:${plugin.pluginId}`, triggerLabels: plugin.modelSpec.triggerLabels, input: plugin.modelSpec.input, fit: 'expand' });
       }
     }
 
@@ -234,17 +233,17 @@ export class SecondaryStage {
 
       for (const consumer of consumers) {
         if (consumer.triggerLabels.length === 0 || consumer.triggerLabels.some((l) => l.toLowerCase() === detLabel)) {
-          targets.push({ key: consumer.key, width: consumer.input.width, height: consumer.input.height, format: consumer.input.format });
+          targets.push({ key: consumer.key, width: consumer.input.width, height: consumer.input.height, format: consumer.input.format, fit: consumer.fit });
         }
       }
 
       if (targets.length === 0) continue;
 
-      // consumers with identical dimensions share one scaled region
+      // consumers with identical dimensions and fit share one scaled region
       const uniqueTargets: ScaleTarget[] = [];
       const dupeMap = new Map<string, string[]>(); // sizeKey → [consumerKey, ...]
       for (const t of targets) {
-        const sizeKey = `${t.width}x${t.height}_${t.format}`;
+        const sizeKey = `${t.width}x${t.height}_${t.format}_${t.fit ?? 'stretch'}`;
         const existing = dupeMap.get(sizeKey);
         if (existing) {
           existing.push(t.key);
@@ -288,13 +287,16 @@ export class SecondaryStage {
     };
 
     for (const consumer of consumers) {
-      const scaled = await this.frameScaler.scaleToSpec(rawFrame, consumer.input);
-      if (!scaled) continue;
+      const letterboxed = await this.frameScaler.letterboxToSpec(rawFrame, consumer.input);
+      if (!letterboxed) continue;
+      const g = letterboxed.geometry;
       const region: CroppedRegion = {
-        frame: this.frameScaler.toVideoFrameData(scaled, `fullframe:${consumer.key}`),
+        frame: this.frameScaler.toVideoFrameData(letterboxed.padded, `fullframe:${consumer.key}`),
         detection: fullFrameDetection,
-        offset: { x: 0, y: 0 },
-        cropSize: { width: frameWidth, height: frameHeight },
+        // a virtual crop covering frame plus fill bars, so the linear box
+        // mapping in transformBoxToOriginal un-letterboxes for free
+        offset: { x: (-g.padX / g.innerWidth) * frameWidth, y: (-g.padY / g.innerHeight) * frameHeight },
+        cropSize: { width: (g.targetWidth / g.innerWidth) * frameWidth, height: (g.targetHeight / g.innerHeight) * frameHeight },
         originalSize: { width: frameWidth, height: frameHeight },
       };
       result.set(consumer.key, [region]);

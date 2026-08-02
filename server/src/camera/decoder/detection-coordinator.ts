@@ -51,6 +51,7 @@ import type { CameraDeviceInterface } from '../../rpc/interfaces/device.js';
 import type { SensorWriteMessage } from '../../rpc/interfaces/sensor.js';
 import type { LineCrossingEvent } from './detection-pipeline.js';
 import type { NormalizedDetectionZone, ProcessedDetectionData } from './event-manager.js';
+import type { LetterboxGeometry } from './frame-scaler.js';
 import type { RegisteredPlugin } from './plugin-registry.js';
 import type { FrameSourceConfig } from './sources/frame-source.js';
 import type { CoordinatorSourceUrl } from './types.js';
@@ -68,6 +69,12 @@ export interface DetectionCoordinatorConfig {
   ptzAutotrack: PtzAutotrackSettings;
   frameWorkerSettings: CameraFrameWorkerSettings;
   interfaceSettings: CameraUiSettings;
+}
+
+interface PluginFrame {
+  model: VideoFrameData;
+  tracking: VideoFrameData;
+  geometry: LetterboxGeometry;
 }
 
 const DEFAULT_CASCADE_TIMEOUT = 10;
@@ -102,6 +109,10 @@ export class DetectionCoordinator {
 
   private readonly activeSensorTriggerTypes = new Map<string, string>();
   private readonly secondaryBboxSeen = new Map<string, number>();
+  private readonly feedingSensors = new Set<string>();
+
+  private lastObjectCallAt = 0;
+  private objectIntervalMs = 0;
 
   private currentDetectionState: {
     motion?: MotionResult;
@@ -277,6 +288,10 @@ export class DetectionCoordinator {
 
   @RPCMethod
   public async onSensorAdded(sensor: CoordinatorSensorInfo): Promise<void> {
+    if (DETECTION_SENSOR_TYPES.has(sensor.sensorType)) {
+      this.feedingSensors.add(sensor.sensorId);
+    }
+
     if (DETECTION_SENSOR_TYPES.has(sensor.sensorType) && sensor.requiresFrames) {
       await this.registerDetectionPluginInternal(sensor);
     }
@@ -292,6 +307,10 @@ export class DetectionCoordinator {
 
   @RPCMethod
   public async onSensorRemoved(sensorId: string): Promise<void> {
+    if (this.feedingSensors.delete(sensorId)) {
+      this.writeSensorProperties(sensorId, { detected: false, detections: [] });
+    }
+
     await this.removeDetectionPluginBySensor(sensorId);
     this.ptzAutotracker.unbind(sensorId);
 
@@ -308,6 +327,9 @@ export class DetectionCoordinator {
 
   @RPCMethod
   public async reportSensorWrite(sensorId: string, sensorType: SensorType, properties: Record<string, unknown>): Promise<void> {
+    // the registry only announces the plugin assigned for this type, everyone else reports into the void
+    if (!this.feedingSensors.has(sensorId)) return;
+
     if (sensorType === SensorType.Object) {
       const filtered = this.applyExternalDetectionFilters(sensorType, properties);
 
@@ -560,7 +582,7 @@ export class DetectionCoordinator {
       audio: cs.audio ? { detected: cs.audio.detected ?? false, detections: cs.audio.detections ?? [] } : undefined,
       cascadeTriggered: cs.cascadeTriggered,
       sensorTriggers: [...new Set(this.activeSensorTriggerTypes.values())],
-      objects: cs.object?.detected ? cs.object.detections : [],
+      objects: cs.object?.detected ? this.stationary.excludeSealed(cs.object.detections) : [],
       faces: cs.face?.detections ?? [],
       faceEmbeddingModel: cs.faceEmbeddingModel,
       plates: cs.licensePlate?.detections ?? [],
@@ -1027,17 +1049,20 @@ export class DetectionCoordinator {
       if (objectFrame) {
         try {
           const result = await PromiseTimeout(
-            objectPlugin.proxy.detectObjects(objectFrame),
+            objectPlugin.proxy.detectObjects(objectFrame.model),
             DETECT_TIMEOUT_MS,
             undefined,
             `Object detection timed out after ${DETECT_TIMEOUT_MS}ms`,
           );
           if (!this.loopRunning) return;
 
+          this.trackDetectionCadence();
+
           // run the pipeline even on empty frames so Norfair advances its
           // Kalman state; the pose delta keeps predictions stable across pans
           const poseDelta = this.ptzAutotracker.consumePoseDelta();
-          const pipelineResult = this.pipeline.process(ensureDetectionBoxes(result.detections), objectFrame, poseDelta);
+          const detected = FrameScaler.undoLetterbox(ensureDetectionBoxes(result.detections), objectFrame.geometry);
+          const pipelineResult = this.pipeline.process(detected, objectFrame.tracking, poseDelta);
 
           // track id churn is invisible in the event log without this
           if (pipelineResult.created.length > 0 || pipelineResult.removed.length > 0) {
@@ -1225,18 +1250,46 @@ export class DetectionCoordinator {
     return scaled ? this.frameScaler.toVideoFrameData(scaled) : undefined;
   }
 
-  private async scaleForObject(rawFrame: Frame): Promise<VideoFrameData | undefined> {
+  private trackDetectionCadence(): void {
+    const now = Date.now();
+    const previous = this.lastObjectCallAt;
+    this.lastObjectCallAt = now;
+
+    const delta = now - previous;
+    if (previous === 0 || delta > 5000) {
+      this.objectIntervalMs = 0;
+      return;
+    }
+
+    this.objectIntervalMs = this.objectIntervalMs === 0 ? delta : this.objectIntervalMs * 0.8 + delta * 0.2;
+
+    const cadence = this.pipeline.syncDetectionCadence(this.objectIntervalMs);
+    if (cadence) {
+      const rate = (1000 / this.objectIntervalMs).toFixed(1);
+      this.logger.debug(
+        `Object detection runs at ${rate}/s, tracker now confirms after ${cadence.initializationDelay} detection(s) and keeps a track for ${cadence.hitCounterMax}`,
+      );
+    }
+  }
+
+  private async scaleForObject(rawFrame: Frame): Promise<PluginFrame | undefined> {
     const objectPlugin = this.plugins.get(SensorType.Object);
     if (!objectPlugin?.requiresFrames) return undefined;
     return this.scaleFrameForPlugin(rawFrame, objectPlugin);
   }
 
-  private async scaleFrameForPlugin(rawFrame: Frame, plugin: RegisteredPlugin): Promise<VideoFrameData | undefined> {
+  private async scaleFrameForPlugin(rawFrame: Frame, plugin: RegisteredPlugin): Promise<PluginFrame | undefined> {
     const inputSpec = plugin.modelSpec?.input;
     if (!isVideoInputSpec(inputSpec)) return undefined;
 
-    const scaled = await this.frameScaler.scaleToSpec(rawFrame, inputSpec);
-    return scaled ? this.frameScaler.toVideoFrameData(scaled) : undefined;
+    const letterboxed = await this.frameScaler.letterboxToSpec(rawFrame, inputSpec);
+    if (!letterboxed) return undefined;
+
+    return {
+      model: this.frameScaler.toVideoFrameData(letterboxed.padded, 'model'),
+      tracking: this.frameScaler.toVideoFrameData(letterboxed.inner, 'tracking'),
+      geometry: letterboxed.geometry,
+    };
   }
 
   private ingestAssistedObjects(sensorId: string, objects: { detections: Detection[]; assisted: boolean }): void {
@@ -1258,9 +1311,10 @@ export class DetectionCoordinator {
     if (!scaled) return { detections: reported, assisted: false };
 
     try {
-      const result = await PromiseTimeout(assist.proxy.detectObjects(scaled), DETECT_TIMEOUT_MS, undefined, `Object assist timed out after ${DETECT_TIMEOUT_MS}ms`);
+      const result = await PromiseTimeout(assist.proxy.detectObjects(scaled.model), DETECT_TIMEOUT_MS, undefined, `Object assist timed out after ${DETECT_TIMEOUT_MS}ms`);
       const reportedLabels = new Set(reported.map((d) => d.label.toLowerCase()));
-      const found = ensureDetectionBoxes(result?.detections ?? []).filter((d) => reportedLabels.size === 0 || reportedLabels.has(d.label.toLowerCase()));
+      const boxed = FrameScaler.undoLetterbox(ensureDetectionBoxes(result?.detections ?? []), scaled.geometry);
+      const found = boxed.filter((d) => reportedLabels.size === 0 || reportedLabels.has(d.label.toLowerCase()));
       if (found.length === 0) return { detections: reported, assisted: false };
       return { detections: found, assisted: true };
     } catch (error) {

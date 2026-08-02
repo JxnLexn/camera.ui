@@ -13,10 +13,13 @@ export interface JpegCrop {
   jpeg: Buffer;
 }
 
+export type CropFit = 'stretch' | 'expand';
+
 export interface ConsumerSpec {
   key: string;
   triggerLabels: string[];
   input: VideoInputSpec;
+  fit: CropFit;
 }
 
 export interface ScaleTarget {
@@ -24,6 +27,7 @@ export interface ScaleTarget {
   width: number;
   height: number;
   format: ScaledFormat;
+  fit?: CropFit;
 }
 
 export interface ScaledFrame {
@@ -32,6 +36,23 @@ export interface ScaledFrame {
   height: number;
   format: ScaledFormat;
 }
+
+export interface LetterboxGeometry {
+  padX: number;
+  padY: number;
+  innerWidth: number;
+  innerHeight: number;
+  targetWidth: number;
+  targetHeight: number;
+}
+
+export interface LetterboxedFrame {
+  padded: ScaledFrame;
+  inner: ScaledFrame;
+  geometry: LetterboxGeometry;
+}
+
+const LETTERBOX_FILL = 114;
 
 export class FrameScaler {
   private readonly MIN_THUMBNAIL_CROP = 64;
@@ -51,6 +72,62 @@ export class FrameScaler {
 
   public async scaleToSpec(frame: Frame, spec: VideoInputSpec): Promise<ScaledFrame | null> {
     return this.scale(frame, spec.width, spec.height, spec.format);
+  }
+
+  public async letterboxToSpec(frame: Frame, spec: VideoInputSpec): Promise<LetterboxedFrame | null> {
+    // nv12 is semi-planar, padding it row by row would tear the chroma plane apart
+    if (spec.format === 'nv12') {
+      const stretched = await this.scaleToSpec(frame, spec);
+      return stretched ? { padded: stretched, inner: stretched, geometry: this.identityGeometry(spec) } : null;
+    }
+
+    const ratio = Math.min(spec.width / frame.width, spec.height / frame.height);
+    const innerWidth = Math.max(2, Math.round((frame.width * ratio) / 2) * 2);
+    const innerHeight = Math.max(2, Math.round((frame.height * ratio) / 2) * 2);
+
+    const inner = await this.scale(frame, Math.min(innerWidth, spec.width), Math.min(innerHeight, spec.height), spec.format);
+    if (!inner) return null;
+
+    const geometry: LetterboxGeometry = {
+      padX: Math.floor((spec.width - inner.width) / 2),
+      padY: Math.floor((spec.height - inner.height) / 2),
+      innerWidth: inner.width,
+      innerHeight: inner.height,
+      targetWidth: spec.width,
+      targetHeight: spec.height,
+    };
+
+    if (geometry.padX === 0 && geometry.padY === 0 && inner.width === spec.width && inner.height === spec.height) {
+      return { padded: inner, inner, geometry };
+    }
+
+    const channels = spec.format === 'gray' ? 1 : 3;
+    const data = Buffer.alloc(spec.width * spec.height * channels, LETTERBOX_FILL);
+    const rowBytes = inner.width * channels;
+
+    for (let y = 0; y < inner.height; y++) {
+      const target = ((geometry.padY + y) * spec.width + geometry.padX) * channels;
+      inner.data.copy(data, target, y * rowBytes, (y + 1) * rowBytes);
+    }
+
+    return { padded: { data, width: spec.width, height: spec.height, format: spec.format }, inner, geometry };
+  }
+
+  public static undoLetterbox(detections: Detection[], geometry: LetterboxGeometry): Detection[] {
+    if (geometry.padX === 0 && geometry.padY === 0 && geometry.innerWidth === geometry.targetWidth && geometry.innerHeight === geometry.targetHeight) {
+      return detections;
+    }
+
+    const clamp = (value: number): number => Math.min(1, Math.max(0, value));
+
+    return detections.map((detection) => {
+      const x = clamp((detection.box.x * geometry.targetWidth - geometry.padX) / geometry.innerWidth);
+      const y = clamp((detection.box.y * geometry.targetHeight - geometry.padY) / geometry.innerHeight);
+      const width = clamp((detection.box.width * geometry.targetWidth) / geometry.innerWidth);
+      const height = clamp((detection.box.height * geometry.targetHeight) / geometry.innerHeight);
+
+      return { ...detection, box: { x, y, width: Math.min(width, 1 - x), height: Math.min(height, 1 - y) } };
+    });
   }
 
   public async scaleProportional(frame: Frame, maxWidth: number, format: ScaledFormat = 'gray'): Promise<ScaledFrame | null> {
@@ -108,22 +185,19 @@ export class FrameScaler {
     const results = new Map<string, CroppedRegion>();
     if (targets.length === 0) return results;
 
-    const crop = this.paddedCrop(detection.box, frame.width, frame.height, padding, 0, 32);
-    if (!crop) return results;
-
-    const meta = {
-      detection,
-      offset: { x: crop.x, y: crop.y },
-      cropSize: { width: crop.width, height: crop.height },
-      originalSize: { width: frame.width, height: frame.height },
-    };
+    const baseCrop = this.paddedCrop(detection.box, frame.width, frame.height, padding, 0, 32);
+    if (!baseCrop) return results;
 
     const scaler = this.getScaler();
     for (const t of targets) {
+      const crop = t.fit === 'expand' ? this.expandCropToAspect(baseCrop, frame.width, frame.height, t.width / t.height) : baseCrop;
       const data = await scaler.toBuffer(frame, { crop, resize: { width: t.width, height: t.height }, format: t.format });
       results.set(t.key, {
         frame: { id: `crop:${detection.label}:${t.key}`, data, width: t.width, height: t.height, format: t.format },
-        ...meta,
+        detection,
+        offset: { x: crop.x, y: crop.y },
+        cropSize: { width: crop.width, height: crop.height },
+        originalSize: { width: frame.width, height: frame.height },
       });
     }
 
@@ -144,6 +218,31 @@ export class FrameScaler {
 
   public dispose(): void {
     this.clearCache();
+  }
+
+  private expandCropToAspect(crop: ScalerCrop, frameWidth: number, frameHeight: number, aspect: number): ScalerCrop {
+    let { x, y, width, height } = crop;
+
+    if (width / height < aspect) {
+      const grow = Math.round(height * aspect) - width;
+      x -= Math.floor(grow / 2);
+      width += grow;
+    } else {
+      const grow = Math.round(width / aspect) - height;
+      y -= Math.floor(grow / 2);
+      height += grow;
+    }
+
+    x = Math.max(0, Math.min(x, frameWidth - width));
+    y = Math.max(0, Math.min(y, frameHeight - height));
+    width = Math.min(width, frameWidth - x);
+    height = Math.min(height, frameHeight - y);
+
+    return { x, y, width, height };
+  }
+
+  private identityGeometry(spec: VideoInputSpec): LetterboxGeometry {
+    return { padX: 0, padY: 0, innerWidth: spec.width, innerHeight: spec.height, targetWidth: spec.width, targetHeight: spec.height };
   }
 
   private paddedCrop(
@@ -173,7 +272,6 @@ export class FrameScaler {
     return { x: cropX, y: cropY, width: cropW, height: cropH };
   }
 
-  // Scale proportionally to maxWidth (never upscale), even dimensions.
   private scaledSize(width: number, height: number, maxWidth: number): { width: number; height: number } {
     const scaleW = width > maxWidth ? maxWidth : width & ~1;
     const scaleH = width > maxWidth ? Math.round((height * maxWidth) / width) & ~1 : height & ~1;

@@ -21,6 +21,10 @@ const MOTION_MERGE_CLOSE_THRESHOLD = 0.1;
 const TRACKER_IOU_THRESHOLD = 0.1;
 const TRACKER_HIT_COUNTER_MAX = 30;
 const TRACKER_INITIALIZATION_DELAY = 3;
+const TRACK_CONFIRM_MS = 300;
+const TRACK_KEEPALIVE_MS = 3000;
+const CADENCE_SWITCH_AFTER_MS = 5000;
+const MOTION_MATCH_ABOVE_MS = 400;
 
 export const PAN_TO_IMAGE_RATIO = 4.0;
 
@@ -126,36 +130,106 @@ function fromRustCrossing(event: RustLineCrossingEvent, lookup: Map<number, Boun
   };
 }
 
+export interface TrackerCadence {
+  initializationDelay: number;
+  hitCounterMax: number;
+  motionTolerance?: number;
+}
+
 export class DetectionPipeline {
   private aspectRatio: number;
-  private readonly tracker: RustObjectTracker;
+  private tracker: RustObjectTracker;
+
+  private zones: DetectionZone[];
+  private lines: DetectionLine[] = [];
+  private minConfidence: number;
+  private reidHitCounterMax = 0;
+
+  private cadence: TrackerCadence = { initializationDelay: TRACKER_INITIALIZATION_DELAY, hitCounterMax: TRACKER_HIT_COUNTER_MAX };
+  private pendingCadenceSince = 0;
 
   constructor(zones: DetectionZone[], settings: CameraDetectionSettings) {
     this.aspectRatio = 16 / 9;
-    this.tracker = new RustObjectTracker({
-      iouThreshold: TRACKER_IOU_THRESHOLD,
-      hitCounterMax: TRACKER_HIT_COUNTER_MAX,
-      initializationDelay: TRACKER_INITIALIZATION_DELAY,
-    });
-    this.tracker.setMinConfidence(settings.object.confidence);
-    this.tracker.setZones(toRustZones(zones));
+    this.zones = zones;
+    this.minConfidence = settings.object.confidence;
+    this.tracker = this.createTracker();
   }
 
   public updateZones(zones: DetectionZone[]): void {
+    this.zones = zones;
     this.tracker.setZones(toRustZones(zones));
   }
 
   public updateLines(lines: DetectionLine[], aspectRatio?: number): void {
     if (aspectRatio !== undefined) this.aspectRatio = aspectRatio;
+    this.lines = lines;
     this.tracker.setLines(toRustLines(lines), this.aspectRatio);
   }
 
   public updateSettings(settings: CameraDetectionSettings): void {
+    this.minConfidence = settings.object.confidence;
     this.tracker.setMinConfidence(settings.object.confidence);
   }
 
   public setReidHitCounterMax(frames: number): void {
+    this.reidHitCounterMax = frames;
     this.tracker.setReidHitCounterMax(frames);
+  }
+
+  public syncDetectionCadence(intervalMs: number): TrackerCadence | undefined {
+    if (intervalMs <= 0) return undefined;
+
+    const target: TrackerCadence = {
+      initializationDelay: Math.min(TRACKER_INITIALIZATION_DELAY, Math.max(1, Math.round(TRACK_CONFIRM_MS / intervalMs))),
+      hitCounterMax: Math.min(TRACKER_HIT_COUNTER_MAX, Math.max(2, Math.round(TRACK_KEEPALIVE_MS / intervalMs))),
+    };
+
+    // below ~2.5/s a walking object out-runs its own box between detections,
+    // IoU hits 0 and only distance matching can follow; tolerance scales with
+    // the gap, capped so distant objects still can't steal each other's ids
+    if (intervalMs >= MOTION_MATCH_ABOVE_MS) {
+      target.motionTolerance = Math.min(0.4, 0.05 + (0.25 * intervalMs) / 1000);
+    }
+
+    if (
+      target.initializationDelay === this.cadence.initializationDelay &&
+      target.hitCounterMax === this.cadence.hitCounterMax &&
+      target.motionTolerance === this.cadence.motionTolerance
+    ) {
+      this.pendingCadenceSince = 0;
+      return undefined;
+    }
+
+    if (this.tracker.trackCount > 0) {
+      const now = Date.now();
+      if (this.pendingCadenceSince === 0) {
+        this.pendingCadenceSince = now;
+        return undefined;
+      }
+      if (now - this.pendingCadenceSince < CADENCE_SWITCH_AFTER_MS) return undefined;
+    }
+
+    this.cadence = target;
+    this.pendingCadenceSince = 0;
+    this.tracker = this.createTracker();
+
+    return target;
+  }
+
+  private createTracker(): RustObjectTracker {
+    const tracker = new RustObjectTracker({
+      iouThreshold: TRACKER_IOU_THRESHOLD,
+      hitCounterMax: this.cadence.hitCounterMax,
+      initializationDelay: this.cadence.initializationDelay,
+      motionTolerance: this.cadence.motionTolerance,
+    });
+
+    tracker.setMinConfidence(this.minConfidence);
+    tracker.setZones(toRustZones(this.zones));
+    if (this.lines.length > 0) tracker.setLines(toRustLines(this.lines), this.aspectRatio);
+    if (this.reidHitCounterMax > 0) tracker.setReidHitCounterMax(this.reidHitCounterMax);
+
+    return tracker;
   }
 
   public refreshReid(): void {
@@ -164,16 +238,8 @@ export class DetectionPipeline {
 
   public process(rawDetections: Detection[], frame: VideoFrameData, poseDelta?: { panDelta: number; tiltDelta: number }): PipelineResult {
     const flat = rawDetections.length === 0 ? [] : this.runNmsAndMergeFlat(rawDetections);
-    // Norfair's movement_vector is the scene flow: panning right drifts the
-    // scene left (x = -panDelta), tilting up drifts it down (y = +tiltDelta,
-    // image y grows downward). The autotracker feeds an accumulated offset
-    // from its reference pose, not a per-frame delta, so the Kalman state
-    // keeps one consistent reference across frames.
     const cameraMotion = poseDelta ? { x: -poseDelta.panDelta * PAN_TO_IMAGE_RATIO, y: poseDelta.tiltDelta * PAN_TO_IMAGE_RATIO } : undefined;
     const result = this.tracker.update(flat, Date.now(), frame.data as Buffer, frame.width, frame.height, cameraMotion);
-
-    // lost (Kalman-extrapolated) tracks stay in the output for smooth UI
-    // bboxes, the coordinator excludes them from the event lifecycle
     const tracked = result.tracked.map(fromRustTracked);
     const boxLookup = new Map<number, BoundingBox>();
     for (const t of tracked) {
