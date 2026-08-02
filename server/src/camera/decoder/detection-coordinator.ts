@@ -81,6 +81,8 @@ const DEFAULT_CASCADE_TIMEOUT = 10;
 const OBJECT_DWELL_SECONDS = 2;
 const SECONDARY_BBOX_TTL_MS = 2000;
 const CADENCE_MIN_SAMPLES = 5;
+const CADENCE_OUTLIER_BAND = 2.5;
+const CADENCE_OUTLIER_RESEED = 5;
 
 @RPCClass
 export class DetectionCoordinator {
@@ -115,6 +117,7 @@ export class DetectionCoordinator {
   private lastObjectCallAt = 0;
   private objectIntervalMs = 0;
   private objectIntervalSamples = 0;
+  private objectIntervalOutliers = 0;
 
   private currentDetectionState: {
     motion?: MotionResult;
@@ -1258,24 +1261,30 @@ export class DetectionCoordinator {
     this.lastObjectCallAt = now;
 
     const delta = now - previous;
-    if (previous === 0 || delta > 5000) {
-      this.objectIntervalMs = 0;
-      this.objectIntervalSamples = 0;
+    if (previous === 0 || delta > 5000) return;
+
+    if (this.objectIntervalMs === 0) {
+      this.objectIntervalMs = delta;
+      this.objectIntervalSamples = 1;
       return;
     }
 
-    this.objectIntervalMs = this.objectIntervalMs === 0 ? delta : this.objectIntervalMs * 0.8 + delta * 0.2;
+    if (delta > this.objectIntervalMs * CADENCE_OUTLIER_BAND || delta < this.objectIntervalMs / CADENCE_OUTLIER_BAND) {
+      this.objectIntervalOutliers++;
+      if (this.objectIntervalOutliers >= CADENCE_OUTLIER_RESEED) {
+        this.objectIntervalMs = delta;
+        this.objectIntervalSamples = 1;
+        this.objectIntervalOutliers = 0;
+      }
+      return;
+    }
+    this.objectIntervalOutliers = 0;
 
+    this.objectIntervalMs = this.objectIntervalMs * 0.8 + delta * 0.2;
     this.objectIntervalSamples++;
     if (this.objectIntervalSamples < CADENCE_MIN_SAMPLES) return;
 
-    const cadence = this.pipeline.syncDetectionCadence(this.objectIntervalMs);
-    if (cadence) {
-      const rate = (1000 / this.objectIntervalMs).toFixed(1);
-      this.logger.debug(
-        `Object detection runs at ${rate}/s, tracker now confirms after ${cadence.initializationDelay} detection(s) and keeps a track for ${cadence.hitCounterMax}`,
-      );
-    }
+    this.pipeline.syncDetectionCadence(this.objectIntervalMs);
   }
 
   private async scaleForObject(rawFrame: Frame): Promise<PluginFrame | undefined> {

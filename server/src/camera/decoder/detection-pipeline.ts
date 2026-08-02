@@ -24,6 +24,7 @@ const TRACKER_INITIALIZATION_DELAY = 3;
 const TRACK_CONFIRM_MS = 300;
 const TRACK_KEEPALIVE_MS = 3000;
 const CADENCE_SWITCH_AFTER_MS = 5000;
+const CADENCE_SWITCH_SPACING_MS = 60_000;
 const MOTION_MATCH_ABOVE_MS = 400;
 const CADENCE_BUCKETS_MS = [100, 150, 200, 300, 500, 700, 1000, 1500, 2000, 3000];
 
@@ -162,6 +163,7 @@ export class DetectionPipeline {
   private cadence: TrackerCadence = { initializationDelay: TRACKER_INITIALIZATION_DELAY, hitCounterMax: TRACKER_HIT_COUNTER_MAX };
   private cadenceIntervalMs = CADENCE_BUCKETS_MS[0];
   private pendingCadenceSince = 0;
+  private lastCadenceSwitchAt = 0;
 
   constructor(zones: DetectionZone[], settings: CameraDetectionSettings) {
     this.aspectRatio = 16 / 9;
@@ -223,8 +225,10 @@ export class DetectionPipeline {
       return undefined;
     }
 
+    const now = Date.now();
+    if (this.lastCadenceSwitchAt !== 0 && now - this.lastCadenceSwitchAt < CADENCE_SWITCH_SPACING_MS) return undefined;
+
     if (this.tracker.trackCount > 0) {
-      const now = Date.now();
       if (this.pendingCadenceSince === 0) {
         this.pendingCadenceSince = now;
         return undefined;
@@ -235,6 +239,7 @@ export class DetectionPipeline {
     this.cadence = target;
     this.cadenceIntervalMs = bucket;
     this.pendingCadenceSince = 0;
+    this.lastCadenceSwitchAt = now;
     this.tracker = this.createTracker();
 
     return target;
