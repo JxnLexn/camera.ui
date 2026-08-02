@@ -8,7 +8,17 @@ All notable changes to this project will be documented in this file.
 
 - **Push notifications are end-to-end encrypted.** Camera name, detection text and the snapshot are sealed on your server and only your phone can unlock them, not camera.ui cloud, not Google or Apple. Update the app, then press Resync in Settings, Notifications once per phone. Android notifications also get the Mute buttons the iPhone already had.
 
+- **The timeline has an event filter.** The new filter button picks which event types show up, on the timeline and in its detections tab alike, and the choice sticks. In camview it also decides whether an opened camera shows only its own events or those of every camera in the view; with all cameras shown, clicking another camera's event jumps straight to it. Detection entries name their camera when more than one is listed.
+
 ### Fixed
+
+- **The camview timeline drives one camera instead of all of them.** With a camera expanded, scrubbing and playback used to run every camera in the view at once, five and more hidden video sessions on a phone made scrubbing spin forever and end in a false "No recording". Expanded means: only that camera decodes, and the timeline shows its recordings and events; the event filter can bring the other cameras' events back into view.
+
+- **Playback starts at the event, not behind it.** After picking an event the timeline already ran while the clip was still loading, and the video then skipped forward to catch up. The clock now starts with the first rendered frame.
+
+- **Panning a zoomed camera no longer closes it.** Dragging with the left mouse button inside a zoomed, expanded camera counted as a click on release and shrank the view back into the grid.
+
+- **A playback error no longer shows as "No recording".** When reading a recording actually fails, playback now retries quietly first and then says "Playback failed", instead of claiming a recording gap that isn't there. Requires the camera-ui-nvr plugin update.
 
 - **Switching the detector for a camera really switches it.** Picking another plugin for Object, Motion or any other detection type left the previous one running. Only the plugin you picked feeds the camera now, and a detection plugin that is enabled but not picked stays out of the picture instead of analyzing frames for nothing.
 

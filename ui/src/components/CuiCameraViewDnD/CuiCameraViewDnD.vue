@@ -244,6 +244,15 @@ function destroyGrid(): void {
   gsInstance = null;
 }
 
+function expandCameraById(cameraId: string): void {
+  const idx = cards.value.findIndex((c) => c.lastDroppedCamera?._id === cameraId);
+  if (idx === -1 || fullScreenCard.value === idx) return;
+  const camera = cards.value[idx].lastDroppedCamera!;
+  collapsingCard.value = undefined;
+  fullScreenCard.value = idx;
+  emit('expand', camera, true);
+}
+
 function toggleFullScreenCard(camera: DBCamera, index: number, expanded: boolean): void {
   if (!expanded) {
     collapsingCard.value = index;
@@ -450,6 +459,7 @@ onBeforeUnmount(() => {
 });
 
 defineExpose({
+  expandCameraById,
   toggleFullscreen,
   toggleAllPlayerMute,
   toggleAllPlayerMicrophone,

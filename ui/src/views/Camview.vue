@@ -168,8 +168,11 @@
       >
         <CuiTimeline
           v-if="timelineState"
-          :camera-ids="viewCameraIds"
+          :camera-ids="timelineCameraIds"
+          :event-camera-ids="viewCameraIds"
+          :camera-names="cameraNameMap"
           :initial-timestamp="timelineInitialTimestamp"
+          @event-select="onTimelineEventSelect"
           :loading="timelineAnimating"
           :type="lgBreakpoint ? 'vertical' : 'horizontal'"
           dark-mode
@@ -364,7 +367,7 @@ const activityMode = ref<CameraActivityMode>('always-on');
 const sourceRole = ref<StreamingRole>('low-resolution');
 const streamingMode = ref<VideoStreamingMode>('webrtc');
 const cards = ref<CardState[]>([]);
-const expandMap = ref<Record<string, boolean>>({});
+const expandedCameraId = ref<string | null>(null);
 const cameraCardModels = reactive<CuiCameraCardModels>({
   sourceRole: sourceRole.value,
   activityMode: activityMode.value,
@@ -496,10 +499,21 @@ const viewCameraIds = computed(() => {
   return currentView.value?.cameras?.map((c) => c.cameraId) ?? [];
 });
 
+const timelineCameraIds = computed(() => {
+  const id = expandedCameraId.value;
+  return id && viewCameraIds.value.includes(id) ? [id] : viewCameraIds.value;
+});
+
+const cameraNameMap = computed(() => {
+  const map: Record<string, string> = {};
+  for (const cam of cameras.value?.result ?? []) map[cam._id] = cam.name;
+  return map;
+});
+
 // CamView forces `sourceRole: 'low'` across all tiles: many parallel 4K streams
 // blow past iOS Safari's memory budget (decoded YUV frames ≈ 12 MB × buffer depth
 // per tile). Scrub quality keeps decode + memory manageable at 10+ tiles.
-const { master } = useMultiNvrPlayback(viewCameraIds, { sourceRole: 'low' });
+const { master } = useMultiNvrPlayback(viewCameraIds, { sourceRole: 'low', activeIds: timelineCameraIds });
 
 // On re-open (timeline unmounts when minimized), seed CuiTimeline's scroll
 // position from the held master playback time so the playback/live gap
@@ -697,7 +711,14 @@ function rearrangeCamera(cameras: DBCamviewLayoutCamera[]): void {
 }
 
 function expandCamera(camera: DBCamera, expanded: boolean): void {
-  expandMap.value[camera._id] = expanded;
+  expandedCameraId.value = expanded ? camera._id : null;
+}
+
+function onTimelineEventSelect(payload: { timestamp: number; cameraId?: string }): void {
+  const current = expandedCameraId.value;
+  if (!current || !payload.cameraId || payload.cameraId === current) return;
+  if (!viewCameraIds.value.includes(payload.cameraId)) return;
+  viewDndRef.value?.expandCameraById(payload.cameraId);
 }
 
 function saveView(view: DBCamviewLayout): void {

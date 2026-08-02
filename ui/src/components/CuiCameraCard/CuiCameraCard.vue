@@ -158,7 +158,7 @@
                 <CuiHeatmap v-if="heatmapEnabled && camera && !isDisabled" :camera-id="camera._id" />
               </div>
 
-              <div v-if="nvrNoData || nvrLicenseRequired || codecUnsupported" class="absolute inset-0 z-3 pointer-events-none overflow-hidden">
+              <div v-if="nvrNoData || nvrLicenseRequired || codecUnsupported || nvrPlaybackFailed" class="absolute inset-0 z-3 pointer-events-none overflow-hidden">
                 <div class="w-full h-full blur-xs">
                   <CuiCameraSnapshot v-if="camera" :camera :show-loading-screen="false" :image-style="{ objectFit: 'fill' }" />
                 </div>
@@ -166,6 +166,7 @@
                   <div class="flex flex-col items-center justify-center text-center">
                     <i-mdi:license v-if="nvrLicenseRequired" class="text-white w-[50px] h-[50px]" />
                     <i-mdi:movie-off v-else-if="codecUnsupported" class="text-white w-[50px] h-[50px]" />
+                    <i-mdi:alert-circle-outline v-else-if="nvrPlaybackFailed" class="text-white w-[50px] h-[50px]" />
                     <i-mdi:video-off v-else class="text-white w-[50px] h-[50px]" />
                     <p v-if="isFullPlayer" class="text-white/80 text-sm max-w-xs mt-3">
                       {{
@@ -175,7 +176,9 @@
                             ? nvrPlaybackVisible
                               ? $t('components.player.codec_unsupported_recording')
                               : $t('components.player.codec_unsupported')
-                            : $t('components.player.no_recording')
+                            : nvrPlaybackFailed
+                              ? $t('components.player.playback_failed')
+                              : $t('components.player.no_recording')
                       }}
                     </p>
                   </div>
@@ -194,6 +197,7 @@
                   'cursor-pointer': cardIsTappable,
                   'pointer-events-none': !cardIsTappable,
                 }"
+                @pointerdown="onCardPointerDown"
                 @click="onCardClick"
               />
 
@@ -208,6 +212,7 @@
                 :class="{
                   'cursor-pointer': cardIsTappable,
                 }"
+                @pointerdown="onCardPointerDown"
                 @click="onCardClick"
               />
             </div>
@@ -891,6 +896,7 @@ const cameraIsInRouter = ref(false);
 const userMediaStream = shallowRef<MediaStream>();
 const isAdapting = ref(false);
 const panValue = ref({ x: 0, y: 0 });
+let panAtPointerDown = { x: 0, y: 0 };
 const zoomValue = ref(1);
 const lastZoom = ref(1);
 const isConstraining = ref(false);
@@ -950,6 +956,7 @@ const nvrCurrentTimestamp = computed(() => nvr.value?.currentTimestamp.value ?? 
 const nvrPlaybackVisible = computed(() => nvrMode.value !== 'idle');
 const nvrLicenseRequired = computed(() => nvrPlaybackVisible.value && (nvr.value?.licenseRequired.value ?? false));
 const nvrNoData = computed(() => nvrPlaybackVisible.value && !nvrLicenseRequired.value && (nvr.value?.noData.value ?? false));
+const nvrPlaybackFailed = computed(() => nvrPlaybackVisible.value && !nvrLicenseRequired.value && (nvr.value?.playbackError.value ?? false));
 const nvrLoading = computed(() => nvrPlaybackVisible.value && (nvr.value?.loading.value ?? false));
 const codecUnsupported = computed(() => (nvrPlaybackVisible.value ? (nvr.value?.unsupported.value ?? false) : streamUnsupported.value));
 const codecDegraded = computed(() => {
@@ -1333,10 +1340,17 @@ const hasMoreMenuItems = computed(() => {
   );
 });
 
-// Quality Button reflects the user's choice (not the adaptive-resolved live value).
 const displayResolution = computed(() => selectedSourceRole.value);
 
+function onCardPointerDown() {
+  panAtPointerDown = { ...panValue.value };
+}
+
 function onCardClick() {
+  const dx = panValue.value.x - panAtPointerDown.x;
+  const dy = panValue.value.y - panAtPointerDown.y;
+  if (Math.hypot(dx, dy) > 5) return;
+
   if (tapsForRedirect.value) {
     router.push(routerLink.value!);
   } else if (tapsForExpand.value) {
