@@ -198,6 +198,31 @@ export class WorkerManager {
     await workerProxy.restart();
   }
 
+  public async updateWorker(agentId: string, version = ConfigService.RUNNING_VERSION): Promise<void> {
+    const worker = this.workers.get(agentId);
+    if (!worker?.online) {
+      throw new Error(`Worker ${agentId} is not online`);
+    }
+
+    // pre-2.1.0 agents don't send it and have no update handler to call
+    if (!worker.update) {
+      throw new Error(`Worker ${worker.name} runs ${worker.version ?? 'an older version'} and has to be updated once on its own machine`);
+    }
+
+    if (!worker.update.updatable) {
+      throw new Error(`Worker ${worker.name} runs inside the desktop app and updates with it`);
+    }
+
+    if (worker.update.updating) {
+      throw new Error(`Worker ${worker.name} is already updating`);
+    }
+
+    this.logger.log(`Updating worker ${worker.name} (${agentId}) to ${version}`);
+
+    const workerProxy = this.createWorkerProxy(agentId);
+    await workerProxy.update(version);
+  }
+
   public async assignCamera(cameraId: string, agentId: string): Promise<void> {
     this.logger.log(`Assigning camera ${cameraId} to worker ${agentId}`);
 
@@ -504,6 +529,7 @@ export class WorkerManager {
       cpuLoad: heartbeat.cpuLoad,
       memLoad: heartbeat.memLoad,
       plugins: heartbeat.plugins,
+      update: heartbeat.update,
     };
 
     this.workers.set(heartbeat.agentId, workerInfo);

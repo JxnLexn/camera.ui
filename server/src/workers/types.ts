@@ -57,6 +57,12 @@ export interface WorkerPlatform {
   arch: string;
 }
 
+export interface WorkerUpdateState {
+  updatable: boolean;
+  updating: boolean;
+  error?: string;
+}
+
 export interface WorkerInfo {
   agentId: string;
   name: string;
@@ -66,6 +72,7 @@ export interface WorkerInfo {
   capabilities: WorkerCapability[];
   version?: string;
   versionMismatch?: boolean;
+  update?: WorkerUpdateState;
   platform?: WorkerPlatform;
   pid?: number;
   cpuLoad?: string;
@@ -86,6 +93,7 @@ export interface WorkerHeartbeat {
   cpuLoad: string;
   memLoad: string;
   plugins?: RemotePluginStatus[];
+  update: WorkerUpdateState;
 }
 
 export interface WorkerSyncResponse {
@@ -99,6 +107,7 @@ export interface WorkerManagerRPC {
 export interface WorkerAgentRPC {
   ping(): Promise<WorkerHealthInfo>;
   restart(): Promise<void>;
+  update(version?: string): Promise<void>;
 }
 
 export interface KnownWorker {

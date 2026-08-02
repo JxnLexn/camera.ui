@@ -55,6 +55,7 @@
                       <template v-for="(btn, bi) in header.buttons" :key="bi">
                         <Button
                           v-if="!btn.disabled?.(data)"
+                          v-tooltip.left="btn.tooltip?.(data)"
                           rounded
                           :loading="btn.loading?.(data)"
                           v-bind="btn.buttonProps"
@@ -69,6 +70,7 @@
                     </template>
                     <Button
                       v-else-if="!header.disabled?.(data)"
+                      v-tooltip.left="header.tooltip?.(data)"
                       rounded
                       :loading="header.loading?.(data)"
                       v-bind="header.buttonProps"

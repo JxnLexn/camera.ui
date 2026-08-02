@@ -158,4 +158,16 @@ export const WorkersRoute: FastifyPluginAsync = async (app: FastifyInstance): Pr
       params: agentParamsSchema,
     },
   });
+
+  app.withTypeProvider<ZodTypeProvider>().route({
+    url: '/:agentId/update',
+    method: 'POST',
+    preValidation: [validJWTNeeded, onlyAdminCanDoThisAction],
+    handler: workersController.updateWorker.bind(workersController),
+    schema: {
+      tags: ['Workers'],
+      summary: 'Update a worker agent to the master version',
+      params: agentParamsSchema,
+    },
+  });
 };

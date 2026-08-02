@@ -20,19 +20,22 @@
         <Card class="cui-card">
           <template #content>
             <div class="flex flex-col gap-6">
-              <div class="flex flex-row items-center justify-between gap-4">
-                <div class="flex flex-col">
-                  <span class="text-sm font-semibold text-color">{{ $t('views.workers.enable_workers') }}</span>
-                  <span class="text-muted text-xs">{{ $t('views.workers.enable_workers_description') }}</span>
+              <div class="flex items-center gap-4">
+                <div class="flex flex-col field-switch-gap">
+                  <label class="cui-label-switch">{{ $t('views.workers.enable_workers') }}</label>
+                  <Message severity="secondary" variant="simple" size="small" class="cui-input-switch-hint">
+                    {{ $t('views.workers.enable_workers_description') }}
+                  </Message>
                 </div>
-                <ToggleSwitch :model-value="workersEnabled" :disabled="configSaving" class="shrink-0" @update:model-value="handleToggle" />
+                <ToggleSwitch :model-value="workersEnabled" :disabled="configSaving" class="ml-auto shrink-0" @update:model-value="handleToggle" />
               </div>
 
               <template v-if="workersEnabled">
                 <div class="flex flex-col field-gap">
-                  <span class="text-sm font-semibold">{{ $t('views.workers.master_address') }}</span>
+                  <label for="master-address" class="cui-label">{{ $t('views.workers.master_address') }}</label>
                   <Select
                     v-model="addressDraft"
+                    input-id="master-address"
                     :options="addressOptions"
                     editable
                     option-label="label"
@@ -40,15 +43,17 @@
                     :placeholder="$t('views.workers.master_address_placeholder')"
                     class="w-full"
                   />
-                  <span class="text-muted text-xs">{{ $t('views.workers.master_address_hint') }}</span>
+                  <Message severity="secondary" variant="simple" size="small" class="cui-input-hint">
+                    {{ $t('views.workers.master_address_hint') }}
+                  </Message>
                 </div>
 
                 <div class="flex flex-col field-gap">
-                  <span class="text-sm font-semibold">{{ $t('views.workers.leaf_port') }}</span>
-                  <InputNumber v-model="portDraft" :min="1024" :max="65535" :use-grouping="false" class="w-full" />
-                  <span v-if="portChanged && (workersConfig?.pairedWorkers ?? 0) > 0" class="text-orange-400 text-xs">
+                  <label for="leaf-port" class="cui-label">{{ $t('views.workers.leaf_port') }}</label>
+                  <InputNumber v-model="portDraft" input-id="leaf-port" :min="1024" :max="65535" :use-grouping="false" class="w-full" />
+                  <Message v-if="portChanged && (workersConfig?.pairedWorkers ?? 0) > 0" severity="warn" variant="simple" size="small" class="cui-input-hint">
                     {{ $t('views.workers.port_change_warning') }}
-                  </span>
+                  </Message>
                 </div>
 
                 <div class="flex flex-row items-end justify-end">
@@ -77,7 +82,7 @@
         <span class="card-title">{{ $t('views.workers.camera_assignments') }}</span>
         <Card class="cui-card">
           <template #content>
-            <p class="text-muted text-sm mb-4">{{ $t('views.workers.camera_assignments_description') }}</p>
+            <span class="text-sm block mb-6">{{ $t('views.workers.camera_assignments_description') }}</span>
             <CuiDataTable :value="cameras" :loading="camerasLoading" :pt="assignmentTablePt" striped-rows class="w-full">
               <template #loading>
                 <ProgressSpinner class="w-[30px] h-[30px] m-0" stroke-width="5" />
@@ -117,7 +122,7 @@
         <span class="card-title">{{ $t('views.workers.plugin_assignments') }}</span>
         <Card class="cui-card">
           <template #content>
-            <p class="text-muted text-sm mb-4">{{ $t('views.workers.plugin_assignments_description') }}</p>
+            <span class="text-sm block mb-6">{{ $t('views.workers.plugin_assignments_description') }}</span>
             <CuiDataTable :value="plugins" :loading="pluginsLoading" :pt="assignmentTablePt" striped-rows class="w-full">
               <template #loading>
                 <ProgressSpinner class="w-[30px] h-[30px] m-0" stroke-width="5" />
@@ -166,7 +171,7 @@
 
               <template v-if="pairing">
                 <div class="flex flex-col field-gap">
-                  <span class="text-sm font-semibold">{{ $t('views.workers.pairing_code') }}</span>
+                  <label class="cui-label">{{ $t('views.workers.pairing_code') }}</label>
                   <InputGroup>
                     <InputText :model-value="pairing.code" readonly type="text" />
                     <InputGroupAddon>
@@ -181,12 +186,14 @@
                       />
                     </InputGroupAddon>
                   </InputGroup>
-                  <span class="text-muted text-xs">{{ $t('views.workers.pairing_expires', { minutes: pairingMinutesLeft }) }}</span>
+                  <Message severity="secondary" variant="simple" size="small" class="cui-input-hint">
+                    {{ $t('views.workers.pairing_expires', { minutes: pairingMinutesLeft }) }}
+                  </Message>
                 </div>
 
                 <div class="flex flex-col field-gap">
                   <div class="flex flex-row items-center justify-between">
-                    <span class="text-sm font-semibold">{{ $t('views.workers.pairing_snippet') }}</span>
+                    <label class="cui-label">{{ $t('views.workers.pairing_snippet') }}</label>
                     <CuiActionButton
                       :action-text="$t('views.workers.copied')"
                       :icon="CopyIcon"
@@ -198,7 +205,9 @@
                     />
                   </div>
                   <pre class="pairing-snippet">{{ pairingSnippet }}</pre>
-                  <span class="text-muted text-xs">{{ $t('views.workers.pairing_snippet_hint') }}</span>
+                  <Message severity="secondary" variant="simple" size="small" class="cui-input-hint">
+                    {{ $t('views.workers.pairing_snippet_hint') }}
+                  </Message>
                 </div>
               </template>
 
@@ -216,6 +225,7 @@
 <script setup lang="ts">
 import CopyIcon from '~icons/fluent/copy-16-filled';
 import RestartIcon from '~icons/ic/round-restart-alt';
+import UpdateIcon from '~icons/material-symbols/deployed-code-update';
 import RemoveIcon from '~icons/mdi/delete-outline';
 import EditIcon from '~icons/mdi/pencil-outline';
 
@@ -226,11 +236,10 @@ import { PluginsQuery } from '@/api/routes/plugins.js';
 import { WorkersQuery } from '@/api/routes/workers.js';
 import RenameWorkerDialog from '@/components/CuiDialog/templates/RenameWorker/RenameWorker.vue';
 
-import type { WorkerInfo, WorkerPairing } from '@/api/routes/workers.js';
 import type { RenameWorkerProps } from '@/components/CuiDialog/templates/RenameWorker/types.js';
 import type { TableHeader } from '@/components/CuiChartTable/types.js';
 import type { PassThrough } from '@primevue/core';
-import type { CameraUiPlugin, DBCamera } from '@shared/types';
+import type { CameraUiPlugin, DBCamera, WorkerInfo, WorkerPairingResponse } from '@shared/types';
 import type { ChartData } from 'chart.js';
 import type { DataTablePassThroughOptions } from 'primevue';
 
@@ -253,6 +262,7 @@ const { mutateAsync: patchConfig, isPending: configSaving } = workersQuery.patch
 const { mutateAsync: assignCamera } = workersQuery.assignCameraQuery();
 const { mutateAsync: unassignCamera } = workersQuery.unassignCameraQuery();
 const { mutateAsync: restartWorkerMutation } = workersQuery.restartWorkerQuery();
+const { mutateAsync: updateWorkerMutation } = workersQuery.updateWorkerQuery();
 const { mutateAsync: createPairing, isPending: generatingCode } = workersQuery.createPairingQuery();
 const { mutateAsync: removeWorkerMutation } = workersQuery.removeWorkerQuery();
 const { mutateAsync: assignPlugin } = workersQuery.assignPluginQuery();
@@ -274,9 +284,10 @@ const assignmentTablePt: PassThrough<DataTablePassThroughOptions> = {
 const workersLoaded = ref(false);
 const workersRestarting = ref<string[]>([]);
 const workersRemoving = ref<string[]>([]);
+const workersUpdating = ref<string[]>([]);
 const assigningCameraIds = ref(new Set<string>());
 const assigningPluginNames = ref(new Set<string>());
-const pairing = ref<WorkerPairing | null>(null);
+const pairing = ref<WorkerPairingResponse | null>(null);
 const addressDraft = ref('');
 const portDraft = ref(7422);
 
@@ -323,6 +334,8 @@ const workerHeaders = computed<TableHeader[]>(() => [
     },
     tooltip(item: WorkerInfo) {
       if (!item.online) return t('views.workers.offline');
+      if (item.update?.error) return t('views.workers.update_failed', { error: item.update.error });
+      if (item.update?.updating) return t('views.workers.updating');
       return item.versionMismatch ? t('views.workers.version_mismatch', { version: item.version || '?' }) : t('views.workers.online');
     },
   },
@@ -418,18 +431,31 @@ const workerHeaders = computed<TableHeader[]>(() => [
     buttons: [
       {
         icon: EditIcon,
+        buttonProps: { severity: 'secondary' },
+        tooltip: () => t('views.workers.rename_worker'),
         action: (item: WorkerInfo) => handleRenameWorker(item),
       },
       {
+        icon: UpdateIcon,
+        buttonProps: { severity: 'secondary' },
+        loading: (item: WorkerInfo) => item.update?.updating || workersUpdating.value.includes(item.agentId),
+        disabled: (item: WorkerInfo) => !item.online || !item.versionMismatch || !item.update?.updatable,
+        tooltip: (item: WorkerInfo) => updateTooltip(item),
+        action: (item: WorkerInfo) => handleUpdateWorker(item.agentId),
+      },
+      {
         icon: RestartIcon,
+        buttonProps: { severity: 'secondary' },
         loading: (item: WorkerInfo) => workersRestarting.value.includes(item.name),
         disabled: (item: WorkerInfo) => !item.online,
+        tooltip: () => t('views.workers.restart_worker'),
         action: (item: WorkerInfo) => handleRestartWorker(item.name, item.agentId),
       },
       {
         icon: RemoveIcon,
         buttonProps: { severity: 'danger' },
         loading: (item: WorkerInfo) => workersRemoving.value.includes(item.agentId),
+        tooltip: () => t('views.workers.remove_worker'),
         action: (item: WorkerInfo) => handleRemoveWorker(item),
       },
     ],
@@ -491,6 +517,21 @@ function handleRenameWorker(worker: WorkerInfo) {
       await renameWorkerMutation({ agentId: worker.agentId, name: newName });
     },
   });
+}
+
+function updateTooltip(item: WorkerInfo): string {
+  if (item.update?.updating) return t('views.workers.updating');
+  if (!masterVersion.value) return t('views.workers.update_worker_short');
+  return t('views.workers.update_worker', { version: masterVersion.value });
+}
+
+async function handleUpdateWorker(agentId: string) {
+  workersUpdating.value.push(agentId);
+  try {
+    await updateWorkerMutation(agentId);
+  } finally {
+    workersUpdating.value = workersUpdating.value.filter((id) => id !== agentId);
+  }
 }
 
 async function handleRestartWorker(workerName: string, agentId: string) {

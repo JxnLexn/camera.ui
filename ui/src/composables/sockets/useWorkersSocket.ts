@@ -1,4 +1,4 @@
-import type { WorkerInfo } from '@/api/routes/workers.js';
+import type { WorkerInfo } from '@shared/types';
 import type { SocketChannel } from '@/connection/index.js';
 
 export const MAX_WORKERS_DATA_POINTS = 30;

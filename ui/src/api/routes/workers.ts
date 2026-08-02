@@ -1,59 +1,26 @@
 import { axiosInstance as api } from '..';
 
-import type { CamerasResponse } from '@shared/types';
+import type { CamerasResponse, PatchWorkersConfigInput, WorkerInfo, WorkerPairingResponse, WorkersConfigResponse } from '@shared/types';
 import type { AxiosResponse } from 'axios';
 import type { AckResponse } from '..';
-
-export interface WorkerInfo {
-  agentId: string;
-  name: string;
-  online: boolean;
-  lastHeartbeat: number;
-  cameras: string[];
-  capabilities: string[];
-  version?: string;
-  versionMismatch?: boolean;
-  platform?: { os: string; arch: string };
-  pid?: number;
-  cpuLoad?: string;
-  memLoad?: string;
-}
-
-export interface WorkerPairing {
-  code: string;
-  expiresAt: number;
-  address: string | null;
-  leafPort: number;
-  apiPort: number;
-}
-
-export interface WorkersConfig {
-  enabled: boolean;
-  address: string;
-  port: number;
-  suggestedAddresses: string[];
-  pairedWorkers: number;
-}
-
-export type WorkersConfigPatch = Partial<Pick<WorkersConfig, 'enabled' | 'address' | 'port'>>;
 
 export async function getWorkers(): Promise<WorkerInfo[]> {
   const response: AxiosResponse<WorkerInfo[]> = await api.get('/workers');
   return response.data;
 }
 
-export async function getWorkersConfig(): Promise<WorkersConfig> {
-  const response: AxiosResponse<WorkersConfig> = await api.get('/workers/config');
+export async function getWorkersConfig(): Promise<WorkersConfigResponse> {
+  const response: AxiosResponse<WorkersConfigResponse> = await api.get('/workers/config');
   return response.data;
 }
 
-export async function patchWorkersConfig(patch: WorkersConfigPatch): Promise<WorkersConfigPatch> {
-  const response: AxiosResponse<WorkersConfigPatch> = await api.patch('/workers/config', patch);
+export async function patchWorkersConfig(patch: PatchWorkersConfigInput): Promise<PatchWorkersConfigInput> {
+  const response: AxiosResponse<PatchWorkersConfigInput> = await api.patch('/workers/config', patch);
   return response.data;
 }
 
-export async function createWorkerPairing(): Promise<WorkerPairing> {
-  const response: AxiosResponse<WorkerPairing> = await api.post('/workers/pairings');
+export async function createWorkerPairing(): Promise<WorkerPairingResponse> {
+  const response: AxiosResponse<WorkerPairingResponse> = await api.post('/workers/pairings');
   return response.data;
 }
 
@@ -63,6 +30,10 @@ export async function removeWorker(agentId: string): Promise<void> {
 
 export async function restartWorker(agentId: string): Promise<void> {
   await api.post(`/workers/${agentId}/restart`);
+}
+
+export async function updateWorker(agentId: string): Promise<void> {
+  await api.post(`/workers/${agentId}/update`);
 }
 
 export async function renameWorker({ agentId, name }: { agentId: string; name: string }): Promise<void> {
@@ -154,6 +125,15 @@ export class WorkersQuery {
   public restartWorkerQuery() {
     return useMutation({
       mutationFn: restartWorker,
+    });
+  }
+
+  public updateWorkerQuery() {
+    return useMutation({
+      mutationFn: updateWorker,
+      onError: (error) => {
+        this.toast.add({ severity: 'error', detail: error, life: 5000 });
+      },
     });
   }
 

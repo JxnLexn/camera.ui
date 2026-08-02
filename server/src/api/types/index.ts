@@ -939,7 +939,27 @@ export interface ValidateShareRequest {
   Querystring: ValidateQuery;
 }
 
+export interface WorkersConfigResponse {
+  enabled: boolean;
+  address: string;
+  port: number;
+  suggestedAddresses: string[];
+  pairedWorkers: number;
+}
+
+export interface WorkerPairingResponse {
+  code: string;
+  expiresAt: number;
+  address: string | null;
+  leafPort: number;
+  apiPort: number;
+}
+
 export interface WorkerRestartRequest {
+  Params: { agentId: string };
+}
+
+export interface WorkerUpdateRequest {
   Params: { agentId: string };
 }
 

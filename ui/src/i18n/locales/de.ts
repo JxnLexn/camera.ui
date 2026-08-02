@@ -2507,7 +2507,12 @@ export default {
       remove_worker_confirm:
         '"{name}" entfernen? Die Zugangsdaten werden widerrufen und die Verbindung gekappt — zugewiesene Kameras laufen wieder auf dieser Maschine. Der interne Message-Broker startet kurz neu.',
       version: 'Version',
-      version_mismatch: 'Versionskonflikt — Worker läuft mit {version}, bitte aktualisieren',
+      version_mismatch: 'Worker läuft mit {version}, auf die Server-Version aktualisieren',
+      update_worker: 'Auf {version} aktualisieren',
+      update_worker_short: 'Worker aktualisieren',
+      restart_worker: 'Worker neu starten',
+      updating: 'Wird aktualisiert, der Worker startet danach neu',
+      update_failed: 'Update fehlgeschlagen: {error}',
     },
   },
 };

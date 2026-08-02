@@ -19,6 +19,7 @@ import type {
   WorkerRestartRequest,
   WorkerUnassignPluginRequest,
   WorkerUnassignRequest,
+  WorkerUpdateRequest,
 } from '../types/index.js';
 
 export class WorkersController {
@@ -232,6 +233,15 @@ export class WorkersController {
   public async restartWorker(req: FastifyRequest<AuthLoginRequest & WorkerRestartRequest>, reply: FastifyReply): Promise<FastifyReply> {
     try {
       await this.workerManager.restartWorker(req.params.agentId);
+      return reply.code(204).send();
+    } catch (error: any) {
+      return reply.code(500).send({ statusCode: 500, message: error.message });
+    }
+  }
+
+  public async updateWorker(req: FastifyRequest<AuthLoginRequest & WorkerUpdateRequest>, reply: FastifyReply): Promise<FastifyReply> {
+    try {
+      await this.workerManager.updateWorker(req.params.agentId);
       return reply.code(204).send();
     } catch (error: any) {
       return reply.code(500).send({ statusCode: 500, message: error.message });

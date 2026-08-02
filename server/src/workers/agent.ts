@@ -7,6 +7,7 @@ import { container } from 'tsyringe';
 import { WorkersService } from '../api/services/workers.service.js';
 import { NamespaceManager } from '../rpc/namespaces.js';
 import { ConfigService } from '../services/config/index.js';
+import { canRequestServerUpdate, requestServerUpdate } from '../utils/ipc.js';
 import { FrameDecodingHandler } from './capabilities/frame-decoding.js';
 import { PluginHostHandler } from './capabilities/plugin-host.js';
 import { WorkerCapability, workloadKey } from './types.js';
@@ -46,6 +47,9 @@ export class WorkerAgent implements WorkerAgentRPC {
 
   private cpuLoad = '0.00';
   private memLoad = '0.00';
+
+  private updating = false;
+  private updateError?: string;
 
   constructor() {
     this.configService = container.resolve<ConfigService>('configService');
@@ -125,7 +129,7 @@ export class WorkerAgent implements WorkerAgentRPC {
     const rpcSubject = NamespaceManager.workerAgentRpc(this.agentId);
     this.closeHandler = await this.proxy.registerHandler(
       rpcSubject,
-      { ping: () => this.ping(), restart: () => this.restart() },
+      { ping: () => this.ping(), restart: () => this.restart(), update: (version?: string) => this.update(version) },
       { isolatedConnection: true, withoutDecorators: true },
     );
 
@@ -185,6 +189,54 @@ export class WorkerAgent implements WorkerAgentRPC {
       await this.close();
       process.exit(0);
     }, 100);
+  }
+
+  public async update(version?: string): Promise<void> {
+    if (!canRequestServerUpdate()) {
+      throw new Error('This worker runs inside the desktop app and updates with it');
+    }
+
+    if (this.updating) {
+      throw new Error('Update already in progress');
+    }
+
+    this.updating = true;
+    this.updateError = undefined;
+
+    // an install takes minutes: answer the master now, report through the heartbeat
+    this.runUpdate(version);
+  }
+
+  private async runUpdate(version = 'latest'): Promise<void> {
+    this.report('log', `Updating to ${version}`);
+
+    try {
+      const output = await requestServerUpdate(version);
+      for await (const line of output) {
+        this.report('raw', line);
+      }
+
+      this.report('log', `Updated to ${version} — restarting`);
+      await this.restart();
+    } catch (error: any) {
+      this.updating = false;
+      this.updateError = error?.message ?? String(error);
+      this.report('error', `Update to ${version} failed: ${this.updateError}`);
+    }
+  }
+
+  private report(level: 'log' | 'error' | 'raw', message: string): void {
+    this.logger[level](message);
+
+    this.forwardLog({
+      timestamp: Date.now(),
+      level,
+      prefix: 'WorkerAgent',
+      suffix: this.configService.config.worker?.name ?? 'worker',
+      message,
+      targetType: 'system',
+      source: 'child',
+    });
   }
 
   private async syncCycle(): Promise<void> {
@@ -278,6 +330,11 @@ export class WorkerAgent implements WorkerAgentRPC {
       cpuLoad: this.cpuLoad,
       memLoad: this.memLoad,
       plugins: this.pluginHostHandler?.getPluginStatuses(),
+      update: {
+        updatable: canRequestServerUpdate(),
+        updating: this.updating,
+        error: this.updateError,
+      },
     };
   }
 

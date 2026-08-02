@@ -11,6 +11,7 @@ export * from '../../server/src/api/schemas/storage.schema.js';
 export * from '../../server/src/api/schemas/sensors.schema.js';
 export type { TransformedSensor } from '../../server/src/api/services/sensors.service.js';
 export * from '../../server/src/api/schemas/users.schema.js';
+export * from '../../server/src/api/schemas/workers.schema.js';
 export type * from '../../server/src/api/types/index.js';
 export type * from '../../server/src/api/websocket/types.js';
 export type { AutomationRun, RunTraceEntry } from '../../server/src/automations/trace.js';

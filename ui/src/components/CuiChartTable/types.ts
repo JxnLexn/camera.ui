@@ -24,6 +24,7 @@ export interface TableHeaderActionButton {
   icon: any;
   loading?: (item: any) => boolean;
   disabled?: (item: any) => boolean;
+  tooltip?: (item: any) => string | undefined;
   action: (item: any) => void;
   buttonProps?: ButtonProps;
 }
@@ -33,6 +34,7 @@ export interface TableHeaderAction extends TableHeaderBase {
   icon?: any;
   loading?: (item: any) => boolean;
   disabled?: (item: any) => boolean;
+  tooltip?: (item: any) => string | undefined;
   action?: (item: any) => void;
   buttonProps?: ButtonProps;
   buttons?: TableHeaderActionButton[];

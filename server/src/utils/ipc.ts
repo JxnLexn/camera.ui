@@ -1,11 +1,125 @@
-import type { IPCMessage } from '../types.js';
+import { IS_ELECTRON } from '@camera.ui/common/utils';
+
+import type { CLIMessage, IPCMessage } from '../types.js';
 
 const REPORT_TIMEOUT_MS = 1000;
+const UPDATE_TIMEOUT_MS = 5 * 60 * 1000;
 
 export class FatalBootError extends Error {}
 
 export function sendIPCMessage(message: IPCMessage): void {
   process.send?.(message);
+}
+
+export function canRequestServerUpdate(): boolean {
+  // eslint-disable-next-line @typescript-eslint/unbound-method
+  return !IS_ELECTRON && Boolean(process.send);
+}
+
+export async function requestServerUpdate(version?: string): Promise<AsyncGenerator<string, void, unknown>> {
+  if (IS_ELECTRON) {
+    throw new Error('Server updates are managed by the desktop app');
+  }
+
+  if (!process.send) {
+    throw new Error('Cannot update server: No CLI process found');
+  }
+
+  sendIPCMessage({
+    type: 'UPDATE_SERVER',
+    version: version,
+  });
+
+  return streamUpdateOutput();
+}
+
+// eslint-disable-next-line @stylistic/generator-star-spacing
+async function* streamUpdateOutput(): AsyncGenerator<string, void, unknown> {
+  let resolver: ((value: { done: boolean; value?: string }) => void) | null = null;
+  let rejector: ((error: Error) => void) | null = null;
+
+  const messageQueue: { done: boolean; value?: string }[] = [];
+  let updateFailed = false;
+  let updateError: Error | null = null;
+
+  const timer = setTimeout(() => {
+    if (resolver) {
+      rejector?.(new Error('Update timeout after 5 minutes'));
+    }
+  }, UPDATE_TIMEOUT_MS);
+
+  const handler = (message: CLIMessage): void => {
+    switch (message.type) {
+      case 'UPDATE_OUTPUT':
+      case 'UPDATE_ERROR': {
+        const result = { done: false, value: message.data };
+        if (resolver) {
+          resolver(result);
+          resolver = null;
+        } else {
+          messageQueue.push(result);
+        }
+        break;
+      }
+      case 'UPDATE_FAILED': {
+        updateFailed = true;
+        updateError = new Error(message.error ?? 'Update failed');
+        if (rejector) {
+          rejector(updateError);
+        }
+        process.removeListener('message', handler);
+        clearTimeout(timer);
+        break;
+      }
+      case 'UPDATE_COMPLETE': {
+        const result = { done: true };
+        if (resolver) {
+          resolver(result);
+          resolver = null;
+        } else {
+          messageQueue.push(result);
+        }
+        process.removeListener('message', handler);
+        clearTimeout(timer);
+        break;
+      }
+    }
+  };
+
+  process.on('message', handler);
+
+  try {
+    while (true) {
+      if (updateFailed) {
+        throw updateError!;
+      }
+
+      if (messageQueue.length > 0) {
+        const next = messageQueue.shift()!;
+        if (next.done) {
+          return;
+        }
+        if (next.value) {
+          yield next.value;
+        }
+      } else {
+        const next = await new Promise<{ done: boolean; value?: string }>((resolve, reject) => {
+          resolver = resolve;
+          rejector = reject;
+        });
+
+        if (next.done) {
+          return;
+        }
+        if (next.value) {
+          yield next.value;
+        }
+      }
+    }
+  } finally {
+    process.removeListener('message', handler);
+    clearTimeout(timer);
+  }
 }
 
 export async function reportStartError(error: unknown): Promise<void> {

@@ -2486,7 +2486,12 @@ export default {
       remove_worker_confirm:
         'Remove "{name}"? Its credentials are revoked and the connection is dropped — assigned cameras fall back to this machine. The internal message broker restarts briefly.',
       version: 'Version',
-      version_mismatch: 'Version mismatch — worker runs {version}, please update it',
+      version_mismatch: 'Worker runs {version}, update it to match the server',
+      update_worker: 'Update to {version}',
+      update_worker_short: 'Update Worker',
+      restart_worker: 'Restart Worker',
+      updating: 'Updating, the worker restarts when it is done',
+      update_failed: 'Update failed: {error}',
     },
   },
 };
