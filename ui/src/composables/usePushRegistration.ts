@@ -12,6 +12,11 @@ interface PerServerRegistration {
   enabledAt: number;
 }
 
+interface PushCryptoPlugin {
+  getOrCreateKey(options: { serverId: string }): Promise<{ key: string }>;
+  deleteKey(options: { serverId: string }): Promise<void>;
+}
+
 type PushRegistrations = Record<string, PerServerRegistration>;
 
 const _registering = ref(false);
@@ -34,10 +39,11 @@ export function usePushRegistration() {
 
       const platform = await detectPlatform();
       const deviceName = await detectDeviceName();
+      const pushKey = await getOrCreatePushKey(serverId);
 
       const device = await registerNotifierDeviceFn({
         pluginName: MOBILE_PLUGIN_NAME,
-        input: { deviceId, platform, deviceName },
+        input: { deviceId, platform, deviceName, ...(pushKey ? { pushKey } : {}) },
       });
 
       await writeRegistration(serverId, { deviceId: device.id, enabledAt: Date.now() });
@@ -53,6 +59,7 @@ export function usePushRegistration() {
     const reg = await readRegistration(serverId);
     if (!reg || reg.deviceId !== deviceId) return;
     await removeRegistration(serverId);
+    await deletePushKey(serverId);
   };
 
   const isServerSynced = async (serverId: string): Promise<boolean> => {
@@ -103,6 +110,36 @@ async function removeRegistration(serverId: string): Promise<void> {
   if (!regs[serverId]) return;
   delete regs[serverId];
   await writeRegistrations(regs);
+}
+
+async function pushCrypto(): Promise<PushCryptoPlugin | null> {
+  try {
+    const { Capacitor, registerPlugin } = await import('@capacitor/core');
+    if (!Capacitor.isPluginAvailable('PushCrypto')) return null;
+    return registerPlugin<PushCryptoPlugin>('PushCrypto');
+  } catch {
+    return null;
+  }
+}
+
+async function getOrCreatePushKey(serverId: string): Promise<string | null> {
+  try {
+    const plugin = await pushCrypto();
+    if (!plugin) return null;
+    const { key } = await plugin.getOrCreateKey({ serverId });
+    return key || null;
+  } catch (err) {
+    log.warn('push key unavailable, falling back to plaintext push:', err);
+    return null;
+  }
+}
+
+async function deletePushKey(serverId: string): Promise<void> {
+  try {
+    await (await pushCrypto())?.deleteKey({ serverId });
+  } catch {
+    // best-effort
+  }
 }
 
 async function detectPlatform(): Promise<'ios' | 'android'> {
