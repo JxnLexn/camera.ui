@@ -25,6 +25,7 @@ const TRACK_CONFIRM_MS = 300;
 const TRACK_KEEPALIVE_MS = 3000;
 const CADENCE_SWITCH_AFTER_MS = 5000;
 const MOTION_MATCH_ABOVE_MS = 400;
+const CADENCE_BUCKETS_MS = [100, 150, 200, 300, 500, 700, 1000, 1500, 2000, 3000];
 
 export const PAN_TO_IMAGE_RATIO = 4.0;
 
@@ -112,6 +113,19 @@ function toRustLines(lines: DetectionLine[]): RustDetectionLine[] {
   }));
 }
 
+function quantizeCadence(intervalMs: number): number {
+  let best = CADENCE_BUCKETS_MS[0];
+  let bestDistance = Number.POSITIVE_INFINITY;
+  for (const bucket of CADENCE_BUCKETS_MS) {
+    const distance = Math.abs(Math.log(intervalMs / bucket));
+    if (distance < bestDistance) {
+      bestDistance = distance;
+      best = bucket;
+    }
+  }
+  return best;
+}
+
 function fromRustCrossing(event: RustLineCrossingEvent, lookup: Map<number, BoundingBox>): LineCrossingEvent {
   const box = lookup.get(event.trackId);
   const w = box?.width ?? 0;
@@ -146,6 +160,7 @@ export class DetectionPipeline {
   private reidHitCounterMax = 0;
 
   private cadence: TrackerCadence = { initializationDelay: TRACKER_INITIALIZATION_DELAY, hitCounterMax: TRACKER_HIT_COUNTER_MAX };
+  private cadenceIntervalMs = CADENCE_BUCKETS_MS[0];
   private pendingCadenceSince = 0;
 
   constructor(zones: DetectionZone[], settings: CameraDetectionSettings) {
@@ -179,16 +194,23 @@ export class DetectionPipeline {
   public syncDetectionCadence(intervalMs: number): TrackerCadence | undefined {
     if (intervalMs <= 0) return undefined;
 
+    const bucket = quantizeCadence(intervalMs);
+    // hysteresis: jitter around the current bucket must not thrash the tracker
+    if (bucket === this.cadenceIntervalMs || Math.abs(intervalMs - this.cadenceIntervalMs) < this.cadenceIntervalMs * 0.25) {
+      this.pendingCadenceSince = 0;
+      return undefined;
+    }
+
     const target: TrackerCadence = {
-      initializationDelay: Math.min(TRACKER_INITIALIZATION_DELAY, Math.max(1, Math.round(TRACK_CONFIRM_MS / intervalMs))),
-      hitCounterMax: Math.min(TRACKER_HIT_COUNTER_MAX, Math.max(2, Math.round(TRACK_KEEPALIVE_MS / intervalMs))),
+      initializationDelay: Math.min(TRACKER_INITIALIZATION_DELAY, Math.max(1, Math.round(TRACK_CONFIRM_MS / bucket))),
+      hitCounterMax: Math.min(TRACKER_HIT_COUNTER_MAX, Math.max(2, Math.round(TRACK_KEEPALIVE_MS / bucket))),
     };
 
     // below ~2.5/s a walking object out-runs its own box between detections,
     // IoU hits 0 and only distance matching can follow; tolerance scales with
     // the gap, capped so distant objects still can't steal each other's ids
-    if (intervalMs >= MOTION_MATCH_ABOVE_MS) {
-      target.motionTolerance = Math.min(0.4, 0.05 + (0.25 * intervalMs) / 1000);
+    if (bucket >= MOTION_MATCH_ABOVE_MS) {
+      target.motionTolerance = Math.min(0.4, 0.05 + (0.25 * bucket) / 1000);
     }
 
     if (
@@ -196,6 +218,7 @@ export class DetectionPipeline {
       target.hitCounterMax === this.cadence.hitCounterMax &&
       target.motionTolerance === this.cadence.motionTolerance
     ) {
+      this.cadenceIntervalMs = bucket;
       this.pendingCadenceSince = 0;
       return undefined;
     }
@@ -210,6 +233,7 @@ export class DetectionPipeline {
     }
 
     this.cadence = target;
+    this.cadenceIntervalMs = bucket;
     this.pendingCadenceSince = 0;
     this.tracker = this.createTracker();
 

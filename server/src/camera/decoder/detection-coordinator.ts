@@ -80,6 +80,7 @@ interface PluginFrame {
 const DEFAULT_CASCADE_TIMEOUT = 10;
 const OBJECT_DWELL_SECONDS = 2;
 const SECONDARY_BBOX_TTL_MS = 2000;
+const CADENCE_MIN_SAMPLES = 5;
 
 @RPCClass
 export class DetectionCoordinator {
@@ -113,6 +114,7 @@ export class DetectionCoordinator {
 
   private lastObjectCallAt = 0;
   private objectIntervalMs = 0;
+  private objectIntervalSamples = 0;
 
   private currentDetectionState: {
     motion?: MotionResult;
@@ -1258,10 +1260,14 @@ export class DetectionCoordinator {
     const delta = now - previous;
     if (previous === 0 || delta > 5000) {
       this.objectIntervalMs = 0;
+      this.objectIntervalSamples = 0;
       return;
     }
 
     this.objectIntervalMs = this.objectIntervalMs === 0 ? delta : this.objectIntervalMs * 0.8 + delta * 0.2;
+
+    this.objectIntervalSamples++;
+    if (this.objectIntervalSamples < CADENCE_MIN_SAMPLES) return;
 
     const cadence = this.pipeline.syncDetectionCadence(this.objectIntervalMs);
     if (cadence) {
