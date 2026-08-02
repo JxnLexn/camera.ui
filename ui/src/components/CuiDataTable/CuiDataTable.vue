@@ -27,7 +27,7 @@ const root = useTemplateRef<HTMLElement>('root');
 
 const canScrollRight = ref(false);
 
-const showPaginator = computed(() => props.paginator ?? (props.value?.length ?? 0) > props.rows);
+const showPaginator = computed(() => props.paginator || (props.value?.length ?? 0) > props.rows);
 
 function measureScroll() {
   const container = root.value?.querySelector<HTMLElement>('.p-datatable-table-container');

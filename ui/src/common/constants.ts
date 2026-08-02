@@ -1,3 +1,6 @@
+export const TABLE_PAGE_SIZE = 10;
+export const TABLE_PAGINATOR_TEMPLATE = 'FirstPageLink PrevPageLink PageLinks NextPageLink LastPageLink';
+
 export const AUTH_SERVICE_URL = import.meta.env.VITE_AUTH_SERVICE_URL ?? 'https://auth.cameraui.com';
 export const BILLING_SERVICE_URL = import.meta.env.VITE_BILLING_SERVICE_URL ?? 'https://billing.cameraui.com';
 export const CLOUD_SERVICE_URL = import.meta.env.VITE_CLOUD_SERVICE_URL ?? 'https://cloud.cameraui.com';

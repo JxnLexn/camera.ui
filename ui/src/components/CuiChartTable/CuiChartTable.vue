@@ -59,7 +59,7 @@
                           rounded
                           :loading="btn.loading?.(data)"
                           v-bind="btn.buttonProps"
-                          class="text-white cui-icon-md"
+                          :class="['cui-icon-md', { 'text-white': btn.buttonProps?.severity !== 'secondary' }]"
                           @click="btn.action(data)"
                         >
                           <template #icon>
@@ -74,7 +74,7 @@
                       rounded
                       :loading="header.loading?.(data)"
                       v-bind="header.buttonProps"
-                      class="text-white cui-icon-md"
+                      :class="['cui-icon-md', { 'text-white': header.buttonProps?.severity !== 'secondary' }]"
                       @click="header.action?.(data)"
                     >
                       <template #icon>
@@ -88,21 +88,14 @@
             </tbody>
           </table>
 
-          <div v-if="paginator && totalPages > 1" class="flex items-center justify-center gap-1 p-2 border-t border-surface">
-            <Button text rounded class="cui-icon-sm" :disabled="currentPage <= 1" @click="goToPage(1)">
-              <template #icon><i-mdi:chevron-double-left width="100%" height="100%" /></template>
-            </Button>
-            <Button text rounded class="cui-icon-sm" :disabled="currentPage <= 1" @click="goToPage(currentPage - 1)">
-              <template #icon><i-mdi:chevron-left width="100%" height="100%" /></template>
-            </Button>
-            <span class="text-xs text-muted px-2">{{ currentPage }} / {{ totalPages }}</span>
-            <Button text rounded class="cui-icon-sm" :disabled="currentPage >= totalPages" @click="goToPage(currentPage + 1)">
-              <template #icon><i-mdi:chevron-right width="100%" height="100%" /></template>
-            </Button>
-            <Button text rounded class="cui-icon-sm" :disabled="currentPage >= totalPages" @click="goToPage(totalPages)">
-              <template #icon><i-mdi:chevron-double-right width="100%" height="100%" /></template>
-            </Button>
-          </div>
+          <Paginator
+            v-if="paginator && totalPages > 1"
+            :rows="rows"
+            :total-records="totalRecords ?? 0"
+            :first="(currentPage - 1) * rows"
+            :template="TABLE_PAGINATOR_TEMPLATE"
+            @page="goToPage($event.page + 1)"
+          />
         </div>
       </template>
     </Card>
@@ -110,13 +103,14 @@
 </template>
 
 <script setup lang="ts">
+import { TABLE_PAGE_SIZE, TABLE_PAGINATOR_TEMPLATE } from '@/common/constants.js';
 import { isHeaderAction, isHeaderCategory, isHeaderChart, isHeaderIndicator } from './types.js';
 
 import type { ChartData, ChartOptions } from 'chart.js';
 import type { CuiChartTableEmits, CuiChartTableProps, TableHeaderChart } from './types.js';
 
 const props = withDefaults(defineProps<CuiChartTableProps>(), {
-  rows: 5,
+  rows: TABLE_PAGE_SIZE,
 });
 
 const emit = defineEmits<CuiChartTableEmits>();
@@ -142,13 +136,13 @@ const totalPages = computed(() => {
 const displayItems = computed(() => {
   if (!value.value) return [];
   if (!paginator.value) return value.value;
-  const pageSize = rows.value ?? 5;
+  const pageSize = rows.value ?? TABLE_PAGE_SIZE;
   const page = currentPage.value - 1;
   return value.value.slice(page * pageSize, (page + 1) * pageSize);
 });
 
 function goToPage(page: number) {
-  const pageSize = rows.value ?? 5;
+  const pageSize = rows.value ?? TABLE_PAGE_SIZE;
   emit('update:page', { page: page - 1, rows: pageSize, first: (page - 1) * pageSize });
 }
 

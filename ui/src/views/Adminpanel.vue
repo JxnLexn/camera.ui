@@ -30,7 +30,11 @@
           :headers="headers('frameworker')"
           :chart-data="frameworkerChartData"
           :loading="frameWorkersLoading"
+          paginator
+          :pagination="{ page: tablePages.frameworker }"
+          :total-records="frameworkerItems.length"
           :empty-message="$t('views.adminpanel.no_frameworkers')"
+          @update:page="onPage($event, 'frameworker')"
         />
       </div>
 
@@ -41,7 +45,11 @@
           :headers="headers('plugins')"
           :chart-data="pluginsChartData"
           :loading="pluginsLoading"
+          paginator
+          :pagination="{ page: tablePages.plugins }"
+          :total-records="pluginItems.length"
           :empty-message="$t('views.adminpanel.no_plugins')"
+          @update:page="onPage($event, 'plugins')"
         />
       </div>
 
@@ -52,7 +60,7 @@
           :headers="userHeaders"
           :loading="tokensLoading"
           paginator
-          :pagination="userPagination"
+          :pagination="{ page: tablePages.users }"
           :total-records="users.length"
           :empty-message="$t('views.adminpanel.no_users')"
           @update:page="onPage($event, 'users')"
@@ -87,6 +95,8 @@ const { t } = useI18n();
 const metricsSocket = useMetricsSocket();
 const { mdBreakpoint, smBreakpoint } = useSharedCuiBreakpoint();
 const { beginServerRestart } = useServerRestart();
+
+const tablePages = ref({ frameworker: 1, plugins: 1, users: 1 });
 
 const userPagination = ref<PaginationQuery>({ page: 1, pageSize: -1 });
 const frameworkersPagination = ref<PaginationQuery>({ page: 1, pageSize: -1 });
@@ -394,14 +404,7 @@ function buildChartData(type: 'system' | 'core' | 'frameworker' | 'plugins', pro
 }
 
 function onPage(e: { page: number; rows: number; first: number }, type: 'frameworker' | 'plugins' | 'users') {
-  const page = e.page + 1;
-  if (type === 'frameworker') {
-    frameworkersPagination.value.page = page;
-  } else if (type === 'plugins') {
-    pluginsPagination.value.page = page;
-  } else if (type === 'users') {
-    userPagination.value.page = page;
-  }
+  tablePages.value[type] = e.page + 1;
 }
 
 function getStatus(type: 'system' | 'core' | 'frameworker' | 'plugins', name: string): RUNTIME_STATUS | PLUGIN_STATUS {
