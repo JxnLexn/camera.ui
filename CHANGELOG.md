@@ -2,6 +2,24 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.1.1]
+
+### Fixed
+
+- **Switching the detector for a camera really switches it.** Picking another plugin for Object, Motion or any other detection type left the previous one running. Only the plugin you picked feeds the camera now, and a detection plugin that is enabled but not picked stays out of the picture instead of analyzing frames for nothing.
+
+- **Objects on wide cameras are detected again.** The picture was squeezed into the detector's square input, so on a dual lens camera at 8:3 a person turned into a sliver that no model recognized. The picture now keeps its proportions.
+
+- **Slow detection hardware reports detections again.** On machines that only manage a detection every second or two, objects were confirmed too late or not at all, and a walking person outran the tracker entirely. Detection now adapts to the pace the hardware actually delivers: a person crossing the yard is reported after about two seconds instead of never.
+
+- **Sensors reach a camera's detection right after start.** Cameras that are disabled or still offline made camera.ui wait for their frame worker on every single sensor a plugin registered. With a few cameras in that state, detection on the running ones only came alive a minute and a half after start.
+
+- **Face recognition finds faces it used to miss.** The image section around a person was distorted before faces, classifiers and CLIP looked at it. Faces of standing people, squashed the most, went undetected entirely. The section now keeps its proportions.
+
+- **Smart-camera detections get undistorted face and plate checks.** When a camera reports a detection without a picture position, the checks run on the whole picture, which was squeezed on wide cameras just like object detection used to be. Fixed the same way.
+
+- **Parked cars no longer label every event.** Objects that camera.ui already knows are stationary could not open events, but still tagged each one with their label. A person walking past two parked cars created events labeled person and vehicle, and searching for vehicles surfaced them. Known-stationary objects now stay out of event labels entirely, their live bounding boxes remain visible.
+
 ## [2.1.0]
 
 ### Added
