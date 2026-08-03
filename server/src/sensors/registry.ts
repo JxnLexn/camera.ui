@@ -3,6 +3,7 @@ import { canProvideSensorsToAnyCameras, SensorType } from '@camera.ui/sdk';
 import { randomUUID } from 'node:crypto';
 import { container } from 'tsyringe';
 
+import { CamerasService } from '../api/services/cameras.service.js';
 import { PluginsService } from '../api/services/plugins.service.js';
 import { NamespaceManager } from '../rpc/namespaces.js';
 import { ServerSensor } from '../sensors/sensor.js';
@@ -187,7 +188,14 @@ export class SensorRegistry {
     this.context.persistState(record._id, sensor.properties);
 
     this.logger.debug(`Sensor registered: "${record.displayName ?? record.name}" (${record.type}) by plugin "${pluginId}"${created ? ' [new]' : ''}`);
-    if (created) this.announceAdded(record);
+    if (created) {
+      this.announceAdded(record);
+      if (options?.assignCameraId) {
+        this.autoEnableDoorbellTrigger(record, options.assignCameraId).catch((error: unknown) =>
+          this.logger.warn('Failed to enable doorbell sensor as detection trigger:', error),
+        );
+      }
+    }
     this.announceConnected(record, true);
 
     for (const cameraId of record.assignedCameraIds) {
@@ -223,6 +231,11 @@ export class SensorRegistry {
       this.records.set(record._id, record);
       this.persistRecord(record._id, () => {});
       this.announceAdded(record);
+      if (options?.assignCameraId) {
+        this.autoEnableDoorbellTrigger(record, options.assignCameraId).catch((error: unknown) =>
+          this.logger.warn('Failed to enable doorbell sensor as detection trigger:', error),
+        );
+      }
     }
 
     return record._id;
@@ -291,6 +304,11 @@ export class SensorRegistry {
 
     this.logger.debug(`Virtual sensor created: ${record.name} (${record.type})`);
     this.announceAdded(record);
+    if (input.assignCameraId) {
+      this.autoEnableDoorbellTrigger(record, input.assignCameraId).catch((error: unknown) =>
+        this.logger.warn('Failed to enable doorbell sensor as detection trigger:', error),
+      );
+    }
     for (const cameraId of record.assignedCameraIds) {
       this.enqueue(cameraId, () => this.pushSensorToCoordinator(record, cameraId));
     }
@@ -310,6 +328,7 @@ export class SensorRegistry {
     record.assignedCameraIds.push(cameraId);
     this.persistRecord(sensorId, () => {});
     this.announceAssignment(record, cameraId, true);
+    this.autoEnableDoorbellTrigger(record, cameraId).catch((error: unknown) => this.logger.warn('Failed to enable doorbell sensor as detection trigger:', error));
     if (this.runtime.has(sensorId)) this.enqueue(cameraId, () => this.pushSensorToCoordinator(record, cameraId));
   }
 
@@ -769,6 +788,18 @@ export class SensorRegistry {
       sensorName: record.name,
       assignedCameraIds: [...record.assignedCameraIds],
     });
+  }
+
+  private async autoEnableDoorbellTrigger(record: DBSensor, cameraId: string): Promise<void> {
+    if (record.type !== SensorType.Doorbell) return;
+    const camera = this.dbs.camerasDB.get(cameraId);
+    if (!camera || camera.detectionSettings.sensor.triggers.includes(record._id)) return;
+
+    const camerasService = new CamerasService();
+    await camerasService.patchCameraByName(camera.name, {
+      detectionSettings: { sensor: { triggers: [...camera.detectionSettings.sensor.triggers, record._id] } },
+    });
+    this.logger.debug(`Doorbell sensor "${record.displayName ?? record.name}" enabled as detection trigger for camera "${camera.name}"`);
   }
 
   private pushCapabilitiesToCoordinators(sensorId: string, capabilities: string[]): void {
