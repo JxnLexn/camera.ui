@@ -691,6 +691,12 @@ export class DetectionCoordinator {
       const detections = (properties.detections as TrackedDetection[] | undefined) ?? [];
       if (this.stationary.evaluate(detections)) {
         this.dwell.refresh(sensorId, OBJECT_DWELL_SECONDS);
+        // a confirmed object re-arms the cascade like motion does: a time-based
+        // motion sensor (ONVIF cool-down) must not blind detection and split
+        // the event while someone is still mid-frame
+        if (this.cascadeEnabled) {
+          this.cascade.triggerMomentary(this.cascadeTimeoutSeconds);
+        }
       } else {
         // clear detected + buffer so no segment opens, the UI still gets
         // the bboxes via the property publish below
