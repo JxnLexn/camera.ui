@@ -18,6 +18,8 @@ All notable changes to this project will be documented in this file.
 
 ### Fixed
 
+- **Doorbell rings and alarms stand out on the timeline.** A doorbell press, siren, security system or contact event without any visual detection used to render as a thin motion-style strip, invisible between regular motion marks. These now get the full event bar with icon and snapshot marker, like a person detection. Requires the camera-ui-nvr plugin update for such events to also pass the recordings confidence filter.
+
 - **A doorbell press during a running motion event shows up immediately.** When someone walked up and rang, the motion event was already running and the ring stayed invisible until that event timed out, up to a minute later. The ring is now stamped into the running event right away, so the timeline and detections show the doorbell the moment it happens. Same for contact and other sensor triggers.
 
 - **Detection sensors keep a history again.** Motion, object, face, license plate and audio sensors never recorded their triggers, so their history tab stayed empty no matter how often they fired; only virtual and plugin-state sensors had entries. Every detection sensor now logs when it triggered, when it cleared, and what it saw (person, a recognized name, a plate, an audio label).
