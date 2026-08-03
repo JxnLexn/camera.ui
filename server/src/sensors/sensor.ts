@@ -1,11 +1,11 @@
 import { isEqual } from '@camera.ui/common/utils';
-import { Disposable, Observable } from '@camera.ui/sdk';
+import { Disposable, Observable, SensorType } from '@camera.ui/sdk';
 
 import { DETECTION_SENSOR_TYPES, PROPERTY_CAPABILITY_MAP, SENSOR_TYPE_CONFIG, VIRTUAL_SENSOR_OWNER_ID } from './types.js';
 
 import type { Logger } from '@camera.ui/common/logger';
 import type { Promisify } from '@camera.ui/rpc';
-import type { ModelSpec, SensorLike, SensorPropertyType, SensorTriggerSettings, SensorType } from '@camera.ui/sdk';
+import type { ModelSpec, SensorLike, SensorPropertyType, SensorTriggerSettings } from '@camera.ui/sdk';
 import type { PropertyChangedEvent } from '@camera.ui/sdk/internal';
 import type { InternalEvent, InternalEventPayload } from '../internal-bus.js';
 import type { DetectionCoordinatorInterface } from '../rpc/interfaces/detection.js';
@@ -176,9 +176,20 @@ export class ServerSensor implements SensorLike {
   }
 
   public applyWriteBatch(properties: Record<string, unknown>): void {
+    const changed: Record<string, unknown> = {};
     for (const [property, value] of Object.entries(properties)) {
-      this.writeProperty(property, value);
+      if (this.writeProperty(property, value)) changed[property] = value;
     }
+
+    if (!('detected' in changed)) return;
+
+    const entry: Record<string, unknown> = { detected: changed.detected };
+    if (changed.detected === true && this.type !== SensorType.Motion) {
+      const detections = (properties.detections ?? this.getValue('detections')) as { label?: string; attribute?: string }[] | undefined;
+      const labels = [...new Set((detections ?? []).map((d) => d.label ?? d.attribute).filter((label): label is string => !!label))];
+      if (labels.length > 0) entry.labels = labels.join(', ');
+    }
+    this.ctx.appendHistory(this.id, entry);
   }
 
   private writeProperty(property: string, value: unknown): boolean {

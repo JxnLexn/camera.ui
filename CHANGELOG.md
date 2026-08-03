@@ -20,6 +20,8 @@ All notable changes to this project will be documented in this file.
 
 - **A doorbell press during a running motion event shows up immediately.** When someone walked up and rang, the motion event was already running and the ring stayed invisible until that event timed out, up to a minute later. The ring is now stamped into the running event right away, so the timeline and detections show the doorbell the moment it happens. Same for contact and other sensor triggers.
 
+- **Detection sensors keep a history again.** Motion, object, face, license plate and audio sensors never recorded their triggers, so their history tab stayed empty no matter how often they fired; only virtual and plugin-state sensors had entries. Every detection sensor now logs when it triggered, when it cleared, and what it saw (person, a recognized name, a plate, an audio label).
+
 - **A person staying in view is one event, not several.** With motion sensors that report on a timer, like many ONVIF cameras, detection stopped watching when the sensor went quiet, even though someone was still in the picture, and the next report opened a fresh event for the same person. Detection now keeps watching as long as it sees someone.
 
 - **Frame worker memory no longer climbs the longer the server runs.** The video scaler kept an internal buffer for every object size it ever cropped, so memory grew for as long as detections came in and only a restart freed it. It now reuses a small fixed set of buffers.
