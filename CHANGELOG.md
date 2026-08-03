@@ -18,6 +18,8 @@ All notable changes to this project will be documented in this file.
 
 - **Panning a zoomed camera no longer closes it.** Dragging with the left mouse button inside a zoomed, expanded camera counted as a click on release and shrank the view back into the grid.
 
+- **Worker updates show what they are doing.** Pressing Update on the Workers page looked like nothing happened for a few seconds, and when the update failed, the reason hid in the status dot's tooltip. The button now spins immediately and a failure shows up as a message, also when the same attempt fails twice in a row.
+
 - **A playback error no longer shows as "No recording".** When reading a recording actually fails, playback now retries quietly first and then says "Playback failed", instead of claiming a recording gap that isn't there. Requires the camera-ui-nvr plugin update.
 
 - **Switching the detector for a camera really switches it.** Picking another plugin for Object, Motion or any other detection type left the previous one running. Only the plugin you picked feeds the camera now, and a detection plugin that is enabled but not picked stays out of the picture instead of analyzing frames for nothing.
