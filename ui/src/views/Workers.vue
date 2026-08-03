@@ -231,13 +231,13 @@ import EditIcon from '~icons/mdi/pencil-outline';
 
 import { ApiQuery } from '@/api/routes/api.js';
 import { CamerasQuery } from '@/api/routes/cameras.js';
-import { copyToClipboard as copy } from '@/common/utils.js';
 import { PluginsQuery } from '@/api/routes/plugins.js';
 import { WorkersQuery } from '@/api/routes/workers.js';
+import { copyToClipboard as copy } from '@/common/utils.js';
 import RenameWorkerDialog from '@/components/CuiDialog/templates/RenameWorker/RenameWorker.vue';
 
-import type { RenameWorkerProps } from '@/components/CuiDialog/templates/RenameWorker/types.js';
 import type { TableHeader } from '@/components/CuiChartTable/types.js';
+import type { RenameWorkerProps } from '@/components/CuiDialog/templates/RenameWorker/types.js';
 import type { PassThrough } from '@primevue/core';
 import type { CameraUiPlugin, DBCamera, WorkerInfo, WorkerPairingResponse } from '@shared/types';
 import type { ChartData } from 'chart.js';
@@ -247,6 +247,7 @@ const { t } = useI18n();
 const { smBreakpoint } = useSharedCuiBreakpoint();
 const dialog = useCuiDialog();
 
+const toast = useCuiToast();
 const workersSocket = useWorkersSocket();
 const { workers, workerHistory, isConnected } = workersSocket;
 
@@ -290,6 +291,9 @@ const assigningPluginNames = ref(new Set<string>());
 const pairing = ref<WorkerPairingResponse | null>(null);
 const addressDraft = ref('');
 const portDraft = ref(7422);
+
+let updateErrorsSeeded = false;
+const seenUpdateErrors = new Map<string, string>();
 
 const cameras = computed(() => camerasData.value?.result ?? []);
 const plugins = computed(() => pluginsData.value?.result ?? []);
@@ -526,6 +530,7 @@ function updateTooltip(item: WorkerInfo): string {
 }
 
 async function handleUpdateWorker(agentId: string) {
+  seenUpdateErrors.delete(agentId);
   workersUpdating.value.push(agentId);
   try {
     await updateWorkerMutation(agentId);
@@ -731,6 +736,36 @@ watch(
   },
   { immediate: true },
 );
+
+watch(workers, (list) => {
+  if (!updateErrorsSeeded) {
+    if (!list.length) return;
+    for (const worker of list) {
+      if (worker.update?.error) seenUpdateErrors.set(worker.agentId, worker.update.error);
+    }
+    updateErrorsSeeded = true;
+    return;
+  }
+  for (const worker of list) {
+    if (worker.update?.updating) {
+      seenUpdateErrors.delete(worker.agentId);
+      continue;
+    }
+    const error = worker.update?.error;
+    if (!error) {
+      seenUpdateErrors.delete(worker.agentId);
+      continue;
+    }
+    if (seenUpdateErrors.get(worker.agentId) === error) continue;
+    seenUpdateErrors.set(worker.agentId, error);
+    toast.add({
+      severity: 'error',
+      summary: worker.name,
+      detail: t('views.workers.update_failed', { error }),
+      life: 6000,
+    });
+  }
+});
 
 onUnmounted(() => {
   workersSocket.disconnect();
