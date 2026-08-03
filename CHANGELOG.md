@@ -4,6 +4,16 @@ All notable changes to this project will be documented in this file.
 
 ## [2.1.2]
 
+### Added
+
+- **Plugins update with one click, or all at once.** Cards with an available update get a direct update button, no dialog, the card just shows a spinner and clicking it again opens the live install output. A new "Update all" button in the toolbar updates every outdated plugin and reports the result. The dialog with release notes and version picker is still there behind the menu.
+
+- **Plugin installs run through a queue.** Installs, updates and uninstalls now queue up on the server and run two at a time, so updating many plugins no longer floods a small box. Every open browser sees which plugins are waiting and which are running, no matter who started them.
+
+- **The Plugins page has a table view.** A button next to the plus switches between the cards and a compact table with status, version and the full action set per row, update, log and the familiar menu, handy for many plugins. The choice sticks, and both views now also show the package name under the display name.
+
+- **Plugins can be managed in bulk.** A select button next to the plus starts a selection in both views, then update, enable, disable or uninstall everything selected in one go, with a summary at the end.
+
 ### Fixed
 
 - **A person staying in view is one event, not several.** With motion sensors that report on a timer, like many ONVIF cameras, detection stopped watching when the sensor went quiet, even though someone was still in the picture, and the next report opened a fresh event for the same person. Detection now keeps watching as long as it sees someone.

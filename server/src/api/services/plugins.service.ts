@@ -25,6 +25,29 @@ import type { SocketService } from '../websocket/index.js';
 const VENV_DIR = /^python(-electron)?-\d+\.\d+-/;
 const REQUIREMENTS_LOCK = 'requirements-lock.txt';
 
+const MANAGE_CONCURRENCY = 2;
+const manageQueue: PluginsProgress[] = [];
+const manageWaiters: (() => void)[] = [];
+let manageRunning = 0;
+
+function acquireManageSlot(): Promise<void> {
+  if (manageRunning < MANAGE_CONCURRENCY) {
+    manageRunning++;
+    return Promise.resolve();
+  }
+  return new Promise((resolve) => {
+    manageWaiters.push(() => {
+      manageRunning++;
+      resolve();
+    });
+  });
+}
+
+function releaseManageSlot(): void {
+  manageRunning--;
+  manageWaiters.shift()?.();
+}
+
 @registry([
   {
     token: 'dbs',
@@ -38,8 +61,6 @@ export class PluginsService {
   private pluginManager: PluginManager;
   private configService: ConfigService;
   private socketService: SocketService;
-
-  private managingPluginsMap = new Map<string, PluginsProgress>();
 
   constructor() {
     this.dbs = container.resolve<Database>('dbs');
@@ -188,13 +209,43 @@ export class PluginsService {
     const title = `${action.charAt(0).toUpperCase()}${action.slice(1)} · ${pluginName}${action !== 'uninstall' && version ? `@${version}` : ''}`;
     log.header(title, { user: userInfo().username, target: elidePath(targetDir) });
 
-    const existingAction = this.managingPluginsMap.get(pluginName);
+    const existingAction = manageQueue.find((entry) => entry.pluginName === pluginName);
     if (existingAction) {
-      log.error(`Cannot ${action} plugin ${pluginName} while ${existingAction.action} is in progress.`);
-      throw new Error(`Cannot ${action} plugin ${pluginName} while ${existingAction.action} is in progress.`);
+      log.error(`Cannot ${action} plugin ${pluginName} while ${existingAction.action} is ${existingAction.status}.`);
+      throw new Error(`Cannot ${action} plugin ${pluginName} while ${existingAction.action} is ${existingAction.status}.`);
     }
 
-    this.managingPluginsMap.set(pluginName, { pluginName, action, version: version ?? 'latest' });
+    const entry: PluginsProgress = { pluginName, action, version: version ?? 'latest', status: 'queued' };
+    manageQueue.push(entry);
+    this.emitManageQueue();
+
+    try {
+      const mustWait = manageRunning >= MANAGE_CONCURRENCY;
+      if (mustWait) log.step('Waiting for other plugin operations');
+      await acquireManageSlot();
+      if (mustWait) log.done();
+
+      entry.status = 'running';
+      this.emitManageQueue();
+
+      try {
+        return await this.runManage(log, entry, targetDir, pluginId);
+      } finally {
+        releaseManageSlot();
+      }
+    } finally {
+      const index = manageQueue.indexOf(entry);
+      if (index !== -1) manageQueue.splice(index, 1);
+      this.emitManageQueue();
+    }
+  }
+
+  public installingPlugins(): PluginsProgress[] {
+    return [...manageQueue];
+  }
+
+  private async runManage(log: InstallLogger, entry: PluginsProgress, targetDir: string, pluginId?: string): Promise<string> {
+    const { pluginName, action, version } = entry;
 
     const worker = this.getPluginProcessByName(pluginName);
     const wasRunning = worker?.isRunning() === true;
@@ -211,11 +262,11 @@ export class PluginsService {
 
       switch (action) {
         case 'install':
-          await this.installPlugin(log, pluginName, version ?? 'latest', targetDir);
+          await this.installPlugin(log, pluginName, version, targetDir);
           installedNew = true;
           break;
         case 'update':
-          installedNew = await this.updatePlugin(log, pluginName, version ?? 'latest', targetDir);
+          installedNew = await this.updatePlugin(log, pluginName, version, targetDir);
           break;
         case 'uninstall':
           await this.uninstallPlugin(log, pluginName, targetDir);
@@ -236,23 +287,17 @@ export class PluginsService {
         await this.pluginManager.startPluginChild(pluginName);
         log.done();
       }
-
-      this.managingPluginsMap.delete(pluginName);
     }
 
     if (installedNew) {
-      log.success(`${pluginName}@${version ?? 'latest'} ${action === 'update' ? 'updated' : 'installed'}`);
+      log.success(`${pluginName}@${version} ${action === 'update' ? 'updated' : 'installed'}`);
     }
 
     return targetDir;
   }
 
-  public installingPlugins(): PluginsProgress[] {
-    const pluginsInProgress: PluginsProgress[] = [];
-    for (const [, progressInfo] of this.managingPluginsMap) {
-      pluginsInProgress.push(progressInfo);
-    }
-    return pluginsInProgress;
+  private emitManageQueue(): void {
+    this.io.of('/plugins').emit('manage-queue', this.installingPlugins());
   }
 
   private async installPlugin(log: InstallLogger, pluginName: string, version: string, targetDir: string, update?: boolean): Promise<void> {

@@ -6,6 +6,8 @@ export const PLUGIN_CARD_SIZE = {
 
 export interface CuiPluginCardProps {
   plugin: CameraUiPlugin;
+  selectionMode?: boolean;
+  selected?: boolean;
 }
 
 export interface CuiPluginOAuthButtonProps {

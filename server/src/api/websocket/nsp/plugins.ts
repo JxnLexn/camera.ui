@@ -1,5 +1,7 @@
 import { container } from 'tsyringe';
 
+import { PluginsService } from '../../services/plugins.service.js';
+
 import type { Namespace, Server, Socket } from 'socket.io';
 import type { PluginManager } from '../../../plugins/index.js';
 import type { PLUGIN_STATUS } from '../../../plugins/types.js';
@@ -10,6 +12,7 @@ export class PluginsNamespace {
   public nspName: SocketNsp = '/plugins';
 
   private pluginManager: PluginManager;
+  private pluginsService = new PluginsService();
 
   constructor(io: Server) {
     this.pluginManager = container.resolve<PluginManager>('pluginManager');
@@ -17,6 +20,8 @@ export class PluginsNamespace {
     this.nsp = io.of(this.nspName);
     this.nsp.on('connection', (socket: Socket) => {
       socket.on('get-plugin-status', this.pluginStatus.bind(this));
+      socket.on('get-manage-queue', (callback?: (data: unknown) => void) => callback?.(this.pluginsService.installingPlugins()));
+      socket.emit('manage-queue', this.pluginsService.installingPlugins());
     });
   }
 

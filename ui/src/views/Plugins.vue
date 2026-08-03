@@ -27,6 +27,19 @@
           </template>
         </Button>
 
+        <Button
+          v-if="updatablePlugins.length"
+          v-tooltip.left="{ value: t('views.plugins.update_all_hint') }"
+          class="cui-button shrink-0 whitespace-nowrap"
+          :loading="updateAllRunning"
+          :label="smBreakpoint ? String(updatablePlugins.length) : t('views.plugins.update_all', { count: updatablePlugins.length })"
+          @click="handleUpdateAll"
+        >
+          <template #icon>
+            <UpdateIcon class="w-4.5 h-4.5" />
+          </template>
+        </Button>
+
         <CuiMenu
           ref="menuRef"
           :items="menuItems"
@@ -60,6 +73,57 @@
         <span class="text-muted text-sm">{{ $t('views.plugins.no_plugins') }}</span>
       </div>
 
+      <Card v-else-if="viewMode === 'table'" key="table" class="cui-card h-auto! self-start">
+        <template #content>
+          <CuiDataTable :value="filteredPlugins" paginator :rows="TABLE_PAGE_SIZE" striped-rows class="w-full">
+            <Column v-if="selectionMode" header="" header-class="p-2 pl-4 w-8 max-w-8" class="p-2 pl-4 w-8 max-w-8">
+              <template #body="{ data }">
+                <Checkbox :model-value="selectedIds.has(data.pluginName)" binary size="small" @update:model-value="toggleSelection(data.pluginName)" />
+              </template>
+            </Column>
+
+            <Column header="" header-class="p-2 pl-4 w-5 max-w-5" class="p-2 pl-4 w-5 max-w-5">
+              <template #body="{ data }">
+                <div class="flex items-center justify-center">
+                  <CuiPluginStatusBadge :plugin-name="data.pluginName" />
+                </div>
+              </template>
+            </Column>
+
+            <Column field="displayName" :header="t('views.plugins.plugin')" header-class="p-2 min-w-48" class="p-2 min-w-48">
+              <template #body="{ data }">
+                <RouterLink :to="`/plugins/${data.pluginName}`" class="flex flex-col min-w-0">
+                  <div class="flex items-center gap-3 min-w-0">
+                    <span class="font-bold text-color text-sm truncate">{{ data.displayName || data.pluginName }}</span>
+                    <i-icon-park-solid:up-c
+                      v-if="updates[data.pluginName]?.updateAvailable"
+                      v-tooltip="{ value: $t('components.form.tooltip.update_available') }"
+                      class="text-green-500 shrink-0"
+                    />
+                  </div>
+                  <span class="text-xs text-muted truncate">{{ data.pluginName }}</span>
+                </RouterLink>
+              </template>
+            </Column>
+
+            <Column field="installedVersion" :header="t('views.plugins.version')" header-class="p-2" class="p-2">
+              <template #body="{ data }">
+                <div class="flex flex-col">
+                  <span class="text-sm">v{{ data.installedVersion || data.latestVersion }}</span>
+                  <span v-if="updates[data.pluginName]?.updateAvailable" class="text-xs text-green-500">v{{ updates[data.pluginName]?.latestVersion }}</span>
+                </div>
+              </template>
+            </Column>
+
+            <Column header-class="p-2 w-32" class="p-2 w-32">
+              <template #body="{ data }">
+                <CuiPluginTableActions :plugin="data" />
+              </template>
+            </Column>
+          </CuiDataTable>
+        </template>
+      </Card>
+
       <div
         v-else
         key="content"
@@ -68,38 +132,134 @@
           gridTemplateColumns: `repeat(auto-fill, minmax(${smBreakpoint ? '100%' : '450px'}, 1fr))`,
         }"
       >
-        <CuiPluginCard v-for="(plugin, index) in filteredPlugins" :key="index" :plugin />
+        <CuiPluginCard
+          v-for="(plugin, index) in filteredPlugins"
+          :key="index"
+          :plugin
+          :selection-mode="selectionMode"
+          :selected="selectedIds.has(plugin.pluginName)"
+          @select="toggleSelection(plugin.pluginName)"
+        />
       </div>
     </Transition>
 
-    <CuiFloatingButton
-      v-if="hasPermission(undefined, 'admin')"
-      :tooltip-props="{ value: $t('views.plugins.search_plugins') }"
-      :button-props="{ class: 'text-white' }"
-      :icon="PlusIcon"
-      :icon-props="{ width: '30px', height: '30px' }"
-      @click="openPluginDialog"
-    />
+    <CuiFloatingButtonGroup v-if="hasPermission(undefined, 'admin')" :force-visible="selectionMode">
+      <template v-if="!selectionMode">
+        <CuiFloatingButton
+          v-if="filteredPlugins.length"
+          grouped
+          :tooltip-props="{ value: t('views.plugins.select') }"
+          :button-props="{ severity: 'secondary' }"
+          :icon="SelectIcon"
+          :icon-props="{ width: '100%', height: '100%' }"
+          @click="enterSelectionMode"
+        />
+        <CuiFloatingButton
+          grouped
+          :tooltip-props="{ value: viewMode === 'cards' ? t('views.plugins.view_table') : t('views.plugins.view_cards') }"
+          :button-props="{ severity: 'secondary' }"
+          :icon="viewMode === 'cards' ? TableIcon : GridIcon"
+          :icon-props="{ width: '100%', height: '100%' }"
+          @click="toggleViewMode"
+        />
+        <CuiFloatingButton
+          grouped
+          :tooltip-props="{ value: $t('views.plugins.search_plugins') }"
+          :button-props="{ class: 'text-white' }"
+          :icon="PlusIcon"
+          :icon-props="{ width: '30px', height: '30px' }"
+          @click="openPluginDialog"
+        />
+      </template>
+
+      <template v-else>
+        <CuiFloatingButton
+          grouped
+          :tooltip-props="{ value: $t('components.form.tooltip.cancel_selection') }"
+          :button-props="{ severity: 'secondary' }"
+          :icon="CloseIcon"
+          :icon-props="{ width: '100%', height: '100%' }"
+          @click="exitSelectionMode"
+        />
+        <CuiFloatingButton
+          grouped
+          :tooltip-props="{ value: allSelected ? $t('components.form.tooltip.deselect_all') : $t('components.form.tooltip.select_all') }"
+          :button-props="{ severity: allSelected ? 'primary' : 'secondary' }"
+          :icon="SelectAllIcon"
+          :icon-props="{ width: '100%', height: '100%' }"
+          @click="toggleSelectAll"
+        />
+        <CuiFloatingButton
+          grouped
+          :tooltip-props="{ value: t('views.plugins.update_selected') }"
+          :button-props="{ severity: 'secondary', disabled: !selectedWithUpdates.length || bulkBusy }"
+          :icon="UpdateIcon"
+          :icon-props="{ width: '100%', height: '100%' }"
+          @click="bulkUpdateSelected"
+        />
+        <CuiFloatingButton
+          grouped
+          :tooltip-props="{ value: t('views.plugins.enable_selected') }"
+          :button-props="{ severity: 'secondary', disabled: !selectedIds.size || bulkBusy }"
+          :icon="PlayIcon"
+          :icon-props="{ width: '100%', height: '100%' }"
+          @click="bulkEnableSelected"
+        />
+        <CuiFloatingButton
+          grouped
+          :tooltip-props="{ value: t('views.plugins.disable_selected') }"
+          :button-props="{ severity: 'secondary', disabled: !selectedIds.size || bulkBusy }"
+          :icon="StopIcon"
+          :icon-props="{ width: '100%', height: '100%' }"
+          @click="bulkDisableSelected"
+        />
+        <CuiFloatingButton
+          grouped
+          :tooltip-props="{ value: t('views.plugins.uninstall_selected') }"
+          :button-props="{ severity: 'danger', disabled: !selectedIds.size || bulkBusy }"
+          :icon="TrashIcon"
+          :icon-props="{ width: '100%', height: '100%' }"
+          @click="bulkUninstallSelected"
+        />
+      </template>
+    </CuiFloatingButtonGroup>
   </div>
 </template>
 
 <script lang="ts" setup>
+import StopIcon from '~icons/carbon/stop-filled';
+import SelectAllIcon from '~icons/fluent/select-all-on-20-filled';
+import UpdateIcon from '~icons/material-symbols/deployed-code-update';
+import CloseIcon from '~icons/mdi/close';
+import TrashIcon from '~icons/mdi/delete-outline';
+import GridIcon from '~icons/mingcute/grid-fill';
+import TableIcon from '~icons/mingcute/table-2-line';
+import PlayIcon from '~icons/solar/play-bold';
+import SelectIcon from '~icons/tabler/dots-filled';
 import PlusIcon from '~icons/typcn/plus';
 
-import type { IConfig } from '@shared/types';
+import type { CameraUiPlugin, IConfig, INpmPluginState } from '@shared/types';
 
 import { ConfigQuery } from '@/api/routes/config.js';
-import { PluginsQuery } from '@/api/routes/plugins.js';
+import { disablePluginFn, enablePluginFn, getPluginUpdateFn, installPluginFn, PluginsQuery, uninstallPluginFn } from '@/api/routes/plugins.js';
+import { TABLE_PAGE_SIZE } from '@/common/constants.js';
 import PluginSearchDialog from '@/components/CuiDialog/templates/PluginSearch/PluginSearch.vue';
 import { PLUGIN_CARD_SIZE } from '@/components/CuiPluginCard/types.js';
+import { useCardSelection } from '@/composables/useCardSelection.js';
+import { usePluginUpdates } from '@/composables/usePluginUpdates.js';
 
 const pluginsQuery = new PluginsQuery();
 const configQuery = new ConfigQuery();
 
 const dialog = useCuiDialog();
+const toast = useCuiToast();
 const { t } = useI18n();
 const { smBreakpoint } = useSharedCuiBreakpoint();
 const { width: windowWidth, height: windowHeight } = useSharedWindowSize();
+const { startUpdate } = usePluginUpdates();
+
+const uiStore = useUiStore();
+const { uiSettings } = storeToRefs(uiStore);
 
 const { data: plugins, isBusy: pluginsLoading } = pluginsQuery.getPluginsQuery({ page: 1, pageSize: -1 });
 const { data: config } = configQuery.getConfigQuery(true);
@@ -108,6 +268,13 @@ const { mutateAsync: patchConfig } = configQuery.patchConfigQuery();
 const menuRef = useTemplateRef('menuRef');
 
 const searchQuery = ref('');
+const updates = ref<Record<string, INpmPluginState | undefined>>({});
+const updateAllRunning = ref(false);
+
+const { selectionMode, selectedIds, selectedItems, allSelected, bulkBusy, enterSelectionMode, exitSelectionMode, toggleSelectAll, toggleSelection } = useCardSelection(
+  () => filteredPlugins.value,
+  (plugin) => plugin.pluginName,
+);
 
 const menuItems = computed(() => [
   {
@@ -128,7 +295,9 @@ const menuItems = computed(() => [
   },
 ]);
 
-const isLoading = computed(() => pluginsLoading.value);
+const isLoading = computed(() => pluginsLoading.value && !plugins.value);
+
+const viewMode = computed(() => uiSettings.value.plugins.view);
 
 const filteredPlugins = computed(() => {
   const list = plugins.value?.result ?? [];
@@ -137,11 +306,156 @@ const filteredPlugins = computed(() => {
   return list.filter((p) => p.pluginName.toLowerCase().includes(q) || p.displayName?.toLowerCase().includes(q));
 });
 
+const updatablePlugins = computed(() => (plugins.value?.result ?? []).filter((p) => updates.value[p.pluginName]?.updateAvailable));
+
+const selectedWithUpdates = computed(() => selectedItems.value.filter((p) => updates.value[p.pluginName]?.updateAvailable));
+
 const skeletonCount = computed(() => {
   const cols = smBreakpoint.value ? 1 : Math.max(1, Math.floor(windowWidth.value / 450));
   const rows = Math.max(1, Math.ceil(windowHeight.value / (PLUGIN_CARD_SIZE.HEIGHT + 8)));
   return cols * rows;
 });
+
+function toggleViewMode() {
+  uiSettings.value.plugins.view = viewMode.value === 'cards' ? 'table' : 'cards';
+}
+
+async function loadUpdates() {
+  const list = plugins.value?.result ?? [];
+  await Promise.all(
+    list.map(async (plugin) => {
+      updates.value[plugin.pluginName] = await pluginsQuery.queryClient
+        .fetchQuery({
+          queryKey: ['plugins', plugin.pluginName, 'update'],
+          queryFn: ({ signal }) => getPluginUpdateFn({ pluginName: plugin.pluginName, signal }),
+          staleTime: 60_000,
+        })
+        .catch(() => undefined);
+    }),
+  );
+}
+
+async function refreshAfterUpdates() {
+  await pluginsQuery.queryClient.refetchQueries({ queryKey: ['pluginsList'] });
+  await pluginsQuery.queryClient.refetchQueries({ queryKey: ['plugins'] });
+  await loadUpdates();
+}
+
+async function runPluginUpdate(plugin: CameraUiPlugin): Promise<boolean> {
+  const version = updates.value[plugin.pluginName]?.latestVersion;
+  if (!version) return false;
+  const ok = await startUpdate(plugin.pluginName, version, () => installPluginFn({ pluginData: { pluginname: plugin.pluginName, pluginversion: version } }));
+  if (ok) await pluginsQuery.queryClient.refetchQueries({ queryKey: ['plugins', plugin.pluginName] }).catch(() => {});
+  return ok;
+}
+
+async function handleUpdateAll() {
+  if (updateAllRunning.value) return;
+  updateAllRunning.value = true;
+
+  const failed: string[] = [];
+  let updated = 0;
+
+  try {
+    const results = await Promise.all([...updatablePlugins.value].map(async (plugin) => ({ plugin, ok: await runPluginUpdate(plugin) })));
+    for (const { plugin, ok } of results) {
+      if (ok) updated++;
+      else failed.push(plugin.displayName || plugin.pluginName);
+    }
+  } finally {
+    updateAllRunning.value = false;
+  }
+
+  await refreshAfterUpdates();
+
+  if (failed.length) {
+    toast.add({
+      severity: 'error',
+      summary: t('views.plugins.update_all_failed', { count: failed.length }),
+      detail: failed.join(', '),
+      life: 8000,
+    });
+  }
+  if (updated) {
+    toast.add({ severity: 'success', detail: t('views.plugins.update_all_done', { count: updated }), life: 5000 });
+  }
+}
+
+async function runBulk(targets: CameraUiPlugin[], action: (plugin: CameraUiPlugin) => Promise<unknown>): Promise<{ done: number; failed: string[] }> {
+  const failed: string[] = [];
+  let done = 0;
+
+  bulkBusy.value = true;
+  try {
+    await Promise.all(
+      targets.map(async (plugin) => {
+        try {
+          await action(plugin);
+          done++;
+        } catch {
+          failed.push(plugin.displayName || plugin.pluginName);
+        }
+      }),
+    );
+  } finally {
+    bulkBusy.value = false;
+  }
+
+  return { done, failed };
+}
+
+function reportBulk(done: number, failed: string[], doneKey: string): void {
+  if (failed.length) {
+    toast.add({ severity: 'error', summary: t('views.plugins.bulk_failed', { count: failed.length }), detail: failed.join(', '), life: 8000 });
+  }
+  if (done) {
+    toast.add({ severity: 'success', detail: t(doneKey, { count: done }), life: 5000 });
+  }
+}
+
+async function bulkUpdateSelected() {
+  const targets = [...selectedWithUpdates.value];
+  const { done, failed } = await runBulk(targets, async (plugin) => {
+    if (!(await runPluginUpdate(plugin))) throw new Error('update failed');
+  });
+  await refreshAfterUpdates();
+  exitSelectionMode();
+  reportBulk(done, failed, 'views.plugins.update_all_done');
+}
+
+async function bulkEnableSelected() {
+  const { done, failed } = await runBulk([...selectedItems.value], (plugin) => enablePluginFn({ pluginName: plugin.pluginName }));
+  await refreshAfterUpdates();
+  exitSelectionMode();
+  reportBulk(done, failed, 'views.plugins.enable_selected_done');
+}
+
+async function bulkDisableSelected() {
+  const { done, failed } = await runBulk([...selectedItems.value], (plugin) => disablePluginFn({ pluginName: plugin.pluginName }));
+  await refreshAfterUpdates();
+  exitSelectionMode();
+  reportBulk(done, failed, 'views.plugins.disable_selected_done');
+}
+
+function bulkUninstallSelected() {
+  const targets = [...selectedItems.value];
+  dialog.openTextDialog({
+    data: {
+      title: t('components.dialog.title.confirm'),
+      contentText: t('views.plugins.uninstall_selected_confirm', { count: targets.length }),
+      confirmText: t('components.form.button.uninstall'),
+      confirmButtonProps: {
+        severity: 'danger',
+      },
+    },
+    onConfirm: async () => {
+      const { done, failed } = await runBulk(targets, (plugin) => uninstallPluginFn({ pluginName: plugin.pluginName }));
+      await refreshAfterUpdates();
+      exitSelectionMode();
+      reportBulk(done, failed, 'views.plugins.uninstall_selected_done');
+    },
+  });
+}
 
 async function toggleAllowBuildScripts() {
   const current = config.value;
@@ -177,6 +491,23 @@ function openPluginDialog() {
     },
   });
 }
+
+watch(
+  () => plugins.value?.result,
+  (list) => {
+    if (list?.length) loadUpdates();
+  },
+  { immediate: true },
+);
+
+const unsubscribeUpdatesSync = pluginsQuery.queryClient.getQueryCache().subscribe((event) => {
+  const [root, name, kind] = event.query.queryKey;
+  if (root !== 'plugins' || kind !== 'update' || typeof name !== 'string') return;
+  const data = event.query.state.data as INpmPluginState | undefined;
+  if (data) updates.value[name] = data;
+});
+
+onUnmounted(unsubscribeUpdatesSync);
 </script>
 
 <style scoped></style>

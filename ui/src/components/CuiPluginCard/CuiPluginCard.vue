@@ -1,9 +1,21 @@
 <template>
   <div
+    class="relative"
     :style="{
       height: `${PLUGIN_CARD_SIZE.HEIGHT}px`,
     }"
   >
+    <div v-if="selectionMode" class="absolute inset-0 z-4 cursor-pointer" @click="$emit('select')">
+      <div class="absolute top-3 left-3 pointer-events-none">
+        <div
+          class="w-5 h-5 rounded-full border-2 flex items-center justify-center transition-colors"
+          :class="selected ? 'bg-primary border-primary' : 'bg-black/5 border-neutral-300 dark:bg-white/10 dark:border-neutral-500'"
+        >
+          <i-mdi:check v-if="selected" class="w-3.5 h-3.5 text-white" />
+        </div>
+      </div>
+    </div>
+
     <Card class="cui-card" :pt="{ body: { class: 'justify-between h-full' } }">
       <template #content>
         <div class="flex flex-col h-full">
@@ -29,6 +41,7 @@
                 />
                 <i-ic:round-warning v-if="compatWarnings.length" v-tooltip="{ value: compatWarnings.join(' · ') }" class="text-yellow-500 flex-shrink-0" />
               </div>
+              <span class="text-xs text-muted truncate max-w-full">{{ plugin.pluginName }}</span>
             </RouterLink>
 
             <ToggleSwitch :model-value="state" class="ml-auto flex-shrink-0" pt:handle:class="bg-white" :disabled="isLoading" @change="togglePlugin" />
@@ -59,6 +72,24 @@
           >
             <template #icon>
               <RestartIcon width="100%" height="100%" />
+            </template>
+          </Button>
+
+          <Button
+            v-if="pluginUpdate?.updateAvailable || updating"
+            v-tooltip.top="{
+              value: updating
+                ? $t(queued ? 'components.plugin_card.update_queued' : 'components.plugin_card.update_running')
+                : $t('components.plugin_card.update_now', { version: pluginUpdate?.latestVersion }),
+            }"
+            text
+            rounded
+            class="cui-icon-md"
+            @click="handleInlineUpdate"
+          >
+            <template #icon>
+              <ProgressSpinner v-if="updating" class="w-4! h-4! m-0" stroke-width="6" />
+              <UpdateIcon v-else width="100%" height="100%" />
             </template>
           </Button>
 
@@ -149,63 +180,32 @@
 
 <script setup lang="ts">
 import { hasInterface, PluginInterface } from '@camera.ui/sdk';
-import { PLUGIN_STATUS } from '@shared/types';
-import StopIcon from '~icons/carbon/stop-filled';
-import RestartIcon from '~icons/iconamoon/restart-bold';
-import TrashIcon from '~icons/iconamoon/trash-fill';
 import UpdateIcon from '~icons/material-symbols/deployed-code-update';
-import SettingsIcon from '~icons/mdi/cog';
-import PlayIcon from '~icons/solar/play-bold';
-import VersionsIcon from '~icons/stash/version-solid';
+import RestartIcon from '~icons/iconamoon/restart-bold';
 
-import { PluginsQuery } from '@/api/routes/plugins.js';
-import { asyncComponent } from '@/common/asyncComponent.js';
 import CuiMenu from '@/components/CuiMenu/CuiMenu.vue';
+import { PluginsQuery } from '@/api/routes/plugins.js';
 import CuiPluginOAuthButton from './CuiPluginOAuthButton.vue';
 import { PLUGIN_CARD_SIZE } from './types.js';
+import { usePluginActions } from './usePluginActions.js';
 
-import type { PluginConsoleProps } from '@/components/CuiDialog/templates/PluginConsole/types.js';
-import type { VersionsHandlerProps } from '@/components/CuiDialog/templates/VersionsHandler/types.js';
-import type { MenuItem } from '@/components/CuiMenu/types.js';
 import type { CuiPluginCardProps } from './types.js';
-
-const PluginConsoleDialog = asyncComponent(() => import('@/components/CuiDialog/templates/PluginConsole/PluginConsole.vue'));
-const VersionsHandlerDialog = asyncComponent(() => import('@/components/CuiDialog/templates/VersionsHandler/VersionsHandler.vue'));
 
 const pluginsQuery = new PluginsQuery();
 
 const props = defineProps<CuiPluginCardProps>();
 
-const route = useRoute();
-const dialog = useCuiDialog();
-const { t } = useI18n();
+defineEmits<{ select: [] }>();
 
-const pluginsSocket = usePluginsSocket(props.plugin.pluginName);
+const { t } = useI18n();
 
 const { plugin } = toRefs(props);
 
-const { data: pluginUpdate } = pluginsQuery.getPluginUpdateQuery(plugin.value.pluginName);
+const { pluginsSocket, pluginUpdate, state, queued, updating, isLoading, items, togglePlugin, openDialog, handleInlineUpdate } = usePluginActions(plugin);
+
 const { data: pluginLogo } = pluginsQuery.getPluginLogoQuery(plugin.value.pluginName);
-const { mutate: enablePlugin, isPending: enableLoading } = pluginsQuery.enablePluginQuery();
-const { mutate: disablePlugin, isPending: disableLoading } = pluginsQuery.disablePluginQuery();
-const { mutate: startPlugin, isPending: startLoading } = pluginsQuery.startPluginQuery();
-const { mutate: stopPlugin, isPending: stopLoading } = pluginsQuery.stopPluginQuery();
-const { mutate: restartPlugin, isPending: restartLoading } = pluginsQuery.restartPluginQuery();
 
 const menuRef = useTemplateRef<InstanceType<typeof CuiMenu>>('menuRef');
-const state = ref(!plugin.value.disabled);
-
-const isLoading = computed(() => enableLoading.value || disableLoading.value || restartLoading.value || startLoading.value || stopLoading.value);
-
-const isPluginStopped = computed(
-  () =>
-    pluginsSocket.status.value === PLUGIN_STATUS.STOPPED ||
-    pluginsSocket.status.value === PLUGIN_STATUS.DISABLED ||
-    pluginsSocket.status.value === PLUGIN_STATUS.ERROR ||
-    pluginsSocket.status.value === PLUGIN_STATUS.UNKNOWN ||
-    pluginsSocket.status.value === PLUGIN_STATUS.UPDATE_REQUIRED ||
-    pluginsSocket.status.value === PLUGIN_STATUS.SERVER_UPDATE_REQUIRED,
-);
 
 const isNvr = plugin.value.contract && hasInterface(plugin.value.contract, PluginInterface.NVR);
 const isOAuthCapable = plugin.value.contract && hasInterface(plugin.value.contract, PluginInterface.OAuthCapable);
@@ -232,193 +232,6 @@ const compatWarnings = computed<string[]>(() => {
   }
 
   return warnings;
-});
-
-const items = computed<MenuItem[]>(() => {
-  const menuItems: MenuItem[] = [
-    {
-      label: t('components.plugin_card.update'),
-      icon: UpdateIcon,
-      hide: !pluginUpdate.value?.updateAvailable,
-      buttonProps: {
-        disabled: isLoading.value,
-        severity: 'primary',
-      },
-      iconProps: {
-        class: 'text-primary',
-      },
-      labelProps: {
-        class: 'text-primary',
-      },
-      onClick: () => {
-        openDialog('install');
-      },
-    },
-    {
-      label: t('components.plugin_card.settings'),
-      icon: SettingsIcon,
-      to: `/plugins/${plugin.value.pluginName}`,
-    },
-    {
-      label: t('components.plugin_card.select_version'),
-      icon: VersionsIcon,
-      hide: plugin.value.private,
-      buttonProps: {
-        disabled: isLoading.value,
-      },
-      onClick: () => {
-        openDialog('versions');
-      },
-    },
-    {
-      label: isPluginStopped.value ? t('components.plugin_card.start') : t('components.plugin_card.stop'),
-      icon: isPluginStopped.value ? PlayIcon : StopIcon,
-      hide: plugin.value.disabled,
-      buttonProps: {
-        disabled: isLoading.value,
-      },
-      onClick: () => {
-        if (isPluginStopped.value) {
-          startPlugin({ pluginName: plugin.value.pluginName });
-        } else {
-          stopPlugin({ pluginName: plugin.value.pluginName });
-        }
-      },
-    },
-    {
-      label: t('components.plugin_card.restart'),
-      icon: RestartIcon,
-      hide: isPluginStopped.value,
-      buttonProps: {
-        disabled: isLoading.value,
-      },
-      onClick: () => {
-        openDialog('restart');
-      },
-    },
-    {
-      label: t('components.plugin_card.uninstall'),
-      icon: TrashIcon,
-      iconProps: {
-        class: 'text-red-500',
-      },
-      labelProps: {
-        class: 'text-red-500',
-      },
-      buttonProps: {
-        disabled: isLoading.value,
-        severity: 'danger',
-      },
-      onClick: () => {
-        openDialog('uninstall');
-      },
-    },
-  ];
-
-  if (route.path === `/plugins/${plugin.value.pluginName}`) {
-    menuItems.splice(1, 1);
-  }
-
-  return menuItems;
-});
-
-function togglePlugin() {
-  if (!state.value) {
-    enablePlugin(
-      { pluginName: plugin.value.pluginName },
-      {
-        onError: () => {
-          state.value = false;
-        },
-        onSuccess: () => {
-          state.value = true;
-        },
-      },
-    );
-  } else {
-    disablePlugin(
-      { pluginName: plugin.value.pluginName },
-      {
-        onError: () => {
-          state.value = true;
-        },
-        onSuccess: () => {
-          state.value = false;
-        },
-      },
-    );
-  }
-}
-
-function openDialog(type: 'console' | 'restart' | 'uninstall' | 'versions' | 'install') {
-  switch (type) {
-    case 'console':
-      dialog.openComponentDialog<PluginConsoleProps>(PluginConsoleDialog, {
-        data: {
-          title: t('components.dialog.title.log'),
-          confirmText: t('components.form.button.download'),
-          loading: isLoading,
-          stayActive: true,
-          contentProps: {
-            plugin: unref(plugin),
-          },
-          dialogContentClass: 'not-md:px-0 h-full md:h-[50vh]',
-        },
-      });
-      break;
-    case 'versions':
-    case 'install':
-      dialog.openComponentDialog<VersionsHandlerProps>(VersionsHandlerDialog, {
-        data: {
-          title: t('components.dialog.title.install_version'),
-          confirmText: type === 'install' ? t('components.form.button.restart') : t('components.form.button.install'),
-          loading: isLoading,
-          contentProps: {
-            target: unref(plugin),
-            installVersion: type === 'install' ? pluginUpdate.value?.latestVersion : undefined,
-          },
-        },
-      });
-      break;
-    case 'restart':
-      dialog.openTextDialog({
-        data: {
-          title: t('components.dialog.title.confirm'),
-          contentText: t('components.dialog.message.confirm_restart_plugin'),
-          confirmText: t('components.form.button.restart'),
-        },
-        onConfirm: () => {
-          restartPlugin({ pluginName: plugin.value.pluginName });
-        },
-      });
-      break;
-    case 'uninstall':
-      dialog.openComponentDialog<VersionsHandlerProps>(VersionsHandlerDialog, {
-        data: {
-          title: t('components.dialog.title.confirm'),
-          confirmText: t('components.form.button.uninstall'),
-          confirmButtonProps: {
-            severity: 'danger',
-          },
-          loading: isLoading,
-          contentProps: {
-            target: unref(plugin),
-            action: 'uninstall',
-          },
-        },
-      });
-      break;
-  }
-}
-
-watch(pluginsSocket.status, (status) => {
-  if (status === PLUGIN_STATUS.STARTING || status === PLUGIN_STATUS.READY || status === PLUGIN_STATUS.STARTED) {
-    state.value = true;
-  }
-});
-
-onBeforeMount(() => {
-  pluginsSocket.connect();
 });
 </script>
 

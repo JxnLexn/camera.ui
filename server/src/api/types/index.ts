@@ -215,6 +215,7 @@ export interface PluginsProgress {
   pluginName: string;
   action: 'install' | 'update' | 'uninstall';
   version: string;
+  status: 'queued' | 'running';
 }
 
 export interface PluginsResponse {
@@ -638,6 +639,10 @@ export interface SensorsSettings {
   hideCameraBound: boolean;
 }
 
+export interface PluginsViewSettings {
+  view: 'cards' | 'table';
+}
+
 export interface UiSettingsLocalStorage {
   cameras: CamerasSettings;
   camview: CamviewSettings;
@@ -645,6 +650,7 @@ export interface UiSettingsLocalStorage {
   console: ConsoleSettings;
   interface: InterfaceSettinges;
   sensors: SensorsSettings;
+  plugins: PluginsViewSettings;
 }
 
 export interface ThemeLocalStorage {

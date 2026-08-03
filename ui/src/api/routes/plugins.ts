@@ -22,8 +22,8 @@ import type {
 import type { AxiosResponse } from 'axios';
 import type { AckResponse } from '..';
 
-const PLUGIN_INSTALL_TIMEOUT_MS = 600_000;
-const PLUGIN_UNINSTALL_TIMEOUT_MS = 120_000;
+const PLUGIN_INSTALL_TIMEOUT_MS = 1_800_000;
+const PLUGIN_UNINSTALL_TIMEOUT_MS = 600_000;
 
 export async function installPluginFn({ pluginData }: { pluginData: InstallPluginInput }): Promise<CameraUiPlugin> {
   const response: AxiosResponse<CameraUiPlugin> = await api.post('/plugins', pluginData, { timeout: PLUGIN_INSTALL_TIMEOUT_MS });

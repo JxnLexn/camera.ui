@@ -70,6 +70,7 @@ export const useThemeStore = defineStore('theme', () => {
 
   function setAppTheme(t: SupportedThemes): void {
     document.documentElement.setAttribute('data-mode', t);
+    document.documentElement.style.background = t === 'dark' ? '#0d0d0d' : '#f8fafc';
 
     switch (t) {
       case 'light':

@@ -33,6 +33,9 @@ const defaultUiSettings: UiSettingsLocalStorage & LoggerLocalStorage = {
   sensors: {
     hideCameraBound: true,
   },
+  plugins: {
+    view: 'cards',
+  },
   'cui-logger-debug': 1,
   'cui-logger-recording': 1,
 };

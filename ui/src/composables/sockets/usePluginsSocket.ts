@@ -1,7 +1,7 @@
 import { PLUGIN_STATUS } from '@shared/types';
 
 import type { SocketChannel, SocketUnsubscribe } from '@/connection/index.js';
-import type { PluginRuntimeInfo } from '@shared/types';
+import type { PluginRuntimeInfo, PluginsProgress } from '@shared/types';
 
 export interface PluginsSocketState {
   status: PLUGIN_STATUS;
@@ -14,6 +14,8 @@ const pluginStates = new Map<string, PluginsSocketState>();
 const pluginRefCounts = new Map<string, number>();
 const pluginDisposalTimers = new Map<string, ReturnType<typeof setTimeout>>();
 const pluginListeners = new Map<string, SocketUnsubscribe>();
+
+const manageQueue = ref<PluginsProgress[]>([]);
 
 let scope: ReturnType<typeof effectScope> | null = null;
 let channel: SocketChannel | null = null;
@@ -64,6 +66,15 @@ async function refetchStatus(pluginName: string): Promise<void> {
   }
 }
 
+async function refetchManageQueue(): Promise<void> {
+  if (!channel?.ready.value) return;
+  try {
+    manageQueue.value = await channel.request<PluginsProgress[]>('get-manage-queue');
+  } catch {
+    // server unreachable — next reconnect will retry via 'connect' handler
+  }
+}
+
 function ensureChannel(): SocketChannel {
   if (channel) return channel;
 
@@ -74,12 +85,17 @@ function ensureChannel(): SocketChannel {
     // already connected, and refetchStatus() reads the module-level `channel`.
     channel = ch;
 
+    ch.on<PluginsProgress[]>('manage-queue', (entries) => {
+      manageQueue.value = entries;
+    });
+
     ch.onReady(() => {
       // Re-fetch status for every tracked plugin — covers reconnect after
       // outage AND endpoint swap (channel internal rebind).
       for (const name of pluginStates.keys()) {
         refetchStatus(name);
       }
+      refetchManageQueue();
     });
   });
 
@@ -144,6 +160,7 @@ export function usePluginsSocket(pluginName: string) {
     isConnected: computed(() => channel?.connected.value ?? false),
     status: computed(() => state.status),
     statusColor: computed(() => state.statusColor),
+    manageEntry: computed(() => manageQueue.value.find((entry) => entry.pluginName === pluginName)),
 
     connect,
     fetchStatus,
@@ -157,6 +174,7 @@ export function resetPluginsSocket(): void {
   pluginListeners.clear();
   pluginStates.clear();
   pluginRefCounts.clear();
+  manageQueue.value = [];
   scope?.stop();
   scope = null;
   channel = null;
