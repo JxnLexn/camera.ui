@@ -22,9 +22,15 @@ All notable changes to this project will be documented in this file.
 
 - **Detection sensors keep a history again.** Motion, object, face, license plate and audio sensors never recorded their triggers, so their history tab stayed empty no matter how often they fired; only virtual and plugin-state sensors had entries. Every detection sensor now logs when it triggered, when it cleared, and what it saw (person, a recognized name, a plate, an audio label).
 
-- **A person staying in view is one event, not several.** With motion sensors that report on a timer, like many ONVIF cameras, detection stopped watching when the sensor went quiet, even though someone was still in the picture, and the next report opened a fresh event for the same person. Detection now keeps watching as long as it sees someone.
+- **A person staying in view is one event, not several.** Two things used to break this. Motion sensors that report on a timer, like many ONVIF cameras, made detection stop watching while someone was still in the picture. And a person standing still for a few seconds was treated like a parked car: the event lost its person label and picture, and empty follow-up events opened every half minute. Detection now keeps watching as long as it sees someone. Only vehicles, packages and resting animals count as parked; a person would have to stand frozen for ten minutes, which only a poster or statue manages.
 
 - **Frame worker memory no longer climbs the longer the server runs.** The video scaler kept an internal buffer for every object size it ever cropped, so memory grew for as long as detections came in and only a restart freed it. It now reuses a small fixed set of buffers.
+
+- **A wrongly learned parked spot no longer swallows new arrivals.** A misdetection could permanently teach the camera that something is parked at a spot, and an animal or person that later rested there was never reported. Only solidly detected objects count as parked now, and a spot whose object stays gone while the camera keeps looking is forgotten.
+
+- **Event thumbnails show the person or car, not the empty scene.** The picture used to be the frame from the moment motion tripped, often before anything interesting was in view, so consecutive events all looked alike. The thumbnail now switches to the best shot of the detected object and is finalized when the event ends. Object thumbnails are also cropped tighter around the subject.
+
+- **Event cards no longer get stuck on an outdated thumbnail.** With the app open while an event started, a card could keep the initial scene forever, sometimes with a face label over a picture that shows no face. Finished events now fetch their stored thumbnails once more.
 
 ## [2.1.1]
 

@@ -7,6 +7,11 @@ import type { BoundingBox, Detection, TrackedDetection } from '@camera.ui/sdk';
 export const STATIONARY_SPEED_THRESHOLD = 0.002;
 export const ANCHOR_SIGHTINGS = 6;
 export const ANCHOR_SETTLE_MS = 8000;
+export const ANCHOR_SETTLE_ANIMAL_MS = 120_000;
+export const ANCHOR_SETTLE_PERSON_MS = 600_000;
+export const ANCHOR_MIN_MEAN_SCORE = 0.65;
+export const ANCHOR_MISSED_EVENTS = 5;
+export const ANCHOR_UNSEEN_ACTIVE_MS = 60 * 60_000;
 export const WAKE_IOU = 0.6;
 export const DEPART_IOU = 0.15;
 export const WAKE_SIGHTINGS = 3;
@@ -14,6 +19,17 @@ export const WAKE_SIGHTINGS = 3;
 const MAX_ANCHORS = 25;
 const MAX_CANDIDATES = 25;
 const ANCHOR_DRIFT_ALPHA = 0.1;
+const MAX_TICK_GAP_MS = 5000;
+
+function settleMsFor(label: string): number {
+  if (label === 'person') return ANCHOR_SETTLE_PERSON_MS;
+  if (label === 'animal') return ANCHOR_SETTLE_ANIMAL_MS;
+  return ANCHOR_SETTLE_MS;
+}
+
+function anchorExpires(label: string): boolean {
+  return label === 'person' || label === 'animal';
+}
 
 interface StationaryAnchor {
   box: BoundingBox;
@@ -24,6 +40,8 @@ interface StationaryAnchor {
   wakeMisses: number;
   settleSightings: number;
   settleSinceMs: number;
+  missedEvents: number;
+  unseenActiveMs: number;
 }
 
 interface CandidateAnchor {
@@ -32,6 +50,7 @@ interface CandidateAnchor {
   sightings: number;
   ghost: boolean;
   stillSinceMs: number;
+  scoreSum: number;
 }
 
 export class StationarySuppressor {
@@ -39,6 +58,7 @@ export class StationarySuppressor {
   private readonly candidates: CandidateAnchor[] = [];
   private readonly labelsSeen = new Set<string>();
   private suppressionLogged = false;
+  private lastEvaluateAt = 0;
 
   constructor(
     private readonly logger: Logger,
@@ -47,12 +67,18 @@ export class StationarySuppressor {
 
   public evaluate(detections: TrackedDetection[]): boolean {
     const now = this.now();
+    const tickMs = this.lastEvaluateAt === 0 ? 0 : Math.min(now - this.lastEvaluateAt, MAX_TICK_GAP_MS);
+    this.lastEvaluateAt = now;
+
     let hasActiveTrack = false;
+    const tickLabels = new Set<string>();
     for (const t of detections) {
       if (t.trackLost) continue;
+      tickLabels.add(t.label);
       this.labelsSeen.add(t.label);
       if (this.evaluateTrack(t, now)) hasActiveTrack = true;
     }
+    this.ageUnseenAnchors(tickLabels, tickMs);
     return hasActiveTrack;
   }
 
@@ -88,9 +114,19 @@ export class StationarySuppressor {
 
       if (survivors.has(id)) {
         anchor.ghost = false;
+        anchor.missedEvents = 0;
       } else if (!this.labelsSeen.has(anchor.label)) {
         // a motion-only event says nothing about a parked object: the detector
-        // never reported that label, so absence is not evidence it left
+        // never reported that label, so absence is not evidence it left. For
+        // person/animal that immunity is bounded: detection demonstrably ran
+        // (other labels were reported) and kept not seeing them
+        if (this.labelsSeen.size > 0 && anchorExpires(anchor.label)) {
+          anchor.missedEvents += 1;
+          if (anchor.missedEvents >= ANCHOR_MISSED_EVENTS) {
+            this.anchors.delete(id);
+            this.logger.trace(`Static suppression: ${anchor.label}#${id} expired, unseen across ${anchor.missedEvents} detection-active events`);
+          }
+        }
         continue;
       } else if (anchor.ghost) {
         this.anchors.delete(id);
@@ -150,6 +186,7 @@ export class StationarySuppressor {
     const anchor = this.anchors.get(t.trackId);
     if (anchor) {
       anchor.ghost = false;
+      anchor.missedEvents = 0;
       return anchor.dormant ? this.evaluateDormant(t, anchor, now) : this.evaluateAnchored(t, anchor);
     }
 
@@ -165,7 +202,12 @@ export class StationarySuppressor {
         candidate.box = t.box;
         candidate.ghost = false;
         candidate.sightings += 1;
-        if (candidate.sightings >= ANCHOR_SIGHTINGS && now - candidate.stillSinceMs >= ANCHOR_SETTLE_MS) {
+        candidate.scoreSum += t.confidence ?? 0;
+        if (
+          candidate.sightings >= ANCHOR_SIGHTINGS &&
+          now - candidate.stillSinceMs >= settleMsFor(t.label) &&
+          candidate.scoreSum / candidate.sightings >= ANCHOR_MIN_MEAN_SCORE
+        ) {
           this.candidates.splice(this.candidates.indexOf(candidate), 1);
           this.anchors.set(t.trackId, {
             box: t.box,
@@ -176,20 +218,42 @@ export class StationarySuppressor {
             wakeMisses: 0,
             settleSightings: 0,
             settleSinceMs: 0,
+            missedEvents: 0,
+            unseenActiveMs: 0,
           });
         }
       } else if (this.candidates.length < MAX_CANDIDATES) {
-        this.candidates.push({ box: t.box, label: t.label, sightings: 1, ghost: false, stillSinceMs: now });
+        this.candidates.push({ box: t.box, label: t.label, sightings: 1, ghost: false, stillSinceMs: now, scoreSum: t.confidence ?? 0 });
       }
     } else if (candidate) {
       // erode instead of reset: a single noisy speed frame must not wipe the
       // warm-up of a genuinely parked object
+      candidate.scoreSum -= candidate.scoreSum / candidate.sightings;
       candidate.sightings -= 1;
+      // a person's stillness window restarts on real movement: the minutes-long
+      // settle targets frozen detections, not people who paused mid-walk
+      if (t.label === 'person') candidate.stillSinceMs = now;
       if (candidate.sightings <= 0) {
         this.candidates.splice(this.candidates.indexOf(candidate), 1);
       }
     }
     return true;
+  }
+
+  private ageUnseenAnchors(tickLabels: Set<string>, tickMs: number): void {
+    if (tickMs <= 0 || this.anchors.size === 0) return;
+    for (const [id, anchor] of this.anchors) {
+      if (!anchorExpires(anchor.label)) continue;
+      if (tickLabels.has(anchor.label)) {
+        anchor.unseenActiveMs = 0;
+        continue;
+      }
+      anchor.unseenActiveMs += tickMs;
+      if (anchor.unseenActiveMs >= ANCHOR_UNSEEN_ACTIVE_MS) {
+        this.anchors.delete(id);
+        this.logger.trace(`Static suppression: ${anchor.label}#${id} expired, unseen for ${Math.round(anchor.unseenActiveMs / 60_000)}min of detection`);
+      }
+    }
   }
 
   private matchCandidate(t: TrackedDetection): CandidateAnchor | undefined {
@@ -246,7 +310,7 @@ export class StationarySuppressor {
     if (stationary) {
       if (anchor.settleSightings === 0) anchor.settleSinceMs = now;
       anchor.settleSightings += 1;
-      if (anchor.settleSightings >= ANCHOR_SIGHTINGS && now - anchor.settleSinceMs >= ANCHOR_SETTLE_MS) {
+      if (anchor.settleSightings >= ANCHOR_SIGHTINGS && now - anchor.settleSinceMs >= settleMsFor(t.label)) {
         anchor.box = t.box;
         anchor.dormant = false;
         anchor.settleSightings = 0;
@@ -272,6 +336,8 @@ export class StationarySuppressor {
       anchor.dormant = false;
       anchor.wakeMisses = 0;
       anchor.settleSightings = 0;
+      anchor.missedEvents = 0;
+      anchor.unseenActiveMs = 0;
       this.anchors.set(t.trackId, anchor);
       this.logger.trace(`Static suppression: ${anchor.label}#${id} re-identified as #${t.trackId} (anchor adopted)`);
       return true;

@@ -123,6 +123,10 @@ export class DetectionEventManager {
   private eventThumbnail: Buffer | null = null;
   private needsEventThumbnail = false;
 
+  private eventBestShot: ThumbnailCandidate | null = null;
+  private eventBestShotPushed = false;
+  private eventBestShotDirty = false;
+
   private segmentFaceTrackIds = new Map<number, number>();
   private segmentPlateAttrIndex = new Map<string, number>();
   private segmentPlateReads = new Set<string>();
@@ -208,8 +212,10 @@ export class DetectionEventManager {
     if (this.activeEvent) this.endEvent();
   }
 
-  public publishEventThumbnail(jpeg?: Buffer): void {
+  public publishEventThumbnail(jpeg?: Buffer, source: 'scene' | 'best-shot' = 'scene'): void {
     if (!this.activeEvent) return;
+    // a late scene re-shoot (HQ warm-up) must not undo an object crop
+    if (source === 'scene' && this.eventBestShotPushed) return;
     if (jpeg) {
       this.eventThumbnail = jpeg;
       this.needsEventThumbnail = false;
@@ -250,6 +256,9 @@ export class DetectionEventManager {
     this.segmentIndex = 0;
     this.needsEventThumbnail = true;
     this.eventThumbnail = null;
+    this.eventBestShot = null;
+    this.eventBestShotPushed = false;
+    this.eventBestShotDirty = false;
     if (data.eventThumbnail) {
       this.eventThumbnail = data.eventThumbnail;
       this.needsEventThumbnail = false;
@@ -276,6 +285,13 @@ export class DetectionEventManager {
 
   private endEvent(): void {
     if (!this.activeEvent) return;
+
+    if (this.eventBestShotDirty && this.eventBestShot) {
+      this.publishEventThumbnail(this.eventBestShot.jpeg, 'best-shot');
+    }
+    this.eventBestShot = null;
+    this.eventBestShotPushed = false;
+    this.eventBestShotDirty = false;
 
     this.closeSegment();
 
@@ -664,6 +680,16 @@ export class DetectionEventManager {
 
         if (!this.sceneThumbnail || this.isBetterScene(candidate, this.sceneThumbnail)) {
           this.sceneThumbnail = candidate;
+        }
+
+        if (!this.eventBestShot || this.isBetterScene(candidate, this.eventBestShot)) {
+          this.eventBestShot = candidate;
+          if (this.eventBestShotPushed) {
+            this.eventBestShotDirty = true;
+          } else {
+            this.eventBestShotPushed = true;
+            this.publishEventThumbnail(candidate.jpeg, 'best-shot');
+          }
         }
 
         this.updateBestCandidate(this.detectionLabelThumbnails, label, thumb);

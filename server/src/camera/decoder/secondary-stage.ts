@@ -23,7 +23,7 @@ import type { PluginRegistry } from './plugin-registry.js';
 const DETECTION_THUMB_MAX_WIDTH = 640;
 const DETECTION_THUMB_MIN_CROP = 160;
 const DETECTION_THUMB_HQ_MAX_WIDTH = 640;
-const DETECTION_THUMB_HQ_MIN_CROP = 640;
+const DETECTION_THUMB_HQ_MIN_CROP = 320;
 const DETECTION_THUMB_HQ_QUALITY = 80;
 const ATTRIBUTE_THUMB_MAX_WIDTH = 640;
 const ATTRIBUTE_THUMB_MIN_CROP = 128;
@@ -88,7 +88,7 @@ export class SecondaryStage {
 
     const objectCrops = await scaler.cropToJPEG(sourceFrame, objectDetections, {
       maxWidth: detectionMaxWidth,
-      padding: 0.3,
+      padding: 0.15,
       minCrop: detectionMinCrop,
       quality: detectionQuality,
     });
