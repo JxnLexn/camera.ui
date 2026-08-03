@@ -169,6 +169,9 @@ export class DetectionEventManager {
 
     if (triggers.length > 0) {
       this.enrichTriggers(triggers, now);
+      // a trigger joining mid-event (doorbell press during a motion event)
+      // must stamp its type right away, not wait for the next segment update
+      this.updateTypes();
       this.activeEvent.lastUpdate = now;
       this.activeEvent.expectedEndTime = data.expectedEndTime;
       // keep-alive for the UI; with an active segment, segment-update carries this
