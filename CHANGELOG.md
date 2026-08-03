@@ -22,6 +22,8 @@ All notable changes to this project will be documented in this file.
 
 - **A doorbell press during a running motion event shows up immediately.** When someone walked up and rang, the motion event was already running and the ring stayed invisible until that event timed out, up to a minute later. The ring is now stamped into the running event right away, so the timeline and detections show the doorbell the moment it happens. Same for contact and other sensor triggers.
 
+- **The update dot on Settings leads to the update.** With a pending server update, clicking Settings in the navbar used to land on the last visited settings page, usually Account. It now opens System directly, where the update button is.
+
 - **A PiP source can be removed again.** Clearing the PiP source of a camera stream showed "Invalid input" and the settings refused to save; the only way out was picking another source. Clearing via the x or selecting none now validates and saves.
 
 - **Detection sensors keep a history again.** Motion, object, face, license plate and audio sensors never recorded their triggers, so their history tab stayed empty no matter how often they fired; only virtual and plugin-state sensors had entries. Every detection sensor now logs when it triggered, when it cleared, and what it saw (person, a recognized name, a plate, an audio label).

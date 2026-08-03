@@ -206,6 +206,7 @@ const isElectronBuild = computed(() => apiInfo.value?.electron ?? false);
 const serverUpdatesViaElectron = computed(() => isElectronApp && isElectronBuild.value);
 
 const defaultSettingsPage = computed(() => {
+  if (serverUpdateAvailable.value && (user.value?.role === 'admin' || user.value?.role === 'master')) return 'system';
   const view = uiSettings.value.interface.selectedSettingsView;
   return settingsViews.includes(view) ? view : 'account';
 });
