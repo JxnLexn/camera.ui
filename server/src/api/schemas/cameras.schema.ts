@@ -218,7 +218,13 @@ export const inputSchema = zod
     preload: zod.boolean().default(true),
     muted: zod.boolean().default(false),
     urls: urlSchema.array().min(1, 'At least one valid URL is required'),
-    childSourceId: zod.string().trim().min(1, 'Child Source ID is required').optional(),
+    childSourceId: zod
+      .string()
+      .trim()
+      .min(1, 'Child Source ID is required')
+      .nullish()
+      .transform((value) => value ?? undefined)
+      .optional(),
   })
   .strict()
   .transform((source) => (source.role === 'snapshot' ? { ...source, useForSnapshot: false, hotMode: false, preload: false } : source));
@@ -240,7 +246,13 @@ export const patchInputSchema = zod
     preload: zod.boolean().default(true),
     muted: zod.boolean().default(false),
     urls: urlSchema.array().min(1, 'At least one valid URL is required'),
-    childSourceId: zod.string().trim().min(1, 'Child Source ID is required').optional(),
+    childSourceId: zod
+      .string()
+      .trim()
+      .min(1, 'Child Source ID is required')
+      .nullish()
+      .transform((value) => value ?? undefined)
+      .optional(),
   })
   .strict()
   .transform((source) => (source.role === 'snapshot' ? { ...source, useForSnapshot: false, hotMode: false, preload: false } : source));

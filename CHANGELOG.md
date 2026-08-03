@@ -22,6 +22,8 @@ All notable changes to this project will be documented in this file.
 
 - **A doorbell press during a running motion event shows up immediately.** When someone walked up and rang, the motion event was already running and the ring stayed invisible until that event timed out, up to a minute later. The ring is now stamped into the running event right away, so the timeline and detections show the doorbell the moment it happens. Same for contact and other sensor triggers.
 
+- **A PiP source can be removed again.** Clearing the PiP source of a camera stream showed "Invalid input" and the settings refused to save; the only way out was picking another source. Clearing via the x or selecting none now validates and saves.
+
 - **Detection sensors keep a history again.** Motion, object, face, license plate and audio sensors never recorded their triggers, so their history tab stayed empty no matter how often they fired; only virtual and plugin-state sensors had entries. Every detection sensor now logs when it triggered, when it cleared, and what it saw (person, a recognized name, a plate, an audio label).
 
 - **A person staying in view is one event, not several.** Two things used to break this. Motion sensors that report on a timer, like many ONVIF cameras, made detection stop watching while someone was still in the picture. And a person standing still for a few seconds was treated like a parked car: the event lost its person label and picture, and empty follow-up events opened every half minute. Detection now keeps watching as long as it sees someone. Only vehicles, packages and resting animals count as parked; a person would have to stand frozen for ten minutes, which only a poster or statue manages.

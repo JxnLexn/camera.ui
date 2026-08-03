@@ -28,7 +28,7 @@ export const inputSchema = zod
     hotMode: zod.boolean().default(true),
     preload: zod.boolean().default(true),
     muted: zod.boolean().default(false),
-    childSourceId: zod.string().trim().optional(),
+    childSourceId: zod.string().trim().nullish(),
   })
   .strict()
   .transform((source) => (source.role === 'snapshot' ? { ...source, useForSnapshot: false, hotMode: false, preload: false } : source));
