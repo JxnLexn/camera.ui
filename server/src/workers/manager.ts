@@ -221,6 +221,9 @@ export class WorkerManager {
 
     const workerProxy = this.createWorkerProxy(agentId);
     await workerProxy.update(version);
+
+    worker.update = { ...worker.update, updating: true, error: undefined };
+    this.emitWorkerUpdate(worker);
   }
 
   public async assignCamera(cameraId: string, agentId: string): Promise<void> {
