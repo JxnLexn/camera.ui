@@ -190,7 +190,8 @@ export class FrameScaler {
 
     const scaler = this.getScaler();
     for (const t of targets) {
-      const crop = t.fit === 'expand' ? this.expandCropToAspect(baseCrop, frame.width, frame.height, t.width / t.height) : baseCrop;
+      const fitted = t.fit === 'expand' ? this.expandCropToAspect(baseCrop, frame.width, frame.height, t.width / t.height) : baseCrop;
+      const crop = this.quantizeCrop(fitted, frame.width, frame.height);
       const data = await scaler.toBuffer(frame, { crop, resize: { width: t.width, height: t.height }, format: t.format });
       results.set(t.key, {
         frame: { id: `crop:${detection.label}:${t.key}`, data, width: t.width, height: t.height, format: t.format },
@@ -238,6 +239,14 @@ export class FrameScaler {
     width = Math.min(width, frameWidth - x);
     height = Math.min(height, frameHeight - y);
 
+    return { x, y, width, height };
+  }
+
+  private quantizeCrop(crop: ScalerCrop, frameWidth: number, frameHeight: number, grid = 32): ScalerCrop {
+    const width = Math.min(frameWidth, Math.ceil(crop.width / grid) * grid);
+    const height = Math.min(frameHeight, Math.ceil(crop.height / grid) * grid);
+    const x = Math.max(0, Math.min(crop.x - Math.floor((width - crop.width) / 2), frameWidth - width));
+    const y = Math.max(0, Math.min(crop.y - Math.floor((height - crop.height) / 2), frameHeight - height));
     return { x, y, width, height };
   }
 

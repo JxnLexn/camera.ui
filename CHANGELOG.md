@@ -18,6 +18,8 @@ All notable changes to this project will be documented in this file.
 
 - **A person staying in view is one event, not several.** With motion sensors that report on a timer, like many ONVIF cameras, detection stopped watching when the sensor went quiet, even though someone was still in the picture, and the next report opened a fresh event for the same person. Detection now keeps watching as long as it sees someone.
 
+- **Frame worker memory no longer climbs the longer the server runs.** The video scaler kept an internal buffer for every object size it ever cropped, so memory grew for as long as detections came in and only a restart freed it. It now reuses a small fixed set of buffers.
+
 ## [2.1.1]
 
 ### Added
