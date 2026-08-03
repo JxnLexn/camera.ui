@@ -1,6 +1,17 @@
 import { SensorType } from '@camera.ui/sdk';
 
+// read-only state widget for detection sensors: detected + current labels
+export const DETECTION_INFO_TYPES: ReadonlySet<SensorType> = new Set([
+  SensorType.Motion,
+  SensorType.Object,
+  SensorType.Audio,
+  SensorType.Face,
+  SensorType.LicensePlate,
+  SensorType.Classifier,
+]);
+
 const WIDGET_TYPES: ReadonlySet<SensorType> = new Set([
+  ...DETECTION_INFO_TYPES,
   SensorType.Light,
   SensorType.Switch,
   SensorType.Lock,

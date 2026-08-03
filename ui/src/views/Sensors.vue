@@ -50,10 +50,122 @@
       <span class="text-muted text-sm">{{ sensors.length ? t('views.sensors.no_matches') : t('views.sensors.no_sensors') }}</span>
     </div>
 
+    <div v-else-if="viewMode === 'cards'" class="flex min-h-0 flex-col">
+      <div
+        class="grid w-full gap-2"
+        :style="{
+          gridTemplateColumns: `repeat(auto-fill, minmax(${smBreakpoint ? '100%' : '300px'}, 1fr))`,
+        }"
+      >
+        <div v-for="row in visibleRows" :key="row.sensor.id" class="relative">
+          <div v-if="selectionMode" class="absolute inset-0 z-4 cursor-pointer" @click="toggleSelection(row.sensor.id)">
+            <div class="absolute top-3 left-3 pointer-events-none">
+              <div
+                class="w-5 h-5 rounded-full border-2 flex items-center justify-center transition-colors"
+                :class="selectedIds.has(row.sensor.id) ? 'bg-primary border-primary' : 'bg-black/5 border-neutral-300 dark:bg-white/10 dark:border-neutral-500'"
+              >
+                <i-mdi:check v-if="selectedIds.has(row.sensor.id)" class="w-3.5 h-3.5 text-white" />
+              </div>
+            </div>
+          </div>
+
+          <Card class="cui-card h-full" :class="[rowClass(row), { 'cursor-pointer': isAdmin && !row.sensor.hidden }]" @click="handleRowClick(row)">
+            <template #content>
+              <div class="flex flex-col gap-3">
+                <div class="flex items-center gap-3 min-w-0">
+                  <component
+                    :is="sensorTypeIcon(row.sensor.type)"
+                    class="w-6 h-6 shrink-0 transition-colors"
+                    :class="{ 'text-muted': !isSensorActive(row.sensor) }"
+                    :style="isSensorActive(row.sensor) ? ACTIVE_ICON_STYLE : undefined"
+                  />
+                  <div class="flex flex-col min-w-0 flex-1">
+                    <div class="flex items-center gap-2 min-w-0">
+                      <span class="font-bold text-color truncate">{{ row.label }}</span>
+                      <i-mdi:eye-off-outline v-if="!row.sensor.exposed" v-tooltip="t('views.sensors.not_exposed')" class="w-4 h-4 shrink-0 text-muted" />
+                    </div>
+                    <span class="text-xs text-muted truncate">{{ row.typeLabel }} · {{ row.pluginLabel }}</span>
+                  </div>
+                  <Badge
+                    v-tooltip="{ value: row.sensor.connected ? t('views.sensors.connected') : t('views.sensors.disconnected') }"
+                    class="shrink-0"
+                    :style="{ background: row.sensor.connected ? 'green' : 'gray' }"
+                  />
+                </div>
+
+                <div class="flex items-center gap-1 min-w-0">
+                  <i-mdi:lock-outline
+                    v-if="row.sensor.assignmentLocked"
+                    v-tooltip="t('views.sensors.assigned_cameras_locked_hint')"
+                    class="w-3.5 h-3.5 shrink-0 text-muted"
+                  />
+                  <span class="text-xs truncate" :class="row.assignedLabel ? 'text-muted' : 'text-muted italic'">
+                    {{ row.assignedLabel || t('views.sensors.unassigned') }}
+                  </span>
+
+                  <div class="flex items-center gap-1 ml-auto">
+                    <Button
+                      v-tooltip.left="t('views.sensors.history')"
+                      text
+                      rounded
+                      severity="secondary"
+                      class="cui-icon-sm shrink-0"
+                      @click.stop="openHistoryDialog(row.sensor)"
+                    >
+                      <template #icon>
+                        <i-mdi:history width="100%" height="100%" />
+                      </template>
+                    </Button>
+
+                    <Button
+                      v-if="isAdmin"
+                      v-tooltip.left="row.sensor.hidden ? t('views.sensors.unhide') : t('views.sensors.hide')"
+                      text
+                      rounded
+                      severity="secondary"
+                      class="cui-icon-sm shrink-0"
+                      @click.stop="setSensorHidden(row.sensor, !row.sensor.hidden)"
+                    >
+                      <template #icon>
+                        <i-mdi:eye v-if="row.sensor.hidden" width="100%" height="100%" class="text-muted" />
+                        <i-mdi:eye-off v-else width="100%" height="100%" class="text-muted" />
+                      </template>
+                    </Button>
+
+                    <span v-if="isAdmin" v-tooltip.left="canDelete(row.sensor) ? t('views.sensors.delete') : t('views.sensors.delete_connected')" class="shrink-0">
+                      <Button text rounded severity="danger" class="cui-icon-sm" :disabled="!canDelete(row.sensor)" @click.stop="confirmDelete(row.sensor)">
+                        <template #icon>
+                          <i-mdi:trash-can-outline width="100%" height="100%" />
+                        </template>
+                      </Button>
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </template>
+          </Card>
+        </div>
+      </div>
+
+      <div v-if="hiddenCount > 0" class="flex items-center justify-end mt-4">
+        <Button
+          severity="secondary"
+          class="cui-button-medium"
+          :label="showHidden ? t('views.sensors.hide_hidden') : `${t('views.sensors.show_hidden')} (${hiddenCount})`"
+          @click="showHidden = !showHidden"
+        />
+      </div>
+    </div>
+
     <div v-else class="flex min-h-0 flex-col">
       <Card class="cui-card">
         <template #content>
           <CuiDataTable :value="visibleRows" striped-rows :pt="tablePtOptions" class="w-full" @row-click="(e: DataTableRowClickEvent) => handleRowClick(e.data)">
+            <Column v-if="selectionMode" header="" header-class="p-2 pl-4 w-8 max-w-8" class="p-2 pl-4 w-8 max-w-8">
+              <template #body="{ data }">
+                <Checkbox :model-value="selectedIds.has(data.sensor.id)" binary size="small" @click.stop @update:model-value="toggleSelection(data.sensor.id)" />
+              </template>
+            </Column>
             <Column header="" header-class="p-2 pl-4 w-5 max-w-5" class="p-2 pl-4 w-5 max-w-5">
               <template #body="{ data }">
                 <div class="flex items-center justify-center">
@@ -67,7 +179,12 @@
             <Column field="label" :header="t('views.sensors.name')" sortable header-class="p-2" class="p-2 w-full min-w-[180px] max-w-0">
               <template #body="{ data }">
                 <div class="flex items-center gap-2 min-w-0" :class="rowClass(data)">
-                  <component :is="sensorTypeIcon(data.sensor.type)" class="w-5 h-5 shrink-0 text-muted" />
+                  <component
+                    :is="sensorTypeIcon(data.sensor.type)"
+                    class="w-5 h-5 shrink-0 transition-colors"
+                    :class="{ 'text-muted': !isSensorActive(data.sensor) }"
+                    :style="isSensorActive(data.sensor) ? ACTIVE_ICON_STYLE : undefined"
+                  />
                   <div class="flex flex-col min-w-0">
                     <div class="flex items-center gap-2 min-w-0">
                       <span class="font-bold text-color truncate">{{ data.label }}</span>
@@ -176,24 +293,99 @@
       </Card>
     </div>
 
-    <CuiFloatingButton
-      v-if="isAdmin"
-      :tooltip-props="{ value: t('views.sensors.create_virtual') }"
-      :button-props="{ class: 'text-white' }"
-      :icon="PlusIcon"
-      :icon-props="{ width: '30px', height: '30px' }"
-      @click="openCreateDialog"
-    />
+    <CuiFloatingButtonGroup v-if="isAdmin" :force-visible="selectionMode">
+      <template v-if="!selectionMode">
+        <CuiFloatingButton
+          v-if="visibleRows.length"
+          grouped
+          :tooltip-props="{ value: t('views.sensors.select') }"
+          :button-props="{ severity: 'secondary' }"
+          :icon="SelectIcon"
+          :icon-props="{ width: '100%', height: '100%' }"
+          @click="enterSelectionMode"
+        />
+        <CuiFloatingButton
+          grouped
+          :tooltip-props="{ value: viewMode === 'cards' ? t('views.sensors.view_table') : t('views.sensors.view_cards') }"
+          :button-props="{ severity: 'secondary' }"
+          :icon="viewMode === 'cards' ? TableIcon : GridIcon"
+          :icon-props="{ width: '100%', height: '100%' }"
+          @click="toggleViewMode"
+        />
+        <CuiFloatingButton
+          grouped
+          :tooltip-props="{ value: t('views.sensors.create_virtual') }"
+          :button-props="{ class: 'text-white' }"
+          :icon="PlusIcon"
+          :icon-props="{ width: '30px', height: '30px' }"
+          @click="openCreateDialog"
+        />
+      </template>
+
+      <template v-else>
+        <CuiFloatingButton
+          grouped
+          :tooltip-props="{ value: $t('components.form.tooltip.cancel_selection') }"
+          :button-props="{ severity: 'secondary' }"
+          :icon="CloseIcon"
+          :icon-props="{ width: '100%', height: '100%' }"
+          @click="exitSelectionMode"
+        />
+        <CuiFloatingButton
+          grouped
+          :tooltip-props="{ value: $t('components.form.tooltip.select_all') }"
+          :button-props="{ severity: allSelected ? 'primary' : 'secondary' }"
+          :icon="SelectAllIcon"
+          :icon-props="{ width: '100%', height: '100%' }"
+          @click="toggleSelectAll"
+        />
+        <CuiFloatingButton
+          grouped
+          :tooltip-props="{ value: t('views.sensors.hide_selected') }"
+          :button-props="{ severity: 'secondary', disabled: !selectedItems.length || bulkBusy }"
+          :icon="EyeOffIcon"
+          :icon-props="{ width: '100%', height: '100%' }"
+          @click="bulkSetHidden(true)"
+        />
+        <CuiFloatingButton
+          grouped
+          :tooltip-props="{ value: t('views.sensors.unhide_selected') }"
+          :button-props="{ severity: 'secondary', disabled: !selectedItems.length || bulkBusy }"
+          :icon="EyeIcon"
+          :icon-props="{ width: '100%', height: '100%' }"
+          @click="bulkSetHidden(false)"
+        />
+        <CuiFloatingButton
+          grouped
+          :tooltip-props="{ value: t('views.sensors.delete_selected') }"
+          :button-props="{ severity: 'danger', disabled: !deletableSelected.length || bulkBusy }"
+          :icon="TrashIcon"
+          :icon-props="{ width: '100%', height: '100%' }"
+          @click="confirmBulkDelete"
+        />
+      </template>
+    </CuiFloatingButtonGroup>
   </div>
 </template>
 
 <script lang="ts" setup>
+import SelectAllIcon from '~icons/fluent/select-all-on-20-filled';
+import CloseIcon from '~icons/mdi/close';
+import EyeIcon from '~icons/mdi/eye';
+import EyeOffIcon from '~icons/mdi/eye-off';
+import TrashIcon from '~icons/mdi/trash-can-outline';
+import GridIcon from '~icons/mingcute/grid-fill';
+import TableIcon from '~icons/mingcute/table-2-line';
+import SelectIcon from '~icons/tabler/dots-filled';
 import PlusIcon from '~icons/typcn/plus';
+import { useAllSensors } from '@camera.ui/browser';
+import { SensorType } from '@camera.ui/sdk';
 
 import { CamerasQuery } from '@/api/routes/cameras.js';
 import { SensorsQuery } from '@/api/routes/sensors.js';
 import { asyncComponent } from '@/common/asyncComponent.js';
 import { sensorTypeIcon } from '@/common/sensorIcons.js';
+import { useCardSelection } from '@/composables/useCardSelection.js';
 
 import type { SensorEditResult } from '@/components/CuiDialog/templates/SensorEdit/types.js';
 import type { VirtualSensorCreateResult } from '@/components/CuiDialog/templates/VirtualSensorCreate/types.js';
@@ -213,15 +405,36 @@ const SensorEditDialog = asyncComponent(() => import('@/components/CuiDialog/tem
 const SensorHistoryDialog = asyncComponent(() => import('@/components/CuiDialog/templates/SensorHistory/SensorHistory.vue'));
 const VirtualSensorCreateDialog = asyncComponent(() => import('@/components/CuiDialog/templates/VirtualSensorCreate/VirtualSensorCreate.vue'));
 
+const ACTIVE_ICON_STYLE: Record<string, string> = {
+  color: 'rgb(251, 146, 60)',
+  filter: 'drop-shadow(0 0 6px rgba(251, 146, 60, 0.6))',
+};
+
+const DETECTED_ACTIVE_TYPES: ReadonlySet<string> = new Set([
+  SensorType.Motion,
+  SensorType.Object,
+  SensorType.Audio,
+  SensorType.Face,
+  SensorType.LicensePlate,
+  SensorType.Classifier,
+  SensorType.Contact,
+  SensorType.Occupancy,
+  SensorType.Smoke,
+  SensorType.Leak,
+]);
+
 const sensorsQuery = new SensorsQuery();
 const camerasQuery = new CamerasQuery();
 
 const dialog = useCuiDialog();
+const toast = useCuiToast();
 const { t } = useI18n();
 const { smBreakpoint } = useSharedCuiBreakpoint();
 
 const uiStore = useUiStore();
 const { uiSettings } = storeToRefs(uiStore);
+
+const { sensors: liveSensors } = useAllSensors();
 
 const { data: sensorsData, isBusy: isLoading } = sensorsQuery.getSensorsQuery();
 const { data: camerasData } = camerasQuery.getCamerasQuery({ page: 1, pageSize: -1 });
@@ -291,6 +504,46 @@ const visibleRows = computed(() => (showHidden.value ? rows.value : rows.value.f
 
 const hiddenCount = computed(() => rows.value.filter((row) => row.sensor.hidden).length);
 
+const viewMode = computed(() => uiSettings.value.sensors.view);
+
+const liveSensorById = computed(() => new Map(liveSensors.value.map((sensor) => [sensor.id, sensor])));
+
+const { selectionMode, selectedIds, selectedItems, allSelected, bulkBusy, enterSelectionMode, exitSelectionMode, toggleSelectAll, toggleSelection } =
+  useCardSelection(
+    () => visibleRows.value,
+    (row) => row.sensor.id,
+  );
+
+const deletableSelected = computed(() => selectedItems.value.filter((row) => canDelete(row.sensor)));
+
+function toggleViewMode() {
+  uiSettings.value.sensors.view = viewMode.value === 'cards' ? 'table' : 'cards';
+}
+
+function isSensorActive(sensor: TransformedSensor): boolean {
+  const live = liveSensorById.value.get(sensor.id);
+  const get = (property: string): unknown => (live ? live.getProperty(property) : (sensor.properties as Record<string, unknown> | undefined)?.[property]);
+
+  switch (sensor.type) {
+    case SensorType.Light:
+    case SensorType.Switch:
+      return !!get('on');
+    case SensorType.Siren:
+      return !!get('active');
+    case SensorType.Doorbell:
+      return !!get('ring');
+    case SensorType.Garage:
+    case SensorType.Lock:
+      return get('currentState') === 0;
+    case SensorType.SecuritySystem:
+      return get('currentState') === 4;
+    case SensorType.Battery:
+      return !!get('low');
+    default:
+      return DETECTED_ACTIVE_TYPES.has(String(sensor.type)) && !!get('detected');
+  }
+}
+
 function rowClass(row: SensorRow): string {
   return row.sensor.hidden ? 'opacity-50' : '';
 }
@@ -300,6 +553,10 @@ function canDelete(sensor: TransformedSensor): boolean {
 }
 
 function handleRowClick(row: SensorRow) {
+  if (selectionMode.value) {
+    toggleSelection(row.sensor.id);
+    return;
+  }
   if (!isAdmin.value || row.sensor.hidden) return;
 
   dialog.openComponentDialog(SensorEditDialog, {
@@ -333,6 +590,63 @@ function openHistoryDialog(sensor: TransformedSensor) {
 
 async function setSensorHidden(sensor: TransformedSensor, hidden: boolean) {
   await patchSensor({ id: sensor.id, data: { hidden } });
+}
+
+async function runBulk(targets: SensorRow[], action: (row: SensorRow) => Promise<unknown>): Promise<{ done: number; failed: string[] }> {
+  const failed: string[] = [];
+  let done = 0;
+
+  bulkBusy.value = true;
+  try {
+    await Promise.all(
+      targets.map(async (row) => {
+        try {
+          await action(row);
+          done++;
+        } catch {
+          failed.push(row.label);
+        }
+      }),
+    );
+  } finally {
+    bulkBusy.value = false;
+  }
+
+  return { done, failed };
+}
+
+function reportBulk(done: number, failed: string[], doneKey: string): void {
+  if (failed.length) {
+    toast.add({ severity: 'error', summary: t('views.sensors.bulk_failed', { count: failed.length }), detail: failed.join(', '), life: 8000 });
+  }
+  if (done) {
+    toast.add({ severity: 'success', detail: t(doneKey, { count: done }), life: 5000 });
+  }
+}
+
+async function bulkSetHidden(hidden: boolean) {
+  const { done, failed } = await runBulk([...selectedItems.value], (row) => patchSensor({ id: row.sensor.id, data: { hidden } }));
+  exitSelectionMode();
+  reportBulk(done, failed, hidden ? 'views.sensors.hide_selected_done' : 'views.sensors.unhide_selected_done');
+}
+
+function confirmBulkDelete() {
+  const targets = [...deletableSelected.value];
+  dialog.openTextDialog({
+    data: {
+      title: t('components.dialog.title.confirm'),
+      contentText: t('views.sensors.delete_selected_confirm', { count: targets.length }),
+      confirmText: t('components.form.button.remove'),
+      confirmButtonProps: {
+        severity: 'danger',
+      },
+    },
+    onConfirm: async () => {
+      const { done, failed } = await runBulk(targets, (row) => deleteSensor({ id: row.sensor.id }));
+      exitSelectionMode();
+      reportBulk(done, failed, 'views.sensors.delete_selected_done');
+    },
+  });
 }
 
 function openCreateDialog() {

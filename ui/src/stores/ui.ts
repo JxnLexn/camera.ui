@@ -32,6 +32,7 @@ const defaultUiSettings: UiSettingsLocalStorage & LoggerLocalStorage = {
   },
   sensors: {
     hideCameraBound: true,
+    view: 'table',
   },
   plugins: {
     view: 'cards',

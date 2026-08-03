@@ -637,6 +637,7 @@ export interface InterfaceSettinges {
 
 export interface SensorsSettings {
   hideCameraBound: boolean;
+  view: 'cards' | 'table';
 }
 
 export interface PluginsViewSettings {

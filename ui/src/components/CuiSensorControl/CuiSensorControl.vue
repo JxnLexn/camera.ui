@@ -136,6 +136,17 @@
     size="small"
     class="card-border"
   />
+
+  <CuiDetectionSensorInfo
+    v-else-if="isDetectionInfo(sensor)"
+    :type="sensor.type"
+    :label="sensor.displayName.value"
+    :detected="sensor.getProperty('detected') ?? false"
+    :labels="detectionLabels(sensor)"
+    :decibels="sensor.type === SensorType.Audio ? (sensor.getProperty(AudioProperty.Decibels) ?? undefined) : undefined"
+    size="small"
+    class="card-border"
+  />
 </template>
 
 <script setup lang="ts">
@@ -156,6 +167,7 @@ import {
   isReactiveTemperatureInfo,
 } from '@camera.ui/browser';
 import {
+  AudioProperty,
   BatteryProperty,
   ContactProperty,
   DoorbellProperty,
@@ -166,11 +178,15 @@ import {
   LockProperty,
   OccupancyProperty,
   SecuritySystemProperty,
+  SensorType,
   SirenProperty,
   SmokeProperty,
   SwitchProperty,
   TemperatureProperty,
 } from '@camera.ui/sdk';
+
+import CuiDetectionSensorInfo from '@/components/CuiDetectionSensorInfo/CuiDetectionSensorInfo.vue';
+import { DETECTION_INFO_TYPES } from './types.js';
 
 import type { ReactiveSensor } from '@camera.ui/browser';
 
@@ -178,4 +194,13 @@ defineProps<{
   sensor: ReactiveSensor<any>;
   disabled?: boolean;
 }>();
+
+function isDetectionInfo(sensor: ReactiveSensor<any>): boolean {
+  return DETECTION_INFO_TYPES.has(sensor.type as SensorType);
+}
+
+function detectionLabels(sensor: ReactiveSensor<any>): string[] {
+  const detections = (sensor.getProperty('detections') ?? []) as { label?: string; attribute?: string }[];
+  return [...new Set(detections.map((d) => d.label ?? d.attribute).filter((label): label is string => !!label))];
+}
 </script>
