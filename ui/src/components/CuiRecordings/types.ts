@@ -45,6 +45,8 @@ export interface RecordingsFilterSidebarProps {
   cameras: { id: string; name: string }[];
   isOpen: boolean;
   isOverlay: boolean;
+  resultCount: number;
+  semanticCount?: number;
   semanticSearchAvailable?: boolean;
   semanticSearchLoading?: boolean;
 }

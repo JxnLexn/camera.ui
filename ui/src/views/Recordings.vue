@@ -13,11 +13,21 @@
       </Button>
     </CuiTopbarSlot>
 
+    <CuiTopbarSlot position="right">
+      <Button severity="secondary" class="cui-button p-2 text-color" text rounded @click="viewMenuRef?.toggleMenu($event)">
+        <template #icon>
+          <i-carbon:settings width="100%" height="100%" />
+        </template>
+      </Button>
+    </CuiTopbarSlot>
+
     <RecordingsFilterSidebar
       :filters="filters"
       :cameras="availableCameras"
       :is-open="sidebarOpen"
       :is-overlay="sidebarIsOverlay"
+      :result-count="gridItems.length"
+      :semantic-count="isSemanticActive ? semanticEventIds.size : undefined"
       :semantic-search-available="semanticAvailable"
       :semantic-search-loading="semanticSearching"
       @update:filters="onFilterUpdate"
@@ -55,6 +65,21 @@
           </div>
         </div>
 
+        <div v-if="!smBreakpoint" class="fixed right-0 z-10 h-[calc(40px+1rem)] py-2 pr-2 flex items-center">
+          <Button
+            v-tooltip.bottom="{ value: $t('views.recordings.view_options') }"
+            severity="secondary"
+            text
+            rounded
+            class="cui-icon-lg relative z-2"
+            @click="viewMenuRef?.toggleMenu($event)"
+          >
+            <template #icon>
+              <i-carbon:settings width="100%" height="100%" />
+            </template>
+          </Button>
+        </div>
+
         <div
           class="px-2 h-full w-full flex flex-col"
           :class="{
@@ -62,29 +87,6 @@
             'pt-[calc(40px+2rem)]': !smBreakpoint,
           }"
         >
-          <div v-if="displayEvents.length || isSemanticActive" class="flex items-center gap-2 mb-2 text-xs text-muted ml-auto">
-            <Button
-              v-tooltip.bottom="{ value: $t('views.recordings.ungroup') }"
-              :severity="ungrouped ? 'primary' : 'secondary'"
-              text
-              rounded
-              class="cui-icon-sm"
-              @click="ungrouped = !ungrouped"
-            >
-              <template #icon>
-                <i-mdi:view-grid-outline v-if="!ungrouped" width="100%" height="100%" />
-                <i-mdi:view-grid v-else width="100%" height="100%" />
-              </template>
-            </Button>
-            <span>{{ $t('views.recordings.result_count', { count: gridItems.length }) }}</span>
-            <template v-if="isSemanticActive">
-              <span class="inline-flex items-center gap-1">
-                <i-tabler:sparkles class="w-3 h-3" />
-                {{ $t('views.recordings.semantic_results', { count: semanticEventIds.size }) }}
-              </span>
-            </template>
-          </div>
-
           <CuiRecordingsGrid
             v-if="gridItems.length"
             ref="gridRef"
@@ -130,6 +132,20 @@
       force-visible
       @click="openExportDialog"
     />
+
+    <CuiMenu
+      ref="viewMenuRef"
+      :items="viewMenuItems"
+      :auto-hide="false"
+      :popover="{
+        pt: {
+          root: { class: 'w-[22rem]' },
+          content: {
+            class: 'p-0! rounded-xl! overflow-hidden!',
+          },
+        },
+      }"
+    />
   </div>
 </template>
 
@@ -141,10 +157,12 @@ import SparklesIcon from '~icons/tabler/sparkles';
 import { CamerasQuery } from '@/api/routes/cameras.js';
 import CameraEventDialog from '@/components/CuiDialog/templates/CameraStreamEvent/CameraStreamEvent.vue';
 import ExportRecordings from '@/components/CuiDialog/templates/ExportRecordings/ExportRecordings.vue';
+import CuiMenu from '@/components/CuiMenu/CuiMenu.vue';
 import RecordingsFilterSidebar from '@/components/CuiRecordings/RecordingsFilterSidebar.vue';
 
 import type { CameraStreamEventProps } from '@/components/CuiDialog/templates/CameraStreamEvent/types.js';
 import type { GridRegion } from '@/components/CuiGridSearch/types.js';
+import type { MenuItem } from '@/components/CuiMenu/types.js';
 import type { RecordingsFilterState } from '@/components/CuiRecordings/types.js';
 import type { EventThumbnails, GetEventsOptions } from '@camera.ui/nvr';
 import type { BoundingBox, DetectionEvent } from '@camera.ui/sdk';
@@ -192,6 +210,7 @@ const TIME_RANGE_MS: Record<string, number> = {
 };
 
 const gridRef = useTemplateRef<{ scrollToTop: () => void }>('gridRef');
+const viewMenuRef = useTemplateRef<InstanceType<typeof CuiMenu>>('viewMenuRef');
 const sidebarState = ref<'opened' | 'closed'>('closed');
 const layoutReady = ref(false);
 const filters = ref<RecordingsFilterState>({
@@ -314,6 +333,29 @@ const gridItems = computed<UngroupedItem[]>(() => {
   if (ungrouped.value && ungroupedItems.value.length) return ungroupedItems.value;
   return displayEvents.value.map((event) => ({ event, key: event.id }));
 });
+
+const viewMenuItems = computed<MenuItem[]>(() => [
+  {
+    key: 'ungroup',
+    label: t('views.recordings.ungroup'),
+    description: t('views.recordings.ungroup_hint'),
+    toggle: true,
+    toggleState: ungrouped.value,
+    onClick: () => {
+      ungrouped.value = !ungrouped.value;
+    },
+  },
+  {
+    key: 'onlyWithRecordings',
+    label: t('views.recordings.only_with_recordings'),
+    description: t('views.recordings.only_with_recordings_hint'),
+    toggle: true,
+    toggleState: filters.value.onlyWithRecordings,
+    onClick: () => {
+      filters.value = { ...filters.value, onlyWithRecordings: !filters.value.onlyWithRecordings };
+    },
+  },
+]);
 
 function openExportDialog(): void {
   dialog.openComponentDialog(ExportRecordings, {

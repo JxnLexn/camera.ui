@@ -19,12 +19,7 @@
             @update:model-value="updateSearchDebounced($event as string)"
           />
         </span>
-      </div>
-
-      <div class="sidebar-divider" />
-      <div class="flex items-center justify-between gap-2">
-        <label class="sidebar-section-title !mb-0">{{ $t('views.recordings.only_with_recordings') }}</label>
-        <ToggleSwitch :model-value="filters.onlyWithRecordings" class="shrink-0" @update:model-value="updateFilter('onlyWithRecordings', $event)" />
+        <span class="text-xs text-muted">{{ $t('views.recordings.result_count', { count: resultCount }) }}</span>
       </div>
 
       <div class="sidebar-divider" />
@@ -50,6 +45,10 @@
           :disabled="!semanticSearchAvailable || !semanticInput?.trim()"
           @click="submitSemanticSearch"
         />
+        <span v-if="semanticCount != null" class="inline-flex items-center gap-1 text-xs text-muted">
+          <i-tabler:sparkles class="w-3 h-3" />
+          {{ $t('views.recordings.semantic_results', { count: semanticCount }) }}
+        </span>
         <div v-if="filters.semanticQuery" class="flex flex-col gap-1.5 mt-1">
           <label class="text-xs text-muted">{{ $t('views.recordings.min_match_score') }}</label>
           <div class="flex items-center gap-3">

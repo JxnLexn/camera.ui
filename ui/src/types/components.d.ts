@@ -427,6 +427,8 @@ declare module 'vue' {
     'IMingcute:gridFill': typeof import('~icons/mingcute/grid-fill')['default']
     'IMingcute:photoAlbumFill': typeof import('~icons/mingcute/photo-album-fill')['default']
     'IMingcute:runFill': typeof import('~icons/mingcute/run-fill')['default']
+    'IMingcute:table2': typeof import('~icons/mingcute/table2')['default']
+    'IMingcute:table2Line': typeof import('~icons/mingcute/table2-line')['default']
     'IMingcute:timelineFill': typeof import('~icons/mingcute/timeline-fill')['default']
     'IMingcute:timelineLine': typeof import('~icons/mingcute/timeline-line')['default']
     'IMynaui:letterHSquareSolid': typeof import('~icons/mynaui/letter-h-square-solid')['default']
