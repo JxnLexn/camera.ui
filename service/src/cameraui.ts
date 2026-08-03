@@ -377,10 +377,12 @@ export class CameraUiCLI {
       } else {
         // the service often runs as a dedicated user; without -H, commands that
         // target the existing install must use the home path the installer
-        // recorded, not the invoking user's home
+        // recorded, not the invoking user's home. In docker nothing is
+        // persisted (s6 passes -H itself), but the image sets the env — an
+        // exec'd update-server without -H must not stage into /root/.camera.ui
         const targetsExistingInstall = ['logs', 'status', 'start', 'stop', 'restart', 'update-server', 'uninstall'].includes(this.action);
         const persistedHomePath = targetsExistingInstall ? this.installer.getPersistedHomePath() : undefined;
-        this.homePath = persistedHomePath ?? join(this.getUserHomeDir(), '.camera.ui');
+        this.homePath = persistedHomePath ?? process.env.CAMERA_UI_HOME_PATH ?? join(this.getUserHomeDir(), '.camera.ui');
       }
     } else {
       this.homePath = resolve(this.homePath);
