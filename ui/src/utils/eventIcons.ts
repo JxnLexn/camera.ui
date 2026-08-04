@@ -1,4 +1,13 @@
+import IconProblem from '~icons/mdi/alert-circle-outline';
 import IconFaceId from '~icons/mdi/face-recognition';
+import IconHeat from '~icons/mdi/fire';
+import IconGas from '~icons/mdi/gas-cylinder';
+import IconCoGas from '~icons/mdi/molecule-co';
+import IconTamper from '~icons/mdi/shield-alert-outline';
+import IconSmoke from '~icons/mdi/smoke-detector';
+import IconCold from '~icons/mdi/snowflake';
+import IconVibration from '~icons/mdi/vibrate';
+import IconLeak from '~icons/mdi/water-alert-outline';
 import IconActivity from '~icons/tabler/activity';
 import IconAlarm from '~icons/tabler/alarm';
 import IconAlertOctagon from '~icons/tabler/alert-octagon';
@@ -44,6 +53,15 @@ const icons: Record<string, Component> = {
   siren: IconSpeakerphone,
   security_system: IconShieldLock,
   'line-crossing': IconArrowsCross,
+  smoke: IconSmoke,
+  gas: IconGas,
+  carbonMonoxide: IconCoGas,
+  heat: IconHeat,
+  leak: IconLeak,
+  cold: IconCold,
+  vibration: IconVibration,
+  tamper: IconTamper,
+  problem: IconProblem,
   // Special filter for classifier-produced types
   other: IconPuzzle,
   // Audio labels

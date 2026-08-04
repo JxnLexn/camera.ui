@@ -1,11 +1,5 @@
 <template>
-  <div
-    class="cui-measurement-info"
-    :class="[
-      `cui-measurement-info--${size}`,
-      { 'cui-measurement-info--disabled': disabled },
-    ]"
-  >
+  <div class="cui-measurement-info" :class="[`cui-measurement-info--${size}`, { 'cui-measurement-info--disabled': disabled }]">
     <div class="cui-measurement-info__header">
       <div class="cui-measurement-info__icon">
         <component :is="typeIcon" class="cui-measurement-info__icon-svg" />
