@@ -24,6 +24,8 @@ All notable changes to this project will be documented in this file.
 
 - **Doorbells ring into the timeline out of the box.** A doorbell sensor that lands on a camera now becomes a detection trigger automatically, so a press starts an event without ticking it under Detection > Sensor Triggers first. Applies to newly added doorbells, existing setups keep their configuration.
 
+- **Server updates restart on their own.** After updating from Settings > System the server now restarts right away instead of waiting for a click on Restart. The interface was not usable in between anyway, now it just comes back on the new version.
+
 - **Plugins can be managed in bulk.** A select button next to the plus starts a selection in both views, then update, enable, disable or uninstall everything selected in one go, with a summary at the end.
 
 - **The Apple TV app has a Sensors page.** Every sensor as a tile like in Apple's Home app, grouped by type, with live states straight from the server. A click switches lights, switches, sirens, locks and the garage; holding select opens a panel with brightness, volume or the alarm modes. New sensors appear on their own, removed ones disappear.

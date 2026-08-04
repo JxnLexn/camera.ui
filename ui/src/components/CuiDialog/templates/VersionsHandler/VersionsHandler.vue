@@ -125,7 +125,6 @@ const { data: pluginCompat, suspense: pluginCompatSuspense } = pluginsQuery.getP
   pluginQueryVersion,
 );
 const { mutate: restartServer, isPending: restartServerLoading } = serverQuery.restartServerQuery();
-const { mutate: restartPlugin, isPending: restartPluginLoading } = pluginsQuery.restartPluginQuery();
 const { mutateAsync: installPlugin, isPending: installPluginLoading } = pluginsQuery.installPluginQuery();
 const { mutateAsync: uninstallPlugin, isPending: uninstallPluginLoading } = pluginsQuery.uninstallPluginQuery();
 const { mutateAsync: updateServer, isPending: updateServerLoading } = serverQuery.updateServerQuery();
@@ -154,7 +153,6 @@ const isLoading = computed(() =>
     installPluginLoading.value ||
     uninstallPluginLoading.value ||
     updateServerLoading.value ||
-    restartPluginLoading.value ||
     restartServerLoading.value,
   ),
 );
@@ -300,12 +298,16 @@ async function installTarget(version: string): Promise<void> {
         },
       });
       queryClient.invalidateQueries({ queryKey: ['api'] });
+      beginServerRestart();
+      restartServer();
+      dialogRef.value.close();
+      return;
     }
 
     newVersionInstalled.value = true;
 
     if (dialogRefProps.confirmText) {
-      dialogRefProps.confirmText.value = isServerTarget(target.value) ? t('components.form.button.restart') : t('components.form.button.finish');
+      dialogRefProps.confirmText.value = t('components.form.button.finish');
     }
   } catch (error: any) {
     toast.add({ severity: 'error', detail: error, life: 3000 });
@@ -332,17 +334,6 @@ async function uninstallTarget(): Promise<void> {
   }
 }
 
-function restartTarget() {
-  if (isPluginTarget(target.value)) {
-    restartPlugin({
-      pluginName: target.value.pluginName,
-    });
-  } else if (isServerTarget(target.value)) {
-    beginServerRestart();
-    restartServer();
-  }
-}
-
 async function onConfirm(): Promise<void | null> {
   if (isUninstall.value) {
     if (uninstallDone.value) {
@@ -354,9 +345,6 @@ async function onConfirm(): Promise<void | null> {
   }
 
   if (newVersionInstalled.value) {
-    if (isServerTarget(target.value)) {
-      restartTarget();
-    }
     return;
   }
 
