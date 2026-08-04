@@ -3,7 +3,7 @@ import { useQueries } from '@tanstack/vue-query';
 import { i18n } from '@/i18n/index.js';
 import { axiosInstance as api } from '..';
 
-import type { DBInstance, UserData } from '@shared/types';
+import type { BulkResult, DBInstance, UserData } from '@shared/types';
 import type { AxiosResponse } from 'axios';
 
 export interface ServerStatus {
@@ -80,6 +80,11 @@ export async function deleteInstanceFn(id: string): Promise<void> {
   await api.delete(`/instances/${id}`);
 }
 
+export async function bulkDeleteInstancesFn({ ids }: { ids: string[] }): Promise<BulkResult> {
+  const response: AxiosResponse<BulkResult> = await api.delete('/instances', { data: { ids } });
+  return response.data;
+}
+
 export async function toggleFavoriteFn(id: string): Promise<{ favorite: boolean }> {
   const response: AxiosResponse<{ favorite: boolean }> = await api.patch(`/instances/${id}/favorite`);
   return response.data;
@@ -151,6 +156,22 @@ export class InstancesQuery {
       onSuccess: async () => {
         await this._queryClient.refetchQueries({ queryKey: ['instances'] });
         this.toast.add({ severity: 'success', detail: this.t('views.settings.instances.removed'), life: 3000 });
+      },
+    });
+  }
+
+  public bulkDeleteMutation() {
+    return useMutation({
+      mutationFn: async ({ ids }: { ids: string[] }) => {
+        const result = await bulkDeleteInstancesFn({ ids });
+        for (const id of ids) {
+          await this._queryClient.cancelQueries({ queryKey: ['instances', id, 'status'] });
+          this._queryClient.removeQueries({ queryKey: ['instances', id, 'status'] });
+        }
+        return result;
+      },
+      onSuccess: async () => {
+        await this._queryClient.refetchQueries({ queryKey: ['instances'] });
       },
     });
   }

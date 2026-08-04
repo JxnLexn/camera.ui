@@ -105,8 +105,19 @@ export const geofenceParamsSchema = zod.object({
   geofenceId: zod.string().min(1, 'Geofence ID is required'),
 });
 
+export const bulkPatchAutomationsSchema = zod.object({
+  ids: zod.array(zod.string().min(1)).min(1).max(10000),
+  data: zod.object({ enabled: zod.boolean() }),
+});
+
+export const bulkDeleteAutomationsSchema = zod.object({
+  ids: zod.array(zod.string().min(1)).min(1).max(10000),
+});
+
 export type CreateAutomationInput = zod.output<typeof createAutomationSchema>;
 export type PatchAutomationInput = zod.output<typeof patchAutomationSchema>;
+export type BulkPatchAutomationsInput = zod.output<typeof bulkPatchAutomationsSchema>;
+export type BulkDeleteAutomationsInput = zod.output<typeof bulkDeleteAutomationsSchema>;
 export type ImportBlueprintInput = zod.output<typeof importBlueprintSchema>;
 export type WebhookBodyInput = zod.output<typeof webhookBodySchema>;
 export type LocationBodyInput = zod.output<typeof locationBodySchema>;

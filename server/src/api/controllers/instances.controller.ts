@@ -1,7 +1,14 @@
 import { InstancesService } from '../services/instances.service.js';
 
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
-import type { AuthLoginRequest, CreateInstanceRequest, InstanceLoginRequest, InstanceParamsRequest, UpdateInstanceRequest } from '../types/index.js';
+import type {
+  AuthLoginRequest,
+  CreateInstanceRequest,
+  InstanceLoginRequest,
+  InstanceParamsRequest,
+  InstancesBulkDeleteRequest,
+  UpdateInstanceRequest,
+} from '../types/index.js';
 
 export class InstancesController {
   private service: InstancesService;
@@ -59,6 +66,15 @@ export class InstancesController {
         return reply.code(404).send({ statusCode: 404, message: 'Instance not found' });
       }
       return reply.code(200).send({ message: 'Instance removed' });
+    } catch (error: any) {
+      return reply.code(500).send({ statusCode: 500, message: error.message });
+    }
+  }
+
+  public async removeBulk(req: FastifyRequest<AuthLoginRequest & InstancesBulkDeleteRequest>, reply: FastifyReply): Promise<FastifyReply> {
+    try {
+      const result = await this.service.removeMany(req.body.ids);
+      return reply.code(200).send(result);
     } catch (error: any) {
       return reply.code(500).send({ statusCode: 500, message: error.message });
     }

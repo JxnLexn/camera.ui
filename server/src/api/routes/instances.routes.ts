@@ -1,7 +1,7 @@
 import { InstancesController } from '../controllers/instances.controller.js';
 import { onlyAdminCanDoThisAction } from '../middlewares/authPermission.middleware.js';
 import { validJWTNeeded } from '../middlewares/authValidation.middleware.js';
-import { createInstanceSchema, instanceLoginSchema, instanceParamsSchema, updateInstanceSchema } from '../schemas/instances.schema.js';
+import { bulkDeleteInstancesSchema, createInstanceSchema, instanceLoginSchema, instanceParamsSchema, updateInstanceSchema } from '../schemas/instances.schema.js';
 
 import type { FastifyInstance, FastifyPluginAsync } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
@@ -88,6 +88,18 @@ export const InstancesRoute: FastifyPluginAsync = async (app: FastifyInstance): 
       tags: ['Instances'],
       summary: 'Remove a remote instance',
       params: instanceParamsSchema,
+    },
+  });
+
+  app.withTypeProvider<ZodTypeProvider>().route({
+    url: '/',
+    method: 'DELETE',
+    preValidation: [validJWTNeeded, onlyAdminCanDoThisAction],
+    handler: controller.removeBulk.bind(controller),
+    schema: {
+      tags: ['Instances'],
+      summary: 'Remove multiple remote instances at once',
+      body: bulkDeleteInstancesSchema,
     },
   });
 

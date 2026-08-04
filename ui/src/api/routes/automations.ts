@@ -2,7 +2,7 @@ import { i18n } from '@/i18n/index.js';
 import { axiosInstance as api } from '..';
 
 import type { AutomationInputType, AutomationStoreBlueprint } from '@/components/CuiAutomation/types.js';
-import type { AutomationRun, DBAutomation, MethodKeys } from '@shared/types';
+import type { AutomationRun, BulkResult, DBAutomation, MethodKeys } from '@shared/types';
 import type { AxiosResponse } from 'axios';
 
 export interface PluginMethodParam {
@@ -66,6 +66,16 @@ export async function patchAutomationFn({ id, data }: { id: string; data: Partia
 
 export async function deleteAutomationFn({ id }: { id: string }): Promise<void> {
   await api.delete(`/automations/${id}`);
+}
+
+export async function bulkPatchAutomationsFn({ ids, data }: { ids: string[]; data: { enabled: boolean } }): Promise<BulkResult> {
+  const response: AxiosResponse<BulkResult> = await api.patch('/automations', { ids, data });
+  return response.data;
+}
+
+export async function bulkDeleteAutomationsFn({ ids }: { ids: string[] }): Promise<BulkResult> {
+  const response: AxiosResponse<BulkResult> = await api.delete('/automations', { data: { ids } });
+  return response.data;
 }
 
 export async function triggerAutomationFn({ id }: { id: string }): Promise<{ output?: Record<string, string> }> {
@@ -160,6 +170,24 @@ export class AutomationsQuery {
   public deleteAutomationQuery() {
     return useMutation({
       mutationFn: deleteAutomationFn,
+      onSuccess: async () => {
+        await this._queryClient.refetchQueries({ queryKey: ['automationsList'] });
+      },
+    });
+  }
+
+  public bulkPatchAutomationsQuery() {
+    return useMutation({
+      mutationFn: bulkPatchAutomationsFn,
+      onSuccess: async () => {
+        await this._queryClient.refetchQueries({ queryKey: ['automationsList'] });
+      },
+    });
+  }
+
+  public bulkDeleteAutomationsQuery() {
+    return useMutation({
+      mutationFn: bulkDeleteAutomationsFn,
       onSuccess: async () => {
         await this._queryClient.refetchQueries({ queryKey: ['automationsList'] });
       },

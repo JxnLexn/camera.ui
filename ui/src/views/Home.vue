@@ -100,9 +100,10 @@
       </Transition>
     </div>
 
-    <CuiFloatingButtonGroup v-if="sortedCameras.length > 1" :force-visible="selectionMode">
+    <CuiFloatingButtonGroup v-if="sortedCameras.length" :force-visible="selectionMode">
       <template v-if="!selectionMode">
         <CuiFloatingButton
+          v-if="sortedCameras.length > 1"
           grouped
           :tooltip-props="{ value: viewMode === 'default' ? $t('components.form.tooltip.view_grouped') : $t('components.form.tooltip.view_default') }"
           :button-props="{ severity: viewMode === 'default' ? 'secondary' : 'primary' }"
@@ -111,6 +112,7 @@
           @click="toggleViewMode"
         />
         <CuiFloatingButton
+          v-if="sortedCameras.length > 1"
           grouped
           :tooltip-props="{ value: uiSettings.cameras.dragDisabled ? $t('components.form.tooltip.enable_drag') : $t('components.form.tooltip.disable_drag') }"
           :button-props="{ severity: uiSettings.cameras.dragDisabled ? 'secondary' : 'success' }"
@@ -202,13 +204,13 @@ import GridIcon from '~icons/mdi/view-grid';
 import SnoozeIcon from '~icons/solar/moon-sleep-bold';
 import SelectIcon from '~icons/tabler/dots-filled';
 
-import { CamerasQuery, patchCameraFn, removeCameraFn } from '@/api/routes/cameras.js';
+import { bulkDeleteCamerasFn, bulkPatchCamerasFn, CamerasQuery } from '@/api/routes/cameras.js';
 import { asyncComponent } from '@/common/asyncComponent.js';
 import { extractErrorMessage, getImageUrl } from '@/common/utils.js';
 
 import type CuiCameraSnapshot from '@/components/CuiCameraSnapshot/CuiCameraSnapshot.vue';
 import type { CameraConsoleProps } from '@/components/CuiDialog/templates/CameraConsole/types.js';
-import type { DBCamera } from '@shared/types';
+import type { BulkResult, DBCamera } from '@shared/types';
 
 interface CameraGroup {
   room: string;
@@ -347,28 +349,21 @@ function moveGroupCard(room: string, id: string, atIndex: number) {
   uiSettings.value.cameras.groupOrder = groupOrder;
 }
 
-const selectionMode = ref(false);
-const selectedIds = ref(new Set<string>());
-const bulkBusy = ref(false);
+const {
+  selectionMode,
+  selectedIds,
+  selectedItems: selectedCameras,
+  allSelected,
+  bulkBusy,
+  enterSelectionMode,
+  exitSelectionMode,
+  toggleSelectAll,
+  toggleSelection,
+} = useCardSelection(sortedCameras, (camera) => camera._id);
 
-const selectedCameras = computed(() => sortedCameras.value.filter((camera) => selectedIds.value.has(camera._id)));
-const allSelected = computed(() => sortedCameras.value.length > 0 && sortedCameras.value.every((camera) => selectedIds.value.has(camera._id)));
 const allSelectedDisabled = computed(() => selectedCameras.value.length > 0 && selectedCameras.value.every((camera) => camera.disabled));
 const allSelectedSnoozed = computed(() => selectedCameras.value.length > 0 && selectedCameras.value.every((camera) => camera.detectionSettings?.snooze));
 const allSelectedRecording = computed(() => selectedCameras.value.length > 0 && selectedCameras.value.every((camera) => camera.recordingSettings?.enabled !== false));
-
-function enterSelectionMode() {
-  selectionMode.value = true;
-}
-
-function exitSelectionMode() {
-  selectionMode.value = false;
-  selectedIds.value = new Set();
-}
-
-function toggleSelectAll() {
-  selectedIds.value = allSelected.value ? new Set() : new Set(sortedCameras.value.map((camera) => camera._id));
-}
 
 function onCardDragEnd() {
   lastDragEnd = Date.now();
@@ -383,24 +378,20 @@ function onCardClick(camera: DBCamera) {
     return;
   }
 
-  const next = new Set(selectedIds.value);
-  if (next.has(camera._id)) {
-    next.delete(camera._id);
-  } else {
-    next.add(camera._id);
-  }
-  selectedIds.value = next;
+  toggleSelection(camera._id);
 }
 
-async function runBulk(operation: (camera: DBCamera) => Promise<unknown>, successDetail: string) {
+async function runBulk(operation: () => Promise<BulkResult>, successDetail: string) {
   if (!selectedCameras.value.length || bulkBusy.value) return;
 
   bulkBusy.value = true;
   try {
-    for (const camera of selectedCameras.value) {
-      await operation(camera);
+    const result = await operation();
+    if (result.failed.length) {
+      toast.add({ severity: 'error', detail: result.failed.map((entry) => `${entry.id}: ${entry.error}`).join(', '), life: 5000 });
+    } else {
+      toast.add({ severity: 'success', detail: successDetail, life: 3000 });
     }
-    toast.add({ severity: 'success', detail: successDetail, life: 3000 });
   } catch (error) {
     toast.add({ severity: 'error', detail: extractErrorMessage(error), life: 4000 });
   } finally {
@@ -411,17 +402,20 @@ async function runBulk(operation: (camera: DBCamera) => Promise<unknown>, succes
 
 async function bulkToggleDisabled() {
   const disabled = !allSelectedDisabled.value;
-  await runBulk((camera) => patchCameraFn({ cameraname: camera.name, cameraData: { disabled } }), t('components.toast.camera_updated'));
+  const cameranames = selectedCameras.value.map((camera) => camera.name);
+  await runBulk(() => bulkPatchCamerasFn({ cameranames, cameraData: { disabled } }), t('components.toast.camera_updated'));
 }
 
 async function bulkToggleSnooze() {
   const snooze = !allSelectedSnoozed.value;
-  await runBulk((camera) => patchCameraFn({ cameraname: camera.name, cameraData: { detectionSettings: { snooze } } }), t('components.toast.camera_updated'));
+  const cameranames = selectedCameras.value.map((camera) => camera.name);
+  await runBulk(() => bulkPatchCamerasFn({ cameranames, cameraData: { detectionSettings: { snooze } } }), t('components.toast.camera_updated'));
 }
 
 async function bulkToggleRecording() {
   const enabled = !allSelectedRecording.value;
-  await runBulk((camera) => patchCameraFn({ cameraname: camera.name, cameraData: { recordingSettings: { enabled } } }), t('components.toast.camera_updated'));
+  const cameranames = selectedCameras.value.map((camera) => camera.name);
+  await runBulk(() => bulkPatchCamerasFn({ cameranames, cameraData: { recordingSettings: { enabled } } }), t('components.toast.camera_updated'));
 }
 
 function confirmBulkDelete() {
@@ -437,7 +431,8 @@ function confirmBulkDelete() {
       },
     },
     onConfirm: async () => {
-      await runBulk((camera) => removeCameraFn({ cameraname: camera.name }), t('components.toast.cameras_removed'));
+      const cameranames = selectedCameras.value.map((camera) => camera.name);
+      await runBulk(() => bulkDeleteCamerasFn({ cameranames }), t('components.toast.cameras_removed'));
       exitSelectionMode();
     },
   });

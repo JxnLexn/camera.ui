@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.1.3]
+
+### Added
+
+- **Bulk actions are single server calls now.** Selecting many cameras, sensors, plugins, automations or instances and deleting, disabling, hiding or updating them sends one request for the whole selection instead of one per item, and reports per item what worked.
+
 ## [2.1.2]
 
 **New plugin: Home Assistant.** Imports your Home Assistant devices into camera.ui. Motion, occupancy, contacts, doorbells, smoke, leak and more become sensors you can assign to cameras as detection triggers. Locks, garage doors, alarm panels, switches, lights and sirens come in as controls and can be switched right from camera.ui. Home Assistant notify services (companion app, TTS, Telegram) can be added as notification targets, so camera.ui alerts reach every channel Home Assistant knows. Inside the Home Assistant add-on it connects without any configuration; everywhere else it takes your Home Assistant URL and an access token.

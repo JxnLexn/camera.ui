@@ -8,18 +8,35 @@ import type { PLUGIN_STATUS } from '../../plugins/types.js';
 import type { AuthConfig } from '../../rpc/interfaces/config.js';
 import type { DBCamera, DBCamviewLayout, DBNotificationSettings, DBRemote, DBRoles, DBServer, DBUser } from '../database/types.js';
 import type { Disable2FAInput, Enable2FAInput, OAuthTokenInput, RefreshTokenInput, RegenerateBackupCodesInput, Verify2FAInput } from '../schemas/auth.schema.js';
-import type { CreateAutomationInput, ImportBlueprintInput, PatchAutomationInput } from '../schemas/automations.schema.js';
+import type {
+  BulkDeleteAutomationsInput,
+  BulkPatchAutomationsInput,
+  CreateAutomationInput,
+  ImportBlueprintInput,
+  PatchAutomationInput,
+} from '../schemas/automations.schema.js';
 import type { PatchBackupSchedulerSettingsInput, RestoreBackupInput, ScheduledBackupParamsInput } from '../schemas/backup.schema.js';
-import type { CameraParamsInput, CreateCameraInput, PatchCameraInput, PreviewCameraInput, SnapshotQueryInput, StreamParamsInput } from '../schemas/cameras.schema.js';
+import type {
+  BulkDeleteCamerasInput,
+  BulkPatchCamerasInput,
+  CameraParamsInput,
+  CreateCameraInput,
+  PatchCameraInput,
+  PreviewCameraInput,
+  SnapshotQueryInput,
+  StreamParamsInput,
+} from '../schemas/cameras.schema.js';
 import type { PaginationQueryInput } from '../schemas/common.schema.js';
 import type { ConfigQueryInput, PatchConfigInput } from '../schemas/config.schema.js';
 import type { FilesParamsInput } from '../schemas/files.schema.js';
 import type { FrameWorkerParamsInput } from '../schemas/frameWorkers.schema.js';
 import type { PatchGo2RtcConfigInput } from '../schemas/go2rtc.schema.js';
-import type { CreateInstanceInput, InstanceLoginInput, UpdateInstanceInput } from '../schemas/instances.schema.js';
+import type { BulkDeleteInstancesInput, CreateInstanceInput, InstanceLoginInput, UpdateInstanceInput } from '../schemas/instances.schema.js';
 import type { PatchMqttInput, TestMqttInput } from '../schemas/mqtt.schema.js';
 import type {
   ActionPluginInput,
+  BulkInstallPluginsInput,
+  BulkPluginNamesInput,
   InstallPluginInput,
   RemoveStorageQueryInput,
   TestAudioInput,
@@ -30,7 +47,7 @@ import type {
   TestObjectInput,
 } from '../schemas/plugins.schema.js';
 import type { CloudflareManagedConnectInput, PairInitInput, PairPollInput, PatchRemoteInput } from '../schemas/remote.schema.js';
-import type { CreateVirtualSensorInput, PatchSensorInput, SensorCommandInput } from '../schemas/sensors.schema.js';
+import type { BulkPatchSensorsInput, CreateVirtualSensorInput, PatchSensorInput, SensorCommandInput } from '../schemas/sensors.schema.js';
 import type { PatchServerInput, ServerChangelogQueryInput, UpdateServerInput } from '../schemas/server.schema.js';
 import type { PatchStorateInput, SetStorageInput, SubmitStorageInput } from '../schemas/storage.schema.js';
 import type {
@@ -394,6 +411,14 @@ export interface CamerasPatchRequest {
   Body: PatchCameraInput;
 }
 
+export interface CamerasBulkPatchRequest {
+  Body: BulkPatchCamerasInput;
+}
+
+export interface CamerasBulkDeleteRequest {
+  Body: BulkDeleteCamerasInput | undefined;
+}
+
 export interface StoragePatchRequest {
   Body: PatchStorateInput;
 }
@@ -450,6 +475,19 @@ export interface PluginsQueryRequest {
 
 export interface PluginsInsertRequest {
   Body: InstallPluginInput;
+}
+
+export interface PluginsBulkInstallRequest {
+  Body: BulkInstallPluginsInput;
+}
+
+export interface PluginsBulkNamesRequest {
+  Body: BulkPluginNamesInput;
+}
+
+export interface PluginsBulkUninstallRequest {
+  Body: BulkPluginNamesInput | undefined;
+  Querystring: RemoveStorageQueryInput;
 }
 
 export interface PluginsConfigPatchRequest {
@@ -898,6 +936,10 @@ export interface InstanceParamsRequest {
   Params: { id: string };
 }
 
+export interface InstancesBulkDeleteRequest {
+  Body: BulkDeleteInstancesInput;
+}
+
 export interface CreateInstanceRequest {
   Body: CreateInstanceInput;
 }
@@ -1024,6 +1066,14 @@ export interface AutomationsPatchRequest {
   Body: PatchAutomationInput;
 }
 
+export interface AutomationsBulkPatchRequest {
+  Body: BulkPatchAutomationsInput;
+}
+
+export interface AutomationsBulkDeleteRequest {
+  Body: BulkDeleteAutomationsInput;
+}
+
 export interface AutomationsImportRequest {
   Body: ImportBlueprintInput;
 }
@@ -1050,6 +1100,16 @@ export interface SensorsCreateVirtualRequest {
 
 export interface SensorsPatchRequest {
   Body: PatchSensorInput;
+}
+
+export interface SensorsBulkDeleteRequest {
+  Body: {
+    ids: string[];
+  };
+}
+
+export interface SensorsBulkPatchRequest {
+  Body: BulkPatchSensorsInput;
 }
 
 export interface SensorsCommandRequest {

@@ -5,21 +5,19 @@
       height: `${PLUGIN_CARD_SIZE.HEIGHT}px`,
     }"
   >
-    <div v-if="selectionMode" class="absolute inset-0 z-4 cursor-pointer" @click="$emit('select')">
-      <div class="absolute top-3 left-3 pointer-events-none">
-        <div
-          class="w-5 h-5 rounded-full border-2 flex items-center justify-center transition-colors"
-          :class="selected ? 'bg-primary border-primary' : 'bg-black/5 border-neutral-300 dark:bg-white/10 dark:border-neutral-500'"
-        >
-          <i-mdi:check v-if="selected" class="w-3.5 h-3.5 text-white" />
-        </div>
-      </div>
-    </div>
+    <div v-if="selectionMode" class="absolute inset-0 z-4 cursor-pointer" @click="$emit('select')"></div>
 
     <Card class="cui-card" :pt="{ body: { class: 'justify-between h-full' } }">
       <template #content>
         <div class="flex flex-col h-full">
           <div class="flex items-center w-full gap-4">
+            <div
+              v-if="selectionMode"
+              class="w-6 h-6 rounded-full border-2 flex items-center justify-center transition-colors shrink-0"
+              :class="selected ? 'bg-primary border-primary' : 'border-color'"
+            >
+              <i-mdi:check v-if="selected" class="w-4 h-4 text-white" />
+            </div>
             <div class="w-16 h-16 relative rounded-full flex-shrink-0 border-2 border-color">
               <Badge class="absolute right-0 bottom-0 min-w-6 w-6 h-6 rounded-full card-background overflow-hidden p-0 border-4 z-1">
                 <template #default>

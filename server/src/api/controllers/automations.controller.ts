@@ -3,12 +3,15 @@ import { container } from 'tsyringe';
 import { getPluginMethodsForClient } from '../../automations/pluginMethodRegistry.js';
 import { getAutomationBlueprint, getAutomationCatalog, invalidateAutomationRegistry } from '../../utils/automation-registry/index.js';
 import { AutomationsService } from '../services/automations.service.js';
+import { collectBulk } from '../utils/bulk.js';
 
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { AutomationEngine } from '../../automations/engine.js';
 import type { DBAutomation } from '../database/types.js';
 import type {
   AuthLoginRequest,
+  AutomationsBulkDeleteRequest,
+  AutomationsBulkPatchRequest,
   AutomationsCreateRequest,
   AutomationsImportRequest,
   AutomationsParamsGeofenceRequest,
@@ -94,6 +97,30 @@ export class AutomationsController {
         return reply.code(404).send({ statusCode: 404, message: 'Automation not found' });
       }
       return reply.code(200).send({ statusCode: 200, message: 'Automation deleted' });
+    } catch (error: any) {
+      return reply.code(500).send({ statusCode: 500, message: error.message });
+    }
+  }
+
+  public async updateBulk(req: FastifyRequest<AuthLoginRequest & AutomationsBulkPatchRequest>, reply: FastifyReply): Promise<FastifyReply> {
+    try {
+      const result = await collectBulk(req.body.ids, async (id) => {
+        const automation = await this.service.update(id, req.body.data);
+        if (!automation) throw new Error('Automation not found');
+      });
+      return reply.code(200).send(result);
+    } catch (error: any) {
+      return reply.code(500).send({ statusCode: 500, message: error.message });
+    }
+  }
+
+  public async deleteBulk(req: FastifyRequest<AuthLoginRequest & AutomationsBulkDeleteRequest>, reply: FastifyReply): Promise<FastifyReply> {
+    try {
+      const result = await collectBulk(req.body.ids, async (id) => {
+        const success = await this.service.delete(id);
+        if (!success) throw new Error('Automation not found');
+      });
+      return reply.code(200).send(result);
     } catch (error: any) {
       return reply.code(500).send({ statusCode: 500, message: error.message });
     }

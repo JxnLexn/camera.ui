@@ -4,6 +4,7 @@ import { axiosInstance as api } from '..';
 import type { InstallPluginInput } from '@/schemas/plugins.schema.js';
 import type { FormSubmitResponse, JsonSchema } from '@camera.ui/sdk';
 import type {
+  BulkResult,
   CameraUiPlugin,
   EngineCompatResult,
   ExtensionsResponse,
@@ -27,6 +28,30 @@ const PLUGIN_UNINSTALL_TIMEOUT_MS = 600_000;
 
 export async function installPluginFn({ pluginData }: { pluginData: InstallPluginInput }): Promise<CameraUiPlugin> {
   const response: AxiosResponse<CameraUiPlugin> = await api.post('/plugins', pluginData, { timeout: PLUGIN_INSTALL_TIMEOUT_MS });
+  return response.data;
+}
+
+export async function bulkInstallPluginsFn({ plugins }: { plugins: InstallPluginInput[] }): Promise<BulkResult> {
+  const response: AxiosResponse<BulkResult> = await api.post('/plugins/install', { plugins }, { timeout: PLUGIN_INSTALL_TIMEOUT_MS });
+  return response.data;
+}
+
+export async function bulkEnablePluginsFn({ pluginNames }: { pluginNames: string[] }): Promise<BulkResult> {
+  const response: AxiosResponse<BulkResult> = await api.put('/plugins/enable', { pluginNames });
+  return response.data;
+}
+
+export async function bulkDisablePluginsFn({ pluginNames }: { pluginNames: string[] }): Promise<BulkResult> {
+  const response: AxiosResponse<BulkResult> = await api.put('/plugins/disable', { pluginNames });
+  return response.data;
+}
+
+export async function bulkUninstallPluginsFn({ pluginNames, removeStorage }: { pluginNames: string[]; removeStorage?: boolean }): Promise<BulkResult> {
+  const response: AxiosResponse<BulkResult> = await api.delete('/plugins', {
+    data: { pluginNames },
+    params: removeStorage ? { removeStorage: true } : undefined,
+    timeout: PLUGIN_UNINSTALL_TIMEOUT_MS,
+  });
   return response.data;
 }
 

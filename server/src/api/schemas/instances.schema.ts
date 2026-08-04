@@ -31,6 +31,11 @@ export const instanceLoginSchema = zod
   })
   .optional();
 
+export const bulkDeleteInstancesSchema = zod.object({
+  ids: zod.array(zod.string().min(1)).min(1).max(1000),
+});
+
+export type BulkDeleteInstancesInput = zod.output<typeof bulkDeleteInstancesSchema>;
 export type CreateInstanceInput = zod.output<typeof createInstanceSchema>;
 export type UpdateInstanceInput = zod.output<typeof updateInstanceSchema>;
 export type InstanceParamsInput = zod.output<typeof instanceParamsSchema>;

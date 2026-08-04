@@ -241,7 +241,7 @@ import PlusIcon from '~icons/typcn/plus';
 import type { CameraUiPlugin, IConfig, INpmPluginState } from '@shared/types';
 
 import { ConfigQuery } from '@/api/routes/config.js';
-import { disablePluginFn, enablePluginFn, getPluginUpdateFn, installPluginFn, PluginsQuery, uninstallPluginFn } from '@/api/routes/plugins.js';
+import { bulkDisablePluginsFn, bulkEnablePluginsFn, bulkInstallPluginsFn, bulkUninstallPluginsFn, getPluginUpdateFn, PluginsQuery } from '@/api/routes/plugins.js';
 import PluginSearchDialog from '@/components/CuiDialog/templates/PluginSearch/PluginSearch.vue';
 import { PLUGIN_CARD_SIZE } from '@/components/CuiPluginCard/types.js';
 import { useCardSelection } from '@/composables/useCardSelection.js';
@@ -340,27 +340,41 @@ async function refreshAfterUpdates() {
   await loadUpdates();
 }
 
-async function runPluginUpdate(plugin: CameraUiPlugin): Promise<boolean> {
-  const version = updates.value[plugin.pluginName]?.latestVersion;
-  if (!version) return false;
-  const ok = await startUpdate(plugin.pluginName, version, () => installPluginFn({ pluginData: { pluginname: plugin.pluginName, pluginversion: version } }));
-  if (ok) await pluginsQuery.queryClient.refetchQueries({ queryKey: ['plugins', plugin.pluginName] }).catch(() => {});
-  return ok;
+async function runBulkUpdate(targets: CameraUiPlugin[]): Promise<{ done: number; failed: string[] }> {
+  const entries = targets
+    .map((plugin) => ({ plugin, version: updates.value[plugin.pluginName]?.latestVersion }))
+    .filter((entry): entry is { plugin: CameraUiPlugin; version: string } => Boolean(entry.version));
+  if (!entries.length) return { done: 0, failed: [] };
+
+  const bulk = bulkInstallPluginsFn({ plugins: entries.map((entry) => ({ pluginname: entry.plugin.pluginName, pluginversion: entry.version })) });
+
+  const failed: string[] = [];
+  let done = 0;
+
+  await Promise.all(
+    entries.map(async ({ plugin, version }) => {
+      const ok = await startUpdate(plugin.pluginName, version, async () => {
+        const result = await bulk;
+        const failure = result.failed.find((entry) => entry.id === plugin.pluginName);
+        if (failure) throw new Error(failure.error);
+      });
+      if (ok) done++;
+      else failed.push(plugin.displayName || plugin.pluginName);
+    }),
+  );
+
+  return { done, failed };
 }
 
 async function handleUpdateAll() {
   if (updateAllRunning.value) return;
   updateAllRunning.value = true;
 
-  const failed: string[] = [];
-  let updated = 0;
+  let done = 0;
+  let failed: string[] = [];
 
   try {
-    const results = await Promise.all([...updatablePlugins.value].map(async (plugin) => ({ plugin, ok: await runPluginUpdate(plugin) })));
-    for (const { plugin, ok } of results) {
-      if (ok) updated++;
-      else failed.push(plugin.displayName || plugin.pluginName);
-    }
+    ({ done, failed } = await runBulkUpdate([...updatablePlugins.value]));
   } finally {
     updateAllRunning.value = false;
   }
@@ -375,32 +389,9 @@ async function handleUpdateAll() {
       life: 8000,
     });
   }
-  if (updated) {
-    toast.add({ severity: 'success', detail: t('views.plugins.update_all_done', { count: updated }), life: 5000 });
+  if (done) {
+    toast.add({ severity: 'success', detail: t('views.plugins.update_all_done', { count: done }), life: 5000 });
   }
-}
-
-async function runBulk(targets: CameraUiPlugin[], action: (plugin: CameraUiPlugin) => Promise<unknown>): Promise<{ done: number; failed: string[] }> {
-  const failed: string[] = [];
-  let done = 0;
-
-  bulkBusy.value = true;
-  try {
-    await Promise.all(
-      targets.map(async (plugin) => {
-        try {
-          await action(plugin);
-          done++;
-        } catch {
-          failed.push(plugin.displayName || plugin.pluginName);
-        }
-      }),
-    );
-  } finally {
-    bulkBusy.value = false;
-  }
-
-  return { done, failed };
 }
 
 function reportBulk(done: number, failed: string[], doneKey: string): void {
@@ -412,28 +403,52 @@ function reportBulk(done: number, failed: string[], doneKey: string): void {
   }
 }
 
+function failedLabels(targets: CameraUiPlugin[], failed: { id: string; error: string }[]): string[] {
+  return targets.filter((plugin) => failed.some((entry) => entry.id === plugin.pluginName)).map((plugin) => plugin.displayName || plugin.pluginName);
+}
+
 async function bulkUpdateSelected() {
-  const targets = [...selectedWithUpdates.value];
-  const { done, failed } = await runBulk(targets, async (plugin) => {
-    if (!(await runPluginUpdate(plugin))) throw new Error('update failed');
-  });
+  bulkBusy.value = true;
+  let done = 0;
+  let failed: string[] = [];
+  try {
+    ({ done, failed } = await runBulkUpdate([...selectedWithUpdates.value]));
+  } finally {
+    bulkBusy.value = false;
+  }
   await refreshAfterUpdates();
   exitSelectionMode();
   reportBulk(done, failed, 'views.plugins.update_all_done');
 }
 
 async function bulkEnableSelected() {
-  const { done, failed } = await runBulk([...selectedItems.value], (plugin) => enablePluginFn({ pluginName: plugin.pluginName }));
-  await refreshAfterUpdates();
-  exitSelectionMode();
-  reportBulk(done, failed, 'views.plugins.enable_selected_done');
+  const targets = [...selectedItems.value];
+  bulkBusy.value = true;
+  try {
+    const result = await bulkEnablePluginsFn({ pluginNames: targets.map((plugin) => plugin.pluginName) });
+    await refreshAfterUpdates();
+    exitSelectionMode();
+    reportBulk(result.succeeded.length, failedLabels(targets, result.failed), 'views.plugins.enable_selected_done');
+  } catch (error: any) {
+    toast.add({ severity: 'error', detail: error?.response?.data?.message ?? error?.message ?? String(error), life: 5000 });
+  } finally {
+    bulkBusy.value = false;
+  }
 }
 
 async function bulkDisableSelected() {
-  const { done, failed } = await runBulk([...selectedItems.value], (plugin) => disablePluginFn({ pluginName: plugin.pluginName }));
-  await refreshAfterUpdates();
-  exitSelectionMode();
-  reportBulk(done, failed, 'views.plugins.disable_selected_done');
+  const targets = [...selectedItems.value];
+  bulkBusy.value = true;
+  try {
+    const result = await bulkDisablePluginsFn({ pluginNames: targets.map((plugin) => plugin.pluginName) });
+    await refreshAfterUpdates();
+    exitSelectionMode();
+    reportBulk(result.succeeded.length, failedLabels(targets, result.failed), 'views.plugins.disable_selected_done');
+  } catch (error: any) {
+    toast.add({ severity: 'error', detail: error?.response?.data?.message ?? error?.message ?? String(error), life: 5000 });
+  } finally {
+    bulkBusy.value = false;
+  }
 }
 
 function bulkUninstallSelected() {
@@ -448,10 +463,17 @@ function bulkUninstallSelected() {
       },
     },
     onConfirm: async () => {
-      const { done, failed } = await runBulk(targets, (plugin) => uninstallPluginFn({ pluginName: plugin.pluginName }));
-      await refreshAfterUpdates();
-      exitSelectionMode();
-      reportBulk(done, failed, 'views.plugins.uninstall_selected_done');
+      bulkBusy.value = true;
+      try {
+        const result = await bulkUninstallPluginsFn({ pluginNames: targets.map((plugin) => plugin.pluginName) });
+        await refreshAfterUpdates();
+        exitSelectionMode();
+        reportBulk(result.succeeded.length, failedLabels(targets, result.failed), 'views.plugins.uninstall_selected_done');
+      } catch (error: any) {
+        toast.add({ severity: 'error', detail: error?.response?.data?.message ?? error?.message ?? String(error), life: 5000 });
+      } finally {
+        bulkBusy.value = false;
+      }
     },
   });
 }

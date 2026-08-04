@@ -4,6 +4,8 @@ import { axiosInstance as api } from '..';
 import type { CreateCameraInput, PatchCameraInput, PreviewCameraInput } from '@/schemas/cameras.schema.js';
 import type { DetectionLine, DetectionZone, FormSubmitResponse, ProbeConfig, SensorType } from '@camera.ui/sdk';
 import type {
+  BulkPatchCamerasInput,
+  BulkResult,
   CamerasResponse,
   DBCamera,
   Go2RTCProbe,
@@ -87,6 +89,16 @@ export async function getCamerasFn({ parameter, signal }: { parameter: Paginatio
 
 export async function patchCameraFn({ cameraname, cameraData }: { cameraname: string; cameraData: PatchCameraInput }): Promise<DBCamera> {
   const response: AxiosResponse<DBCamera> = await api.patch(`/cameras/${cameraname}`, cameraData);
+  return response.data;
+}
+
+export async function bulkPatchCamerasFn({ cameranames, cameraData }: { cameranames: string[]; cameraData: BulkPatchCamerasInput['cameraData'] }): Promise<BulkResult> {
+  const response: AxiosResponse<BulkResult> = await api.patch('/cameras', { cameranames, cameraData });
+  return response.data;
+}
+
+export async function bulkDeleteCamerasFn({ cameranames }: { cameranames: string[] }): Promise<BulkResult> {
+  const response: AxiosResponse<BulkResult> = await api.delete('/cameras', { data: { cameranames } });
   return response.data;
 }
 

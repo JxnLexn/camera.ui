@@ -10,6 +10,7 @@ export * from '../../server/src/api/schemas/server.schema.js';
 export * from '../../server/src/api/schemas/storage.schema.js';
 export * from '../../server/src/api/schemas/sensors.schema.js';
 export type { TransformedSensor } from '../../server/src/api/services/sensors.service.js';
+export type { BulkResult } from '../../server/src/api/utils/bulk.js';
 export * from '../../server/src/api/schemas/users.schema.js';
 export * from '../../server/src/api/schemas/workers.schema.js';
 export type * from '../../server/src/api/types/index.js';

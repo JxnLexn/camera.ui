@@ -1,7 +1,7 @@
 import { i18n } from '@/i18n/index.js';
 import { axiosInstance as api } from '..';
 
-import type { CreateVirtualSensorInput, MethodKeys, PatchSensorInput, TransformedSensor } from '@shared/types';
+import type { BulkResult, CreateVirtualSensorInput, MethodKeys, PatchSensorInput, TransformedSensor } from '@shared/types';
 import type { AxiosResponse } from 'axios';
 
 export async function getSensorsFn({ signal, cameraId }: { signal: AbortSignal; cameraId?: string }): Promise<TransformedSensor[]> {
@@ -21,6 +21,16 @@ export async function patchSensorFn({ id, data }: { id: string; data: PatchSenso
 
 export async function deleteSensorFn({ id }: { id: string }): Promise<void> {
   await api.delete(`/sensors/${id}`);
+}
+
+export async function bulkDeleteSensorsFn({ ids }: { ids: string[] }): Promise<{ deleted: number; skipped: string[] }> {
+  const response: AxiosResponse<{ deleted: number; skipped: string[] }> = await api.delete('/sensors', { data: { ids } });
+  return response.data;
+}
+
+export async function bulkPatchSensorsFn({ ids, data }: { ids: string[]; data: { hidden: boolean } }): Promise<BulkResult> {
+  const response: AxiosResponse<BulkResult> = await api.patch('/sensors', { ids, data });
+  return response.data;
 }
 
 export interface SensorHistoryEntry {
@@ -84,6 +94,24 @@ export class SensorsQuery {
   public deleteSensorQuery() {
     return useMutation({
       mutationFn: deleteSensorFn,
+      onSuccess: async () => {
+        await this._queryClient.refetchQueries({ queryKey: ['sensorsList'] });
+      },
+    });
+  }
+
+  public bulkDeleteSensorsQuery() {
+    return useMutation({
+      mutationFn: bulkDeleteSensorsFn,
+      onSuccess: async () => {
+        await this._queryClient.refetchQueries({ queryKey: ['sensorsList'] });
+      },
+    });
+  }
+
+  public bulkPatchSensorsQuery() {
+    return useMutation({
+      mutationFn: bulkPatchSensorsFn,
       onSuccess: async () => {
         await this._queryClient.refetchQueries({ queryKey: ['sensorsList'] });
       },

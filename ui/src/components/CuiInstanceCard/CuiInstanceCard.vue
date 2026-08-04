@@ -8,22 +8,17 @@
     }"
   >
     <template #content>
-      <div v-if="selectionMode" class="absolute top-3 right-3 z-2 pointer-events-none">
-        <div class="w-6 h-6 rounded-full border-2 flex items-center justify-center transition-colors" :class="selected ? 'bg-primary border-primary' : 'border-color'">
-          <i-mdi:check v-if="selected" class="w-4 h-4 text-white" />
-        </div>
-      </div>
       <div class="flex flex-col gap-2">
         <div class="flex items-center justify-between gap-2">
           <div class="flex items-center gap-1.5 min-w-0">
-            <Button
-              severity="secondary"
-              text
-              rounded
-              class="cui-icon-sm shrink-0 !ml-[calc(-0.25rem*2)]"
-              :disabled="selectionMode"
-              @click.stop="!selectionMode && emit('toggle-favorite')"
+            <div
+              v-if="selectionMode"
+              class="w-6 h-6 rounded-full border-2 flex items-center justify-center transition-colors shrink-0"
+              :class="selected ? 'bg-primary border-primary' : 'border-color'"
             >
+              <i-mdi:check v-if="selected" class="w-4 h-4 text-white" />
+            </div>
+            <Button v-else severity="secondary" text rounded class="cui-icon-sm shrink-0 !ml-[calc(-0.25rem*2)]" @click.stop="emit('toggle-favorite')">
               <template #icon>
                 <i-solar:star-bold v-if="instance.favorite" class="w-4 h-4 text-yellow-500" />
                 <i-solar:star-bold v-else class="w-4 h-4" />

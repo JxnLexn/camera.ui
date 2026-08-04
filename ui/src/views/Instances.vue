@@ -61,7 +61,7 @@
     <CuiFloatingButtonGroup :force-visible="selectionMode">
       <template v-if="!selectionMode">
         <CuiFloatingButton
-          v-if="allInstances.length > 1"
+          v-if="allInstances.length"
           grouped
           :tooltip-props="{ value: t('views.instances.select') }"
           :button-props="{ severity: 'secondary' }"
@@ -158,6 +158,7 @@ const { data: instancesData, isPending: instancesPending } = instancesQuery.list
 const { mutateAsync: createInstance } = instancesQuery.createMutation();
 const { mutateAsync: updateInstance } = instancesQuery.updateMutation();
 const { mutateAsync: deleteInstance } = instancesQuery.deleteMutation();
+const { mutateAsync: bulkDeleteInstances } = instancesQuery.bulkDeleteMutation();
 const { mutateAsync: toggleFavorite } = instancesQuery.toggleFavoriteMutation();
 const statusQueries = instancesQuery.statusQueries(instancesWithCredentials);
 
@@ -315,7 +316,7 @@ function confirmBulkRemove() {
       bulkBusy.value = true;
       isLoading.value = true;
       try {
-        await Promise.all(ids.map((id) => deleteInstance(id)));
+        await bulkDeleteInstances({ ids });
         exitSelectionMode();
       } catch (error: any) {
         toast.add({ severity: 'error', detail: error, life: 3000 });

@@ -613,9 +613,28 @@ export const snapshotQuerySchema = zod.object({
   forceNew: zod.coerce.boolean().optional(),
 });
 
+export const bulkPatchCamerasSchema = zod.object({
+  cameranames: zod.array(zod.string().min(1)).min(1).max(1000),
+  cameraData: zod
+    .object({
+      disabled: zod.boolean().optional(),
+      detectionSettings: zod.object({ snooze: zod.boolean() }).optional(),
+      recordingSettings: zod.object({ enabled: zod.boolean() }).optional(),
+    })
+    .refine((data) => data.disabled !== undefined || data.detectionSettings !== undefined || data.recordingSettings !== undefined, {
+      message: 'Nothing to update',
+    }),
+});
+
+export const bulkDeleteCamerasSchema = zod.object({
+  cameranames: zod.array(zod.string().min(1)).min(1).max(1000),
+});
+
 export type PreviewCameraInput = zod.output<typeof previewCameraSchema>;
 export type CreateCameraInput = zod.output<typeof createCameraSchema>;
 export type PatchCameraInput = zod.output<typeof patchCameraSchema>;
+export type BulkPatchCamerasInput = zod.output<typeof bulkPatchCamerasSchema>;
+export type BulkDeleteCamerasInput = zod.output<typeof bulkDeleteCamerasSchema>;
 export type SnapshotQueryInput = zod.output<typeof snapshotQuerySchema>;
 export type ProbeQueryInput = zod.output<typeof probeQuerySchema>;
 export type ExtensionTypeQueryInput = zod.output<typeof extensionTypeQuerySchema>;

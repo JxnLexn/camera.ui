@@ -512,7 +512,7 @@ async function bulkRemoveFromGroup() {
 
   bulkBusy.value = true;
   try {
-    await Promise.all(ids.map((id) => faceStore.removeFromCluster(id)));
+    await faceStore.removeFacesFromCluster(ids);
     exitSelectionMode();
   } catch (err) {
     toast.add({ severity: 'error', detail: err, life: 3000 });
@@ -527,7 +527,7 @@ async function bulkDiscard() {
 
   bulkBusy.value = true;
   try {
-    await Promise.all(ids.map((id) => faceStore.deleteUnknownFace(id)));
+    await faceStore.deleteUnknownFaces(ids);
     exitSelectionMode();
   } catch (err) {
     toast.add({ severity: 'error', detail: err, life: 3000 });

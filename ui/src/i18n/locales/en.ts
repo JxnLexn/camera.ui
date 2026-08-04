@@ -1857,6 +1857,7 @@ export default {
       disable_selected: 'Disable selected',
       delete_selected: 'Delete selected',
       delete_selected_confirm: 'Delete {count} selected automation(s)?',
+      delete_selected_failed: '{count} automation(s) could not be deleted',
       run_history: 'Run history',
       no_runs: 'No runs yet',
       run_success: 'Success',

@@ -6,6 +6,7 @@ import { container } from 'tsyringe';
 import { createSourceName } from '../../utils/camera.js';
 import { CamerasService } from '../services/cameras.service.js';
 import { PluginsService } from '../services/plugins.service.js';
+import { collectBulk } from '../utils/bulk.js';
 import { resolvePluginName } from '../utils/plugin.js';
 
 import type { AssignedPlugin, ProbeConfig, SchemaConfig } from '@camera.ui/sdk';
@@ -25,6 +26,8 @@ import type {
   CamerasExtensionsParamsRequest,
   CamerasExtensionsRequest,
   CamerasInsertRequest,
+  CamerasBulkDeleteRequest,
+  CamerasBulkPatchRequest,
   CamerasParamsRequest,
   CamerasPatchRequest,
   CamerasPreviewRequest,
@@ -963,11 +966,34 @@ export class CamerasController {
     }
   }
 
-  public async removeAll(_req: FastifyRequest<AuthLoginRequest>, reply: FastifyReply): Promise<FastifyReply> {
+  public async removeAll(req: FastifyRequest<AuthLoginRequest & CamerasBulkDeleteRequest>, reply: FastifyReply): Promise<FastifyReply> {
     try {
+      if (req.body?.cameranames) {
+        const result = await collectBulk(req.body.cameranames, async (cameraname) => {
+          if (!this.service.findByName(cameraname) && !this.service.findById(cameraname)) throw new Error('Camera not exists');
+          await this.service.removeByName(cameraname);
+        });
+        return reply.code(200).send(result);
+      }
+
       await this.service.removeAll();
 
       return reply.code(204).send();
+    } catch (error: any) {
+      return reply.code(500).send({
+        statusCode: 500,
+        message: error.message,
+      });
+    }
+  }
+
+  public async patchBulk(req: FastifyRequest<AuthLoginRequest & CamerasBulkPatchRequest>, reply: FastifyReply): Promise<FastifyReply> {
+    try {
+      const result = await collectBulk(req.body.cameranames, async (cameraname) => {
+        if (!this.service.findByName(cameraname) && !this.service.findById(cameraname)) throw new Error('Camera not exists');
+        await this.service.patchCameraByName(cameraname, req.body.cameraData);
+      });
+      return reply.code(200).send(result);
     } catch (error: any) {
       return reply.code(500).send({
         statusCode: 500,

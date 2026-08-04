@@ -213,6 +213,25 @@ export class InstancesService {
     return true;
   }
 
+  public async removeMany(ids: string[]): Promise<{ succeeded: string[]; failed: { id: string; error: string }[] }> {
+    const instances = this.getInstances();
+    const succeeded: string[] = [];
+    const failed: { id: string; error: string }[] = [];
+
+    for (const id of ids) {
+      const index = instances.findIndex((i) => i.id === id);
+      if (index === -1) {
+        failed.push({ id, error: 'Instance not found' });
+        continue;
+      }
+      instances.splice(index, 1);
+      succeeded.push(id);
+    }
+
+    if (succeeded.length > 0) await this.saveInstances(instances);
+    return { succeeded, failed };
+  }
+
   public getCredentials(id: string): { username: string; password: string } | null {
     const instance = this.getInstances().find((i) => i.id === id);
     if (!instance?.credentials) return null;

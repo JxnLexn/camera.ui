@@ -30,6 +30,17 @@ export const sensorCommandSchema = zod.object({
   value: zod.unknown(),
 });
 
+export const bulkDeleteSensorsSchema = zod.object({
+  ids: zod.array(zod.string()).min(1).max(10000),
+});
+
+export const bulkPatchSensorsSchema = zod.object({
+  ids: zod.array(zod.string()).min(1).max(10000),
+  data: zod.object({ hidden: zod.boolean() }),
+});
+
 export type CreateVirtualSensorInput = zod.infer<typeof createVirtualSensorSchema>;
 export type PatchSensorInput = zod.infer<typeof patchSensorSchema>;
+export type BulkDeleteSensorsInput = zod.infer<typeof bulkDeleteSensorsSchema>;
+export type BulkPatchSensorsInput = zod.infer<typeof bulkPatchSensorsSchema>;
 export type SensorCommandInput = zod.infer<typeof sensorCommandSchema>;

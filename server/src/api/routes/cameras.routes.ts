@@ -3,6 +3,8 @@ import { onlyAdminCanDoThisAction } from '../middlewares/authPermission.middlewa
 import { validJWTNeeded } from '../middlewares/authValidation.middleware.js';
 import { pages } from '../middlewares/pagination.middleware.js';
 import {
+  bulkDeleteCamerasSchema,
+  bulkPatchCamerasSchema,
   cameraParamsSchema,
   cameraSourceParamsSchema,
   createCameraSchema,
@@ -87,14 +89,27 @@ export const CamerasRoute: FastifyPluginAsync = async (app: FastifyInstance): Pr
     },
   });
 
-  app.route({
+  app.withTypeProvider<ZodTypeProvider>().route({
     url: '/',
     method: 'DELETE',
     preValidation: [validJWTNeeded, onlyAdminCanDoThisAction],
     handler: camerasController.removeAll.bind(camerasController),
     schema: {
       tags: ['Cameras'],
-      summary: 'Delete all cameras',
+      summary: 'Delete all cameras, or only the ones named in the body',
+      body: bulkDeleteCamerasSchema.optional(),
+    },
+  });
+
+  app.withTypeProvider<ZodTypeProvider>().route({
+    url: '/',
+    method: 'PATCH',
+    preValidation: [validJWTNeeded, onlyAdminCanDoThisAction],
+    handler: camerasController.patchBulk.bind(camerasController),
+    schema: {
+      tags: ['Cameras'],
+      summary: 'Update multiple cameras at once',
+      body: bulkPatchCamerasSchema,
     },
   });
 

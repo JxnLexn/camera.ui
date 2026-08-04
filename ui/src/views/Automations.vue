@@ -79,7 +79,7 @@
     <CuiFloatingButtonGroup :force-visible="selectionMode">
       <template v-if="!selectionMode">
         <CuiFloatingButton
-          v-if="isAdmin && flows.length > 1"
+          v-if="isAdmin && flows.length"
           grouped
           :tooltip-props="{ value: t('views.automations.select') }"
           :button-props="{ severity: 'secondary' }"
@@ -164,7 +164,8 @@ const { width: windowWidth, height: windowHeight } = useSharedWindowSize();
 
 const { data: flowsData, isBusy: isLoading } = automationsQuery.getAutomationsQuery();
 const { mutateAsync: patchFlow } = automationsQuery.patchAutomationQuery();
-const { mutateAsync: removeFlow, isPending: isDeleting } = automationsQuery.deleteAutomationQuery();
+const { mutateAsync: bulkPatchFlows } = automationsQuery.bulkPatchAutomationsQuery();
+const { mutateAsync: bulkRemoveFlows, isPending: isDeleting } = automationsQuery.bulkDeleteAutomationsQuery();
 
 const CARD_MIN_WIDTH = 350;
 const CARD_HEIGHT = 82;
@@ -206,9 +207,11 @@ function onCardClick(flowId: string) {
 async function bulkToggleEnabled() {
   if (!selectedItems.value.length || bulkBusy.value) return;
   const enabled = allSelectedDisabled.value;
+  const ids = selectedItems.value.filter((flow) => flow.enabled !== enabled).map((flow) => flow._id);
+  if (!ids.length) return;
   bulkBusy.value = true;
   try {
-    await Promise.all(selectedItems.value.filter((flow) => flow.enabled !== enabled).map((flow) => patchFlow({ id: flow._id, data: { enabled } })));
+    await bulkPatchFlows({ ids, data: { enabled } });
   } finally {
     bulkBusy.value = false;
   }
@@ -227,7 +230,10 @@ function confirmBulkDelete() {
     onConfirm: async () => {
       bulkBusy.value = true;
       try {
-        await Promise.all(ids.map((id) => removeFlow({ id })));
+        const { failed } = await bulkRemoveFlows({ ids });
+        if (failed.length) {
+          toast.add({ severity: 'error', detail: t('views.automations.delete_selected_failed', { count: failed.length }), life: 5000 });
+        }
         exitSelectionMode();
       } finally {
         bulkBusy.value = false;

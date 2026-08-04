@@ -58,21 +58,19 @@
         }"
       >
         <div v-for="row in visibleRows" :key="row.sensor.id" class="relative">
-          <div v-if="selectionMode" class="absolute inset-0 z-4 cursor-pointer" @click="toggleSelection(row.sensor.id)">
-            <div class="absolute top-3 left-3 pointer-events-none">
-              <div
-                class="w-5 h-5 rounded-full border-2 flex items-center justify-center transition-colors"
-                :class="selectedIds.has(row.sensor.id) ? 'bg-primary border-primary' : 'bg-black/5 border-neutral-300 dark:bg-white/10 dark:border-neutral-500'"
-              >
-                <i-mdi:check v-if="selectedIds.has(row.sensor.id)" class="w-3.5 h-3.5 text-white" />
-              </div>
-            </div>
-          </div>
+          <div v-if="selectionMode" class="absolute inset-0 z-4 cursor-pointer" @click="toggleSelection(row.sensor.id)"></div>
 
           <Card class="cui-card h-full" :class="[rowClass(row), { 'cursor-pointer': isAdmin && !row.sensor.hidden }]" @click="handleRowClick(row)">
             <template #content>
               <div class="flex flex-col gap-3">
                 <div class="flex items-center gap-3 min-w-0">
+                  <div
+                    v-if="selectionMode"
+                    class="w-6 h-6 rounded-full border-2 flex items-center justify-center transition-colors shrink-0"
+                    :class="selectedIds.has(row.sensor.id) ? 'bg-primary border-primary' : 'border-color'"
+                  >
+                    <i-mdi:check v-if="selectedIds.has(row.sensor.id)" class="w-4 h-4 text-white" />
+                  </div>
                   <component
                     :is="sensorTypeIcon(row.sensor.type)"
                     class="w-6 h-6 shrink-0 transition-colors"
@@ -369,6 +367,8 @@
 </template>
 
 <script lang="ts" setup>
+import { useAllSensors } from '@camera.ui/browser';
+import { SensorType } from '@camera.ui/sdk';
 import SelectAllIcon from '~icons/fluent/select-all-on-20-filled';
 import CloseIcon from '~icons/mdi/close';
 import EyeIcon from '~icons/mdi/eye';
@@ -378,8 +378,6 @@ import GridIcon from '~icons/mingcute/grid-fill';
 import TableIcon from '~icons/mingcute/table-2-line';
 import SelectIcon from '~icons/tabler/dots-filled';
 import PlusIcon from '~icons/typcn/plus';
-import { useAllSensors } from '@camera.ui/browser';
-import { SensorType } from '@camera.ui/sdk';
 
 import { CamerasQuery } from '@/api/routes/cameras.js';
 import { SensorsQuery } from '@/api/routes/sensors.js';
@@ -449,6 +447,8 @@ const { data: camerasData } = camerasQuery.getCamerasQuery({ page: 1, pageSize: 
 const { mutateAsync: createVirtualSensor, isPending: isCreating } = sensorsQuery.createVirtualSensorQuery();
 const { mutateAsync: patchSensor } = sensorsQuery.patchSensorQuery();
 const { mutateAsync: deleteSensor, isPending: isDeleting } = sensorsQuery.deleteSensorQuery();
+const { mutateAsync: bulkDeleteSensors } = sensorsQuery.bulkDeleteSensorsQuery();
+const { mutateAsync: bulkPatchSensors } = sensorsQuery.bulkPatchSensorsQuery();
 
 const tablePtOptions: PassThrough<DataTablePassThroughOptions> = {
   bodyRow: {
@@ -599,29 +599,6 @@ async function setSensorHidden(sensor: TransformedSensor, hidden: boolean) {
   await patchSensor({ id: sensor.id, data: { hidden } });
 }
 
-async function runBulk(targets: SensorRow[], action: (row: SensorRow) => Promise<unknown>): Promise<{ done: number; failed: string[] }> {
-  const failed: string[] = [];
-  let done = 0;
-
-  bulkBusy.value = true;
-  try {
-    await Promise.all(
-      targets.map(async (row) => {
-        try {
-          await action(row);
-          done++;
-        } catch {
-          failed.push(row.label);
-        }
-      }),
-    );
-  } finally {
-    bulkBusy.value = false;
-  }
-
-  return { done, failed };
-}
-
 function reportBulk(done: number, failed: string[], doneKey: string): void {
   if (failed.length) {
     toast.add({ severity: 'error', summary: t('views.sensors.bulk_failed', { count: failed.length }), detail: failed.join(', '), life: 8000 });
@@ -632,9 +609,18 @@ function reportBulk(done: number, failed: string[], doneKey: string): void {
 }
 
 async function bulkSetHidden(hidden: boolean) {
-  const { done, failed } = await runBulk([...selectedItems.value], (row) => patchSensor({ id: row.sensor.id, data: { hidden } }));
-  exitSelectionMode();
-  reportBulk(done, failed, hidden ? 'views.sensors.hide_selected_done' : 'views.sensors.unhide_selected_done');
+  const targets = [...selectedItems.value];
+  bulkBusy.value = true;
+  try {
+    const { succeeded, failed } = await bulkPatchSensors({ ids: targets.map((row) => row.sensor.id), data: { hidden } });
+    const failedLabels = targets.filter((row) => failed.some((entry) => entry.id === row.sensor.id)).map((row) => row.label);
+    exitSelectionMode();
+    reportBulk(succeeded.length, failedLabels, hidden ? 'views.sensors.hide_selected_done' : 'views.sensors.unhide_selected_done');
+  } catch (error: any) {
+    toast.add({ severity: 'error', detail: error?.response?.data?.message ?? error?.message ?? String(error), life: 5000 });
+  } finally {
+    bulkBusy.value = false;
+  }
 }
 
 function confirmBulkDelete() {
@@ -649,9 +635,15 @@ function confirmBulkDelete() {
       },
     },
     onConfirm: async () => {
-      const { done, failed } = await runBulk(targets, (row) => deleteSensor({ id: row.sensor.id }));
-      exitSelectionMode();
-      reportBulk(done, failed, 'views.sensors.delete_selected_done');
+      bulkBusy.value = true;
+      try {
+        const { skipped } = await bulkDeleteSensors({ ids: targets.map((row) => row.sensor.id) });
+        const failed = targets.filter((row) => skipped.includes(row.sensor.id)).map((row) => row.label);
+        exitSelectionMode();
+        reportBulk(targets.length - failed.length, failed, 'views.sensors.delete_selected_done');
+      } finally {
+        bulkBusy.value = false;
+      }
     },
   });
 }

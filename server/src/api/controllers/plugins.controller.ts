@@ -18,6 +18,7 @@ import { isPlatformCompatible } from '../../utils/platform.js';
 import { computeTrust, getBlock, getBlocklist, getCatalog, getVerified, getWeeklyDownloads, invalidateRegistry } from '../../utils/plugin-registry/index.js';
 import { CamerasService } from '../services/cameras.service.js';
 import { PluginsService } from '../services/plugins.service.js';
+import { collectBulk, collectBulkParallel } from '../utils/bulk.js';
 import { resolvePluginName } from '../utils/plugin.js';
 
 import type { JsonSchema } from '@camera.ui/sdk';
@@ -35,6 +36,9 @@ import type {
   PaginationRequest,
   PluginExtension,
   PluginExtensionConfig,
+  PluginsBulkInstallRequest,
+  PluginsBulkNamesRequest,
+  PluginsBulkUninstallRequest,
   PluginsInsertRequest,
   PluginsParamsNameRequest,
   PluginsParamsRemoveRequest,
@@ -90,38 +94,27 @@ export class PluginsController {
 
   public async enableByName(req: FastifyRequest<AuthLoginRequest & PluginsParamsNameRequest>, reply: FastifyReply): Promise<FastifyReply> {
     try {
-      const pluginName = resolvePluginName(req.params);
-      const plugin = this.service.getPluginByName(pluginName);
-
-      if (!plugin) {
-        return reply.code(404).send({
-          statusCode: 404,
-          message: 'Plugin not exists',
-        });
-      }
-
-      if (!plugin.disabled) {
-        return reply.code(400).send({
-          statusCode: 404,
-          message: 'Plugin already enabled',
-        });
-      }
-
-      plugin.disabled = false;
-
-      if (this.configService.config.plugins.disabledPlugins.includes(pluginName)) {
-        const index = this.configService.config.plugins.disabledPlugins.indexOf(pluginName);
-        this.configService.config.plugins.disabledPlugins.splice(index, 1);
-        this.configService.writeConfig();
-      }
-
-      // Start the plugin in the background. The UI reflects the real state via the
-      // /plugins `plugin-status-<name>` socket event when the child reaches STARTED/ERROR.
-      this.pluginManager.startPluginChild(pluginName).catch((error: unknown) => {
-        this.logger.error(`Failed to start plugin ${pluginName} after enable:`, error);
-      });
-
+      this.enableOne(resolvePluginName(req.params));
       return reply.code(204).send();
+    } catch (error: any) {
+      const statusCode = error.statusCode ?? 500;
+      return reply.code(statusCode).send({
+        statusCode,
+        message: error.message,
+      });
+    }
+  }
+
+  public async enableBulk(req: FastifyRequest<AuthLoginRequest & PluginsBulkNamesRequest>, reply: FastifyReply): Promise<FastifyReply> {
+    try {
+      const result = await collectBulk(req.body.pluginNames, async (pluginName) => {
+        try {
+          this.enableOne(pluginName);
+        } catch (error: any) {
+          if (error.statusCode !== 400) throw error;
+        }
+      });
+      return reply.code(200).send(result);
     } catch (error: any) {
       return reply.code(500).send({
         statusCode: 500,
@@ -132,35 +125,28 @@ export class PluginsController {
 
   public async disableByName(req: FastifyRequest<AuthLoginRequest & PluginsParamsNameRequest>, reply: FastifyReply): Promise<FastifyReply> {
     try {
-      const pluginName = resolvePluginName(req.params);
-      const plugin = this.service.getPluginByName(pluginName);
-
-      if (!plugin) {
-        return reply.code(404).send({
-          statusCode: 404,
-          message: 'Plugin not exists',
-        });
-      }
-
-      if (plugin.disabled) {
-        return reply.code(400).send({
-          statusCode: 404,
-          message: 'Plugin already disabled',
-        });
-      }
-
-      plugin.disabled = true;
-
-      this.configService.config.plugins.disabledPlugins.push(pluginName);
-      this.configService.writeConfig();
-
-      // Stop in the background — same reasoning as enable: a graceful teardown can
-      // run into its shutdown grace period and shouldn't hold the HTTP reply open.
-      this.pluginManager.stopPluginChild(pluginName).catch((error: unknown) => {
-        this.logger.error(`Failed to stop plugin ${pluginName} after disable:`, error);
-      });
-
+      this.disableOne(resolvePluginName(req.params));
       return reply.code(204).send();
+    } catch (error: any) {
+      const statusCode = error.statusCode ?? 500;
+      return reply.code(statusCode).send({
+        statusCode,
+        message: error.message,
+      });
+    }
+  }
+
+  public async disableBulk(req: FastifyRequest<AuthLoginRequest & PluginsBulkNamesRequest>, reply: FastifyReply): Promise<FastifyReply> {
+    try {
+      const result = await collectBulk(req.body.pluginNames, async (pluginName) => {
+        try {
+          this.disableOne(pluginName);
+        } catch (error: any) {
+          // already disabled is a no-op in bulk, not a failure
+          if (error.statusCode !== 400) throw error;
+        }
+      });
+      return reply.code(200).send(result);
     } catch (error: any) {
       return reply.code(500).send({
         statusCode: 500,
@@ -832,56 +818,32 @@ export class PluginsController {
 
   public async installOrUpdate(req: FastifyRequest<AuthLoginRequest & PluginsInsertRequest>, reply: FastifyReply): Promise<FastifyReply> {
     try {
-      const blocklist = await getBlocklist();
-      const block = getBlock(req.body.pluginname, req.body.pluginversion, blocklist);
-      if (block) {
-        return reply.code(403).send({
-          statusCode: 403,
-          message: `Plugin is blocked: ${block.reason}`,
-        });
-      }
-
-      // registry metadata is best-effort, an unreachable registry must not block installs
-      const manifest = await getFullManifest(`${req.body.pluginname}@${req.body.pluginversion}`).catch(() => undefined);
-      const protocolCompat = manifest ? checkProtocolCompat(manifest.cameraui?.protocolLevel) : 'unknown';
-      if (protocolCompat === 'serverTooOld') {
-        return reply.code(409).send({
-          statusCode: 409,
-          message: 'This plugin version needs a newer camera.ui. Update camera.ui first.',
-        });
-      }
-      if (protocolCompat === 'pluginTooOld') {
-        return reply.code(409).send({
-          statusCode: 409,
-          message: 'This plugin version was built for an older camera.ui and cannot run anymore. Pick a newer version.',
-        });
-      }
-
-      let plugin = this.pluginManager.plugins.get(req.body.pluginname);
-
-      const command = plugin ? 'update' : 'install';
-
-      this.logger.log(`${plugin ? 'Updating' : 'Installing'} plugin: ${req.body.pluginname}@${req.body.pluginversion}`);
-
-      const installPath = await this.service.manage(req.body.pluginname, command, req.body.pluginversion, plugin?.id);
-
-      if (!plugin) {
-        plugin = await this.pluginManager.loadPlugin(installPath);
-
-        this.logger.log(`Plugin installed: ${plugin.pluginName}.${plugin.displayName} (${plugin.info.installedVersion})`);
-
-        this.pluginManager.initializeInstalledPlugin(plugin);
-      } else {
-        this.logger.log(`Plugin updated: ${plugin.pluginName}.${plugin.displayName} (${req.body.pluginversion})`);
-      }
-
-      invalidatePackage(plugin.pluginName);
-      await plugin.reparsePackageJson();
+      const plugin = await this.installOne(req.body.pluginname, req.body.pluginversion);
 
       const serverNsp = this.socketService.namespaces.get('/server');
       await (serverNsp as ServerNamespace).checkPlugins();
 
       return reply.code(201).send(plugin.info);
+    } catch (error: any) {
+      const statusCode = error.statusCode ?? 500;
+      return reply.code(statusCode).send({
+        statusCode,
+        message: error.message,
+      });
+    }
+  }
+
+  public async installBulk(req: FastifyRequest<AuthLoginRequest & PluginsBulkInstallRequest>, reply: FastifyReply): Promise<FastifyReply> {
+    try {
+      const versions = new Map(req.body.plugins.map((entry) => [entry.pluginname, entry.pluginversion]));
+      const result = await collectBulkParallel([...versions.keys()], async (pluginname) => {
+        await this.installOne(pluginname, versions.get(pluginname)!);
+      });
+
+      const serverNsp = this.socketService.namespaces.get('/server');
+      await (serverNsp as ServerNamespace).checkPlugins();
+
+      return reply.code(200).send(result);
     } catch (error: any) {
       return reply.code(500).send({
         statusCode: 500,
@@ -907,39 +869,34 @@ export class PluginsController {
     reply: FastifyReply,
   ): Promise<FastifyReply> {
     try {
-      const pluginName = resolvePluginName(req.params);
-      const plugin = this.service.getPluginByName(pluginName);
-
-      if (!plugin) {
-        return reply.code(404).send({
-          statusCode: 404,
-          message: 'Plugin not exists',
-        });
-      }
-
-      this.logger.log(`Uninstalling plugin: ${plugin.pluginName}.${plugin.displayName} (${plugin.info.installedVersion})`);
-
-      await this.service.manage(plugin.pluginName, 'uninstall', undefined, plugin.id);
-      await this.pluginManager.removePlugin(plugin, req.query.removeStorage);
-
-      invalidatePackage(plugin.pluginName);
-
-      this.logger.log(`Plugin uninstalled: ${plugin.pluginName}.${plugin.displayName} (${plugin.info.installedVersion})`);
+      await this.uninstallOne(resolvePluginName(req.params), req.query.removeStorage);
 
       const serverNsp = this.socketService.namespaces.get('/server');
       await (serverNsp as ServerNamespace).checkPlugins();
 
       return reply.code(204).send();
     } catch (error: any) {
-      return reply.code(500).send({
-        statusCode: 500,
+      const statusCode = error.statusCode ?? 500;
+      return reply.code(statusCode).send({
+        statusCode,
         message: error.message,
       });
     }
   }
 
-  public async uninstallAll(req: FastifyRequest<AuthLoginRequest & PluginsParamsRemoveRequest>, reply: FastifyReply): Promise<FastifyReply> {
+  public async uninstallAll(req: FastifyRequest<AuthLoginRequest & PluginsBulkUninstallRequest>, reply: FastifyReply): Promise<FastifyReply> {
     try {
+      if (req.body?.pluginNames) {
+        const result = await collectBulkParallel(req.body.pluginNames, async (pluginName) => {
+          await this.uninstallOne(pluginName, req.query.removeStorage);
+        });
+
+        const serverNsp = this.socketService.namespaces.get('/server');
+        await (serverNsp as ServerNamespace).checkPlugins();
+
+        return reply.code(200).send(result);
+      }
+
       this.logger.log('Uninstalling all plugins');
 
       const plugins = this.service.listPlugins();
@@ -962,6 +919,113 @@ export class PluginsController {
         message: error.message,
       });
     }
+  }
+
+  private enableOne(pluginName: string): void {
+    const plugin = this.service.getPluginByName(pluginName);
+
+    if (!plugin) {
+      throw Object.assign(new Error('Plugin not exists'), { statusCode: 404 });
+    }
+
+    if (!plugin.disabled) {
+      throw Object.assign(new Error('Plugin already enabled'), { statusCode: 400 });
+    }
+
+    plugin.disabled = false;
+
+    if (this.configService.config.plugins.disabledPlugins.includes(pluginName)) {
+      const index = this.configService.config.plugins.disabledPlugins.indexOf(pluginName);
+      this.configService.config.plugins.disabledPlugins.splice(index, 1);
+      this.configService.writeConfig();
+    }
+
+    // Start the plugin in the background. The UI reflects the real state via the
+    // /plugins `plugin-status-<name>` socket event when the child reaches STARTED/ERROR.
+    this.pluginManager.startPluginChild(pluginName).catch((error: unknown) => {
+      this.logger.error(`Failed to start plugin ${pluginName} after enable:`, error);
+    });
+  }
+
+  private disableOne(pluginName: string): void {
+    const plugin = this.service.getPluginByName(pluginName);
+
+    if (!plugin) {
+      throw Object.assign(new Error('Plugin not exists'), { statusCode: 404 });
+    }
+
+    if (plugin.disabled) {
+      throw Object.assign(new Error('Plugin already disabled'), { statusCode: 400 });
+    }
+
+    plugin.disabled = true;
+
+    this.configService.config.plugins.disabledPlugins.push(pluginName);
+    this.configService.writeConfig();
+
+    // Stop in the background — same reasoning as enable: a graceful teardown can
+    // run into its shutdown grace period and shouldn't hold the HTTP reply open.
+    this.pluginManager.stopPluginChild(pluginName).catch((error: unknown) => {
+      this.logger.error(`Failed to stop plugin ${pluginName} after disable:`, error);
+    });
+  }
+
+  private async installOne(pluginname: string, pluginversion: string): Promise<Plugin> {
+    const blocklist = await getBlocklist();
+    const block = getBlock(pluginname, pluginversion, blocklist);
+    if (block) {
+      throw Object.assign(new Error(`Plugin is blocked: ${block.reason}`), { statusCode: 403 });
+    }
+
+    // registry metadata is best-effort, an unreachable registry must not block installs
+    const manifest = await getFullManifest(`${pluginname}@${pluginversion}`).catch(() => undefined);
+    const protocolCompat = manifest ? checkProtocolCompat(manifest.cameraui?.protocolLevel) : 'unknown';
+    if (protocolCompat === 'serverTooOld') {
+      throw Object.assign(new Error('This plugin version needs a newer camera.ui. Update camera.ui first.'), { statusCode: 409 });
+    }
+    if (protocolCompat === 'pluginTooOld') {
+      throw Object.assign(new Error('This plugin version was built for an older camera.ui and cannot run anymore. Pick a newer version.'), { statusCode: 409 });
+    }
+
+    let plugin = this.pluginManager.plugins.get(pluginname);
+
+    const command = plugin ? 'update' : 'install';
+
+    this.logger.log(`${plugin ? 'Updating' : 'Installing'} plugin: ${pluginname}@${pluginversion}`);
+
+    const installPath = await this.service.manage(pluginname, command, pluginversion, plugin?.id);
+
+    if (!plugin) {
+      plugin = await this.pluginManager.loadPlugin(installPath);
+
+      this.logger.log(`Plugin installed: ${plugin.pluginName}.${plugin.displayName} (${plugin.info.installedVersion})`);
+
+      this.pluginManager.initializeInstalledPlugin(plugin);
+    } else {
+      this.logger.log(`Plugin updated: ${plugin.pluginName}.${plugin.displayName} (${pluginversion})`);
+    }
+
+    invalidatePackage(plugin.pluginName);
+    await plugin.reparsePackageJson();
+
+    return plugin;
+  }
+
+  private async uninstallOne(pluginName: string, removeStorage?: boolean): Promise<void> {
+    const plugin = this.service.getPluginByName(pluginName);
+
+    if (!plugin) {
+      throw Object.assign(new Error('Plugin not exists'), { statusCode: 404 });
+    }
+
+    this.logger.log(`Uninstalling plugin: ${plugin.pluginName}.${plugin.displayName} (${plugin.info.installedVersion})`);
+
+    await this.service.manage(plugin.pluginName, 'uninstall', undefined, plugin.id);
+    await this.pluginManager.removePlugin(plugin, removeStorage);
+
+    invalidatePackage(plugin.pluginName);
+
+    this.logger.log(`Plugin uninstalled: ${plugin.pluginName}.${plugin.displayName} (${plugin.info.installedVersion})`);
   }
 
   private async readLogoFromPath(logoPath: string): Promise<string | null> {

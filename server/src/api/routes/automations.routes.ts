@@ -5,6 +5,8 @@ import {
   automationParamsSchema,
   automationStoreParamsSchema,
   automationStoreQuerySchema,
+  bulkDeleteAutomationsSchema,
+  bulkPatchAutomationsSchema,
   createAutomationSchema,
   geofenceParamsSchema,
   importBlueprintSchema,
@@ -28,6 +30,30 @@ export const AutomationsRoute: FastifyPluginAsync = async (app: FastifyInstance)
     schema: {
       tags: ['Automations'],
       summary: 'List all automations',
+    },
+  });
+
+  app.withTypeProvider<ZodTypeProvider>().route({
+    url: '/',
+    method: 'PATCH',
+    preValidation: [validJWTNeeded, onlyAdminCanDoThisAction],
+    handler: controller.updateBulk.bind(controller),
+    schema: {
+      tags: ['Automations'],
+      summary: 'Update multiple automations at once',
+      body: bulkPatchAutomationsSchema,
+    },
+  });
+
+  app.withTypeProvider<ZodTypeProvider>().route({
+    url: '/',
+    method: 'DELETE',
+    preValidation: [validJWTNeeded, onlyAdminCanDoThisAction],
+    handler: controller.deleteBulk.bind(controller),
+    schema: {
+      tags: ['Automations'],
+      summary: 'Delete multiple automations at once',
+      body: bulkDeleteAutomationsSchema,
     },
   });
 

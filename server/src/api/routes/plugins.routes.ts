@@ -4,6 +4,8 @@ import { validJWTNeeded } from '../middlewares/authValidation.middleware.js';
 import { pages } from '../middlewares/pagination.middleware.js';
 import { paginationQuerySchema } from '../schemas/common.schema.js';
 import {
+  bulkInstallPluginsSchema,
+  bulkPluginNamesSchema,
   installPluginSchema,
   pluginParamsSchema,
   pluginScopedParamsSchema,
@@ -90,8 +92,45 @@ export const PluginsRoute: FastifyPluginAsync = async (app: FastifyInstance): Pr
     handler: pluginsController.uninstallAll.bind(pluginsController),
     schema: {
       tags: ['Plugins'],
-      summary: 'Uninstall all plugins',
+      summary: 'Uninstall all plugins, or only the ones named in the body',
       querystring: removeStorageQuerySchema,
+      body: bulkPluginNamesSchema.optional(),
+    },
+  });
+
+  app.withTypeProvider<ZodTypeProvider>().route({
+    url: '/install',
+    method: 'POST',
+    preValidation: [validJWTNeeded, onlyAdminCanDoThisAction],
+    handler: pluginsController.installBulk.bind(pluginsController),
+    schema: {
+      tags: ['Plugins'],
+      summary: 'Install or update multiple plugins at once',
+      body: bulkInstallPluginsSchema,
+    },
+  });
+
+  app.withTypeProvider<ZodTypeProvider>().route({
+    url: '/enable',
+    method: 'PUT',
+    preValidation: [validJWTNeeded, onlyAdminCanDoThisAction],
+    handler: pluginsController.enableBulk.bind(pluginsController),
+    schema: {
+      tags: ['Plugins'],
+      summary: 'Enable multiple plugins at once',
+      body: bulkPluginNamesSchema,
+    },
+  });
+
+  app.withTypeProvider<ZodTypeProvider>().route({
+    url: '/disable',
+    method: 'PUT',
+    preValidation: [validJWTNeeded, onlyAdminCanDoThisAction],
+    handler: pluginsController.disableBulk.bind(pluginsController),
+    schema: {
+      tags: ['Plugins'],
+      summary: 'Disable multiple plugins at once',
+      body: bulkPluginNamesSchema,
     },
   });
 

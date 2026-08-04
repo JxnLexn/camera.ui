@@ -118,6 +118,16 @@ export const pluginVersionQuerySchema = zod.object({
   pluginversion: zod.string().trim().optional(),
 });
 
+export const bulkPluginNamesSchema = zod.object({
+  pluginNames: zod.array(zod.string().trim().min(1)).min(1).max(1000),
+});
+
+export const bulkInstallPluginsSchema = zod.object({
+  plugins: zod.array(installPluginSchema).min(1).max(1000),
+});
+
+export type BulkPluginNamesInput = zod.output<typeof bulkPluginNamesSchema>;
+export type BulkInstallPluginsInput = zod.output<typeof bulkInstallPluginsSchema>;
 export type InstallPluginInput = zod.output<typeof installPluginSchema>;
 export type ActionPluginInput = zod.output<typeof actionPluginSchema>;
 export type PatchPluginConfigJsonInput = zod.output<typeof patchPluginConfigJsonSchema>;

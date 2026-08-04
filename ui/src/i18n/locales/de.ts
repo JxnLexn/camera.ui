@@ -1872,6 +1872,7 @@ export default {
       disable_selected: 'Ausgewählte deaktivieren',
       delete_selected: 'Ausgewählte löschen',
       delete_selected_confirm: '{count} ausgewählte Automatisierung(en) löschen?',
+      delete_selected_failed: '{count} Automatisierung(en) konnten nicht gelöscht werden',
       run_history: 'Verlauf',
       no_runs: 'Noch keine Ausführungen',
       run_success: 'Erfolgreich',
