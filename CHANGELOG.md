@@ -4,6 +4,8 @@ All notable changes to this project will be documented in this file.
 
 ## [2.1.2]
 
+**New plugin: Home Assistant.** Imports your Home Assistant devices into camera.ui. Motion, occupancy, contacts, doorbells, smoke, leak and more become sensors you can assign to cameras as detection triggers. Locks, garage doors, alarm panels, switches, lights and sirens come in as controls and can be switched right from camera.ui. Inside the Home Assistant add-on it connects without any configuration; everywhere else it takes your Home Assistant URL and an access token.
+
 ### Added
 
 - **Plugins update with one click, or all at once.** Cards with an available update get a direct update button, no dialog, the card just shows a spinner and clicking it again opens the live install output. A new "Update all" button in the toolbar updates every outdated plugin and reports the result. The dialog with release notes and version picker is still there behind the menu.
