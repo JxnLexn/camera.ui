@@ -19,7 +19,8 @@ hljs.registerLanguage('yaml', yaml);
 hljs.registerLanguage('json', json);
 hljs.registerLanguage('python', python);
 
-const md = MarkdownIt('commonmark', {
+const md = MarkdownIt({
+  linkify: true,
   highlight(str: string, lang: string): string {
     if (lang && hljs.getLanguage(lang)) {
       try {
@@ -31,6 +32,13 @@ const md = MarkdownIt('commonmark', {
     return '<pre><code class="hljs">' + md.utils.escapeHtml(str) + '</code></pre>';
   },
 });
+
+const renderLinkOpen = md.renderer.rules.link_open ?? ((tokens, idx, options, _env, self) => self.renderToken(tokens, idx, options));
+md.renderer.rules.link_open = (tokens, idx, options, env, self) => {
+  tokens[idx].attrSet('target', '_blank');
+  tokens[idx].attrSet('rel', 'noopener noreferrer');
+  return renderLinkOpen(tokens, idx, options, env, self);
+};
 
 const props = defineProps<CuiMarkdownContentProps>();
 
