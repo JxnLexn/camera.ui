@@ -137,6 +137,25 @@
     class="card-border"
   />
 
+  <CuiBinarySensor
+    v-else-if="isBinarySensor(sensor)"
+    :type="sensor.type"
+    :label="sensor.displayName.value"
+    :detected="sensor.getProperty('detected') ?? false"
+    size="small"
+    class="card-border"
+  />
+
+  <CuiMeasurementInfo
+    v-else-if="measurementUnit(sensor)"
+    :type="sensor.type"
+    :label="sensor.displayName.value"
+    :current="sensor.getProperty('current') ?? undefined"
+    :unit="measurementUnit(sensor)!"
+    size="small"
+    class="card-border"
+  />
+
   <CuiDetectionSensorInfo
     v-else-if="isDetectionInfo(sensor)"
     :type="sensor.type"
@@ -186,7 +205,7 @@ import {
 } from '@camera.ui/sdk';
 
 import CuiDetectionSensorInfo from '@/components/CuiDetectionSensorInfo/CuiDetectionSensorInfo.vue';
-import { DETECTION_INFO_TYPES } from './types.js';
+import { BINARY_SENSOR_TYPES, DETECTION_INFO_TYPES, MEASUREMENT_UNITS } from './types.js';
 
 import type { ReactiveSensor } from '@camera.ui/browser';
 
@@ -194,6 +213,14 @@ defineProps<{
   sensor: ReactiveSensor<any>;
   disabled?: boolean;
 }>();
+
+function isBinarySensor(sensor: ReactiveSensor<any>): boolean {
+  return BINARY_SENSOR_TYPES.has(sensor.type as SensorType);
+}
+
+function measurementUnit(sensor: ReactiveSensor<any>): string | undefined {
+  return MEASUREMENT_UNITS.get(sensor.type as SensorType);
+}
 
 function isDetectionInfo(sensor: ReactiveSensor<any>): boolean {
   return DETECTION_INFO_TYPES.has(sensor.type as SensorType);

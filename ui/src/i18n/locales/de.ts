@@ -689,6 +689,10 @@ export default {
       detected: 'Rauch erkannt',
       clear: 'Kein Rauch',
     },
+    binary_sensor: {
+      detected: 'Ausgelöst',
+      clear: 'Inaktiv',
+    },
     leak_sensor: {
       detected: 'Leck erkannt',
       clear: 'Kein Leck',

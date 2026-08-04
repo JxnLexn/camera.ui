@@ -677,6 +677,10 @@ export default {
       detected: 'Smoke Detected',
       clear: 'Clear',
     },
+    binary_sensor: {
+      detected: 'Triggered',
+      clear: 'Clear',
+    },
     leak_sensor: {
       detected: 'Leak Detected',
       clear: 'Clear',

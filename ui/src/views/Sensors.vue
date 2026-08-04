@@ -421,6 +421,14 @@ const DETECTED_ACTIVE_TYPES: ReadonlySet<string> = new Set([
   SensorType.Occupancy,
   SensorType.Smoke,
   SensorType.Leak,
+  SensorType.Gas,
+  SensorType.CarbonMonoxide,
+  SensorType.Heat,
+  SensorType.Cold,
+  SensorType.Vibration,
+  SensorType.Tamper,
+  SensorType.Problem,
+  SensorType.Power,
 ]);
 
 const sensorsQuery = new SensorsQuery();
@@ -508,11 +516,10 @@ const viewMode = computed(() => uiSettings.value.sensors.view);
 
 const liveSensorById = computed(() => new Map(liveSensors.value.map((sensor) => [sensor.id, sensor])));
 
-const { selectionMode, selectedIds, selectedItems, allSelected, bulkBusy, enterSelectionMode, exitSelectionMode, toggleSelectAll, toggleSelection } =
-  useCardSelection(
-    () => visibleRows.value,
-    (row) => row.sensor.id,
-  );
+const { selectionMode, selectedIds, selectedItems, allSelected, bulkBusy, enterSelectionMode, exitSelectionMode, toggleSelectAll, toggleSelection } = useCardSelection(
+  () => visibleRows.value,
+  (row) => row.sensor.id,
+);
 
 const deletableSelected = computed(() => selectedItems.value.filter((row) => canDelete(row.sensor)));
 
