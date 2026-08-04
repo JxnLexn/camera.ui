@@ -12,6 +12,8 @@ All notable changes to this project will be documented in this file.
 
 - **The Plugins page has a table view.** A button next to the plus switches between the cards and a compact table with status, version and the full action set per row, update, log and the familiar menu, handy for many plugins. The choice sticks, and both views now also show the package name under the display name.
 
+- **Ten new sensor types.** Gas, carbon monoxide, carbon dioxide, heat, cold, vibration, tamper, problem, power and illuminance. Plugins can provide them, virtual ones can be created like any other sensor, and each comes with its own widget, icon and history.
+
 - **The Sensors page catches up with Plugins.** A card view next to the table, switched via the floating buttons, and a select mode to hide, unhide or delete many sensors at once. Sensor icons also light up while a sensor is active, a glowing icon means motion running, door open, light on, doorbell ringing.
 
 - **Detection sensors show their state in the sensor dialog.** Motion, object, audio, face, license plate and classifier sensors had no widget there; they now show a live state with what is currently detected, and audio includes the level.
