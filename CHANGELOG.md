@@ -22,6 +22,12 @@ All notable changes to this project will be documented in this file.
 
 - **Plugins can be managed in bulk.** A select button next to the plus starts a selection in both views, then update, enable, disable or uninstall everything selected in one go, with a summary at the end.
 
+- **The Apple TV app has a Sensors page.** Every sensor as a tile like in Apple's Home app, grouped by type, with live states straight from the server. A click switches lights, switches, sirens, locks and the garage; holding select opens a panel with brightness, volume or the alarm modes. New sensors appear on their own, removed ones disappear.
+
+- **Events on the Apple TV line up with the web app.** Doorbell rings and sensor events now show in Recent Events and on the Events page with their own icons instead of going missing, there are new Doorbell and Sensors filters, and scrolling down reaches older days instead of stopping after yesterday.
+
+- **CamView on the Apple TV keeps cameras unique.** Rotating a tile's camera or letting a wall fill itself could put the same camera on two tiles. That can't happen anymore, and saved layouts that already carry duplicates clean themselves up on open.
+
 ### Fixed
 
 - **Doorbell rings and alarms stand out on the timeline.** A doorbell press, siren, security system or contact event without any visual detection used to render as a thin motion-style strip, invisible between regular motion marks. These now get the full event bar with icon and snapshot marker, like a person detection. Requires the camera-ui-nvr plugin update for such events to also pass the recordings confidence filter.
