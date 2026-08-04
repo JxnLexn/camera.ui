@@ -4,9 +4,19 @@ All notable changes to this project will be documented in this file.
 
 ## [2.1.3]
 
+**Home Assistant plugin users: update the plugin (1.0.4) and the camera.ui integration too.** The device-flood fix needs all three pieces: the plugin marks imported sensors on its next start, and the updated integration stops exporting them. After updating, reload the camera.ui integration in Home Assistant once so the stray devices disappear.
+
 ### Added
 
+- **Events can be deleted from the Recordings page.** A new select mode behind the floating button lets you pick single events, several or all loaded ones and delete them. They disappear everywhere at once, camera events on Home, the timeline and the recordings list, on every open browser. Recorded video stays on disk until the normal cleanup removes it.
+
 - **Bulk actions are single server calls now.** Selecting many cameras, sensors, plugins, automations or instances and deleting, disabling, hiding or updating them sends one request for the whole selection instead of one per item, and reports per item what worked.
+
+### Fixed
+
+- **Sensors imported from a smart home are never exported back to it.** Sensors now remember where they came from, and export bridges towards that system skip them no matter what. This stops the device flood some Home Assistant plugin users saw, where every import re-appeared in Home Assistant as a camera.ui device.
+
+- **A car driving past no longer wakes the parked car behind it.** The tracker can briefly hand a parked car's box to a passing vehicle; the parked car then counted as active again, stretched the running event and labelled it, and the next passer-by repeated the show. Worst with motion sensors that report on a timer, where events stayed open for minutes. Waking now requires the object to actually move, not just its box to jump.
 
 ## [2.1.2]
 
