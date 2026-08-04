@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.1.4]
+
+### Fixed
+
+- **Opening an event no longer starts the video too late.** A passing car was often already halfway through the frame, and you had to rewind by hand to see it enter. Events now play from a few seconds before the motion that started them, so the beginning of the scene is on screen right away.
+
 ## [2.1.3]
 
 **Home Assistant plugin users: update the plugin (1.0.4) and the camera.ui integration too.** The device-flood fix needs all three pieces: the plugin marks imported sensors on its next start, and the updated integration stops exporting them. After updating, reload the camera.ui integration in Home Assistant once so the stray devices disappear.
