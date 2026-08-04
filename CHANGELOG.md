@@ -14,7 +14,7 @@ All notable changes to this project will be documented in this file.
 
 ### Fixed
 
-- **Sensors imported from a smart home are never exported back to it.** Sensors now remember where they came from, and export bridges towards that system skip them no matter what. This stops the device flood some Home Assistant plugin users saw, where every import re-appeared in Home Assistant as a camera.ui device.
+- **Sensors imported from a smart home are never exported back to it.** Sensors now remember where they came from, and export bridges towards that system skip them no matter what. This stops the device flood some Home Assistant plugin users saw, where every import re-appeared in Home Assistant as a camera.ui device. Existing setups heal themselves: over MQTT the stray entities are cleaned up automatically on the next start, and for the camera.ui integration one reload in Home Assistant clears them.
 
 - **A car driving past no longer wakes the parked car behind it.** The tracker can briefly hand a parked car's box to a passing vehicle; the parked car then counted as active again, stretched the running event and labelled it, and the next passer-by repeated the show. Worst with motion sensors that report on a timer, where events stayed open for minutes. Waking now requires the object to actually move, not just its box to jump.
 
