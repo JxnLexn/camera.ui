@@ -24,6 +24,7 @@ export interface TransformedSensor {
   assignedCameraIds: string[];
   exposed: boolean;
   hidden: boolean;
+  origin?: string;
   properties: Record<string, unknown>;
   capabilities: string[];
   semantics?: SensorSemantics;
@@ -129,6 +130,7 @@ export class SensorsService {
       assignedCameraIds: data.assignedCameraIds,
       exposed: record.exposed,
       hidden: record.hidden ?? false,
+      origin: record.origin,
       properties: data.properties,
       capabilities: data.capabilities,
       semantics: resolveSensorSemantics(data),

@@ -11,6 +11,7 @@ export interface StoredSensorData {
   assignedCameraIds: string[];
   boundCameraId?: string;
   exposed: boolean;
+  origin?: string;
   connected: boolean;
   properties: Record<string, unknown>;
   capabilities: string[];
@@ -90,6 +91,7 @@ export interface SensorExposedChangedEvent {
   sensorId: string;
   sensorType: SensorType;
   exposed: boolean;
+  origin?: string;
 }
 
 export interface SensorAssignmentChangedEvent {

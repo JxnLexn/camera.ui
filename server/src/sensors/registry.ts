@@ -152,7 +152,9 @@ export class SensorRegistry {
         name: sensor.name,
         assignedCameraIds: options?.assignCameraId ? [options.assignCameraId] : [],
         boundCameraId: options?.assignCameraId,
-        exposed: true,
+        exposed: sensor.exposed ?? true,
+        hidden: sensor.hidden,
+        origin: sensor.origin,
         state: {},
         createdAt: Date.now(),
         updatedAt: Date.now(),
@@ -164,6 +166,7 @@ export class SensorRegistry {
     }
 
     record.name = sensor.name;
+    record.origin ??= sensor.origin;
 
     // camera.addSensor re-registration re-binds (also backfills migrated records)
     if (options?.assignCameraId) {
@@ -223,7 +226,9 @@ export class SensorRegistry {
         name: sensor.name,
         assignedCameraIds: options?.assignCameraId ? [options.assignCameraId] : [],
         boundCameraId: options?.assignCameraId,
-        exposed: true,
+        exposed: sensor.exposed ?? true,
+        hidden: sensor.hidden,
+        origin: sensor.origin,
         state: {},
         createdAt: Date.now(),
         updatedAt: Date.now(),

@@ -129,19 +129,16 @@ export class MqttBridge {
       else this.clearRetained(sensorBucket(sensor.sensorId));
     });
 
-    // a rename or capability flip changes the discovery config (name, brightness
-    // channel), so republish the whole sensor rather than a single property
     this.onBus('sensor:displayName:changed', (payload) => this.republishSensor((payload as SensorLifecyclePayload).sensorId));
 
     this.onBus('sensor:capabilities:changed', (payload) => this.republishSensor((payload as SensorLifecyclePayload).sensorId));
 
-    // republishSensor clears everything when the sensor is no longer exposed
     this.onBus('sensor:exposed:changed', (payload) => this.republishSensor((payload as SensorLifecyclePayload).sensorId));
 
     this.onBus('sensor:property:changed', (payload) => {
       const change = payload as SensorPropertyChangedPayload;
       const sensor = this.registry.getSensor(change.sensorId);
-      if (!sensor?.data.exposed) return;
+      if (!this.isHaExportable(sensor?.data)) return;
       this.publishRetained(sensorBucket(change.sensorId), this.manager.topics.sensorProperty(change.sensorId, change.property), JSON.stringify(change.value ?? null));
     });
 
@@ -176,7 +173,7 @@ export class MqttBridge {
     const [sensorId, property] = parts;
 
     const sensor = this.registry.getSensor(sensorId, { connectedOnly: true });
-    if (!sensor?.data.exposed || !isWritableSensor(sensor.type, sensor.pluginId)) return;
+    if (!sensor || !this.isHaExportable(sensor.data) || !isWritableSensor(sensor.type, sensor.pluginId)) return;
 
     sensor.updateValue(property, parseCommandPayload(payload.toString('utf8')));
   }
@@ -206,7 +203,7 @@ export class MqttBridge {
     }
 
     for (const sensor of this.registry.getAllSensors()) {
-      if (sensor.data.exposed) this.publishSensorState(sensor.data);
+      if (this.isHaExportable(sensor.data)) this.publishSensorState(sensor.data);
     }
 
     this.sweepLegacyRetained();
@@ -313,10 +310,14 @@ export class MqttBridge {
     this.publishRetained(controller.id, this.manager.topics.cameraMeta(controller.id), JSON.stringify(meta));
   }
 
+  private isHaExportable(data: StoredSensorData | undefined): boolean {
+    return !!data?.exposed && data.origin !== 'homeassistant';
+  }
+
   private republishSensor(sensorId: string): void {
     const data = this.registry.getSensor(sensorId, { connectedOnly: true })?.data;
     if (!data) return;
-    if (!data.exposed) {
+    if (!this.isHaExportable(data)) {
       this.clearRetained(sensorBucket(sensorId));
       return;
     }
