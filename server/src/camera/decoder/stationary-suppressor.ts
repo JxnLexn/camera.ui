@@ -273,7 +273,7 @@ export class StationarySuppressor {
   private evaluateAnchored(t: TrackedDetection, anchor: StationaryAnchor): boolean {
     const iou = boxIou(anchor.box, t.box);
 
-    if (iou < DEPART_IOU) {
+    if (iou < DEPART_IOU && (t.trackSpeed ?? 0) >= STATIONARY_SPEED_THRESHOLD) {
       anchor.wakeMisses += 1;
       if (anchor.wakeMisses >= WAKE_SIGHTINGS) {
         anchor.dormant = true;
