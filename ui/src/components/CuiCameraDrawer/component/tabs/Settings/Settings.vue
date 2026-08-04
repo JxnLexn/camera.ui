@@ -1437,22 +1437,16 @@ import type {
   RecordingSource,
   StreamingRole,
 } from '@camera.ui/sdk';
+import { SENSOR_TYPE_CONFIG } from '@shared/types';
+
 import type { DBCamera } from '@shared/types';
 import type { CameraOptionsTabEmits, CameraOptionsTabProps } from '../../types.js';
 
-const TRIGGERABLE_TYPES = new Set([
-  SensorType.Contact,
-  SensorType.Occupancy,
-  SensorType.Smoke,
-  SensorType.Leak,
-  SensorType.Doorbell,
-  SensorType.Switch,
-  SensorType.Light,
-  SensorType.Siren,
-  SensorType.Lock,
-  SensorType.Garage,
-  SensorType.SecuritySystem,
-]);
+const TRIGGERABLE_TYPES = new Set(
+  Object.entries(SENSOR_TYPE_CONFIG)
+    .filter(([, meta]) => meta.cascadeTrigger && !meta.isDetectionType)
+    .map(([type]) => type as SensorType),
+);
 
 const camerasQuery = new CamerasQuery();
 const camerasQueryRooms = new CamerasQuery();
