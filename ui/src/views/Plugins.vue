@@ -75,7 +75,7 @@
 
       <Card v-else-if="viewMode === 'table'" key="table" class="cui-card h-auto! self-start">
         <template #content>
-          <CuiDataTable :value="filteredPlugins" paginator :rows="TABLE_PAGE_SIZE" striped-rows class="w-full">
+          <CuiDataTable :value="filteredPlugins" paginator striped-rows class="w-full">
             <Column v-if="selectionMode" header="" header-class="p-2 pl-4 w-8 max-w-8" class="p-2 pl-4 w-8 max-w-8">
               <template #body="{ data }">
                 <Checkbox :model-value="selectedIds.has(data.pluginName)" binary size="small" @update:model-value="toggleSelection(data.pluginName)" />
@@ -242,7 +242,6 @@ import type { CameraUiPlugin, IConfig, INpmPluginState } from '@shared/types';
 
 import { ConfigQuery } from '@/api/routes/config.js';
 import { disablePluginFn, enablePluginFn, getPluginUpdateFn, installPluginFn, PluginsQuery, uninstallPluginFn } from '@/api/routes/plugins.js';
-import { TABLE_PAGE_SIZE } from '@/common/constants.js';
 import PluginSearchDialog from '@/components/CuiDialog/templates/PluginSearch/PluginSearch.vue';
 import { PLUGIN_CARD_SIZE } from '@/components/CuiPluginCard/types.js';
 import { useCardSelection } from '@/composables/useCardSelection.js';

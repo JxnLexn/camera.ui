@@ -1,4 +1,3 @@
-export const TABLE_PAGE_SIZE = 10;
 export const TABLE_PAGINATOR_TEMPLATE = 'FirstPageLink PrevPageLink PageLinks NextPageLink LastPageLink';
 
 export const AUTH_SERVICE_URL = import.meta.env.VITE_AUTH_SERVICE_URL ?? 'https://auth.cameraui.com';

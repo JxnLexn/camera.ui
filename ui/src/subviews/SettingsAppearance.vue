@@ -64,6 +64,13 @@
                 <Message severity="secondary" variant="simple" size="small" class="cui-input-hint">{{ $t('components.form.hint.default_settings_page') }}</Message>
               </div>
 
+              <div class="flex flex-col field-gap">
+                <label class="cui-label">{{ $t('components.form.label.table_rows') }}</label>
+                <Select v-model="uiSettings.interface.tableRows" :options="tableRowsOptions" />
+
+                <Message severity="secondary" variant="simple" size="small" class="cui-input-hint">{{ $t('components.form.hint.table_rows') }}</Message>
+              </div>
+
               <div class="w-full flex flex-col gap-2">
                 <div class="flex flex-col field-gap cui-toggle-switch">
                   <div class="flex items-center gap-4">
@@ -139,6 +146,8 @@ const { uiSettings } = storeToRefs(uiStore);
 
 const recording = ref(Logger.isRecording());
 const debugOn = ref(Logger.isDebug());
+
+const tableRowsOptions = [5, 10, 15, 25, 50, 100];
 
 const landingOptions = computed(() =>
   landingPageRoutes().map((route) => ({

@@ -29,6 +29,7 @@ const defaultUiSettings: UiSettingsLocalStorage & LoggerLocalStorage = {
     selectedSettingsView: 'account',
     navbarStayCollapsed: true,
     landingPage: '/home',
+    tableRows: 15,
   },
   sensors: {
     hideCameraBound: true,
@@ -47,6 +48,8 @@ export const useUiStore = defineStore('ui', () => {
   });
 
   uiSettings.value.interface.landingPage ??= '/home';
+  uiSettings.value.interface.tableRows ??= 15;
+  uiSettings.value.sensors.view ??= 'table';
 
   return {
     uiSettings,

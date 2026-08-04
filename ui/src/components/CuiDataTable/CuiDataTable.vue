@@ -6,7 +6,7 @@
       </div>
     </Transition>
 
-    <DataTable v-bind="$attrs" :value="value" :rows="rows" :paginator="showPaginator" :paginator-template="paginatorTemplate">
+    <DataTable v-bind="$attrs" :value="value" :rows="effectiveRows" :paginator="showPaginator" :paginator-template="paginatorTemplate">
       <template v-for="(_, name) in $slots" #[name]="slotProps">
         <slot :name="name" v-bind="slotProps ?? {}" />
       </template>
@@ -23,11 +23,16 @@ defineOptions({ inheritAttrs: false });
 
 const props = withDefaults(defineProps<CuiDataTableProps>(), CUI_DATA_TABLE_DEFAULTS);
 
+const uiStore = useUiStore();
+const { uiSettings } = storeToRefs(uiStore);
+
 const root = useTemplateRef<HTMLElement>('root');
 
 const canScrollRight = ref(false);
 
-const showPaginator = computed(() => props.paginator || (props.value?.length ?? 0) > props.rows);
+const effectiveRows = computed(() => props.rows ?? uiSettings.value.interface.tableRows);
+
+const showPaginator = computed(() => props.paginator || (props.value?.length ?? 0) > effectiveRows.value);
 
 function measureScroll() {
   const container = root.value?.querySelector<HTMLElement>('.p-datatable-table-container');

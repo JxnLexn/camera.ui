@@ -633,6 +633,7 @@ export interface InterfaceSettinges {
   selectedSettingsView: SettingsViews;
   navbarStayCollapsed: boolean;
   landingPage: string;
+  tableRows: number;
 }
 
 export interface SensorsSettings {

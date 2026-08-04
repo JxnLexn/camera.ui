@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 
 ## [2.1.2]
 
-**New plugin: Home Assistant.** Imports your Home Assistant devices into camera.ui. Motion, occupancy, contacts, doorbells, smoke, leak and more become sensors you can assign to cameras as detection triggers. Locks, garage doors, alarm panels, switches, lights and sirens come in as controls and can be switched right from camera.ui. Inside the Home Assistant add-on it connects without any configuration; everywhere else it takes your Home Assistant URL and an access token.
+**New plugin: Home Assistant.** Imports your Home Assistant devices into camera.ui. Motion, occupancy, contacts, doorbells, smoke, leak and more become sensors you can assign to cameras as detection triggers. Locks, garage doors, alarm panels, switches, lights and sirens come in as controls and can be switched right from camera.ui. Home Assistant notify services (companion app, TTS, Telegram) can be added as notification targets, so camera.ui alerts reach every channel Home Assistant knows. Inside the Home Assistant add-on it connects without any configuration; everywhere else it takes your Home Assistant URL and an access token.
 
 ### Added
 
@@ -13,6 +13,8 @@ All notable changes to this project will be documented in this file.
 - **Plugin installs run through a queue.** Installs, updates and uninstalls now queue up on the server and run two at a time, so updating many plugins no longer floods a small box. Every open browser sees which plugins are waiting and which are running, no matter who started them.
 
 - **The Plugins page has a table view.** A button next to the plus switches between the cards and a compact table with status, version and the full action set per row, update, log and the familiar menu, handy for many plugins. The choice sticks, and both views now also show the package name under the display name.
+
+- **Table page size is adjustable.** Settings > Appearance has a new "Table rows per page" option (5 to 100) that every table follows, plugins, sensors, admin panel and the rest. The choice is saved per browser.
 
 - **Ten new sensor types.** Gas, carbon monoxide, carbon dioxide, heat, cold, vibration, tamper, problem, power and illuminance. Plugins can provide them, virtual ones can be created like any other sensor, and each comes with its own widget, icon and history. The binary ones can start camera events as sensor triggers, and such events stand out on the timeline with the full event bar.
 

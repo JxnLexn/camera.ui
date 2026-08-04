@@ -103,22 +103,25 @@
 </template>
 
 <script setup lang="ts">
-import { TABLE_PAGE_SIZE, TABLE_PAGINATOR_TEMPLATE } from '@/common/constants.js';
+import { TABLE_PAGINATOR_TEMPLATE } from '@/common/constants.js';
 import { isHeaderAction, isHeaderCategory, isHeaderChart, isHeaderIndicator } from './types.js';
 
 import type { ChartData, ChartOptions } from 'chart.js';
 import type { CuiChartTableEmits, CuiChartTableProps, TableHeaderChart } from './types.js';
 
-const props = withDefaults(defineProps<CuiChartTableProps>(), {
-  rows: TABLE_PAGE_SIZE,
-});
+const props = defineProps<CuiChartTableProps>();
 
 const emit = defineEmits<CuiChartTableEmits>();
 
 const themeStore = useThemeStore();
 const { theme } = storeToRefs(themeStore);
 
-const { headers, items: value, loading, chartData, paginator, pagination, totalRecords, rows } = toRefs(props);
+const uiStore = useUiStore();
+const { uiSettings } = storeToRefs(uiStore);
+
+const { headers, items: value, loading, chartData, paginator, pagination, totalRecords } = toRefs(props);
+
+const rows = computed(() => props.rows ?? uiSettings.value.interface.tableRows);
 
 const endMarker = useTemplateRef<HTMLElement>('endMarker');
 const scrollTarget = useTemplateRef<HTMLElement>('scrollTarget');
@@ -136,13 +139,13 @@ const totalPages = computed(() => {
 const displayItems = computed(() => {
   if (!value.value) return [];
   if (!paginator.value) return value.value;
-  const pageSize = rows.value ?? TABLE_PAGE_SIZE;
+  const pageSize = rows.value;
   const page = currentPage.value - 1;
   return value.value.slice(page * pageSize, (page + 1) * pageSize);
 });
 
 function goToPage(page: number) {
-  const pageSize = rows.value ?? TABLE_PAGE_SIZE;
+  const pageSize = rows.value;
   emit('update:page', { page: page - 1, rows: pageSize, first: (page - 1) * pageSize });
 }
 
