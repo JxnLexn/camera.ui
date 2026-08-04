@@ -106,6 +106,9 @@
                 :load-thumbnails="loadThumbnails"
                 :semantic-score="semanticEventIds.get(item.event.id)"
                 :thumbnail-override="item.thumbnailOverride"
+                :selection-mode="selectionMode"
+                :selected="selectedIds.has(item.event.id)"
+                @select="toggleSelection(item.event.id)"
                 @scroll-to-event="() => openRecordingDialog(item.event)"
               />
             </template>
@@ -123,15 +126,54 @@
       </div>
     </main>
 
-    <CuiFloatingButton
-      v-if="availableCameras.length"
-      :tooltip-props="{ value: $t('views.recordings.export.title') }"
-      :button-props="{ class: 'text-white' }"
-      :icon="DownloadIcon"
-      :icon-props="{ width: '26px', height: '26px' }"
-      force-visible
-      @click="openExportDialog"
-    />
+    <CuiFloatingButtonGroup v-if="availableCameras.length" :force-visible="selectionMode">
+      <template v-if="!selectionMode">
+        <CuiFloatingButton
+          v-if="isAdmin && displayEvents.length"
+          grouped
+          :tooltip-props="{ value: $t('views.recordings.select') }"
+          :button-props="{ severity: 'secondary' }"
+          :icon="SelectIcon"
+          :icon-props="{ width: '100%', height: '100%' }"
+          @click="enterSelectionMode"
+        />
+        <CuiFloatingButton
+          grouped
+          :tooltip-props="{ value: $t('views.recordings.export.title') }"
+          :button-props="{ class: 'text-white' }"
+          :icon="DownloadIcon"
+          :icon-props="{ width: '26px', height: '26px' }"
+          @click="openExportDialog"
+        />
+      </template>
+
+      <template v-else>
+        <CuiFloatingButton
+          grouped
+          :tooltip-props="{ value: $t('components.form.tooltip.cancel_selection') }"
+          :button-props="{ severity: 'secondary' }"
+          :icon="CloseIcon"
+          :icon-props="{ width: '100%', height: '100%' }"
+          @click="exitSelectionMode"
+        />
+        <CuiFloatingButton
+          grouped
+          :tooltip-props="{ value: allSelected ? $t('components.form.tooltip.deselect_all') : $t('components.form.tooltip.select_all') }"
+          :button-props="{ severity: allSelected ? 'primary' : 'secondary' }"
+          :icon="SelectAllIcon"
+          :icon-props="{ width: '100%', height: '100%' }"
+          @click="toggleSelectAll"
+        />
+        <CuiFloatingButton
+          grouped
+          :tooltip-props="{ value: $t('components.form.tooltip.delete_selected') }"
+          :button-props="{ severity: 'danger', disabled: !selectedIds.size || bulkBusy }"
+          :icon="TrashIcon"
+          :icon-props="{ width: '100%', height: '100%' }"
+          @click="confirmBulkDelete"
+        />
+      </template>
+    </CuiFloatingButtonGroup>
 
     <CuiMenu
       ref="viewMenuRef"
@@ -151,6 +193,10 @@
 
 <script setup lang="ts">
 import { EventHoverPreviewKey, getPrimaryThumbnailFromCache, thumbnailToUrl, useDetectionEvents, useEventHoverPreview, useSemanticSearch } from '@camera.ui/nvr';
+import SelectAllIcon from '~icons/fluent/select-all-on-20-filled';
+import CloseIcon from '~icons/mdi/close';
+import TrashIcon from '~icons/mdi/delete-outline';
+import SelectIcon from '~icons/tabler/dots-filled';
 import DownloadIcon from '~icons/tabler/download';
 import SparklesIcon from '~icons/tabler/sparkles';
 
@@ -177,6 +223,7 @@ interface UngroupedItem {
 const camerasQuery = new CamerasQuery();
 
 const dialog = useCuiDialog();
+const toast = useCuiToast();
 const { t } = useI18n();
 const { smBreakpoint, xlBreakpoint, mdBreakpoint } = useSharedCuiBreakpoint();
 const { isTouch } = useSharedCuiUserAgent();
@@ -278,7 +325,7 @@ const allCameraIds = computed(() => {
 
 registerScrollToTop(() => gridRef.value?.scrollToTop());
 
-const { events, isLoading, hasMore, loadMore, loadThumbnails, getCachedThumbnails } = useDetectionEvents({
+const { events, isLoading, hasMore, loadMore, loadThumbnails, getCachedThumbnails, deleteEvents } = useDetectionEvents({
   availableCameraIds: allCameraIds,
   cameraIds,
   realtime: true,
@@ -333,6 +380,41 @@ const gridItems = computed<UngroupedItem[]>(() => {
   if (ungrouped.value && ungroupedItems.value.length) return ungroupedItems.value;
   return displayEvents.value.map((event) => ({ event, key: event.id }));
 });
+
+const isAdmin = computed(() => hasPermission(undefined, 'admin'));
+
+const { selectionMode, selectedIds, allSelected, bulkBusy, enterSelectionMode, exitSelectionMode, toggleSelectAll, toggleSelection } = useCardSelection(
+  displayEvents,
+  (event) => event.id,
+);
+
+function confirmBulkDelete() {
+  const ids = [...selectedIds.value];
+  if (!ids.length || bulkBusy.value) return;
+
+  dialog.openTextDialog({
+    data: {
+      title: t('components.dialog.title.confirm'),
+      contentText: t('views.recordings.delete_selected_confirm', { count: ids.length }),
+      confirmText: t('components.form.button.remove'),
+      confirmButtonProps: {
+        severity: 'danger',
+      },
+    },
+    onConfirm: async () => {
+      bulkBusy.value = true;
+      try {
+        await deleteEvents(ids);
+        exitSelectionMode();
+        toast.add({ severity: 'success', detail: t('views.recordings.delete_selected_done', { count: ids.length }), life: 5000 });
+      } catch (error: any) {
+        toast.add({ severity: 'error', detail: error?.message ?? String(error), life: 5000 });
+      } finally {
+        bulkBusy.value = false;
+      }
+    },
+  });
+}
 
 const viewMenuItems = computed<MenuItem[]>(() => [
   {

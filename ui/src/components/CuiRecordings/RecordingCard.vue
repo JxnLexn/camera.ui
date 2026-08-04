@@ -29,7 +29,7 @@
             {{ semanticDisplay.label }}
           </span>
           <Button
-            v-if="canDownload"
+            v-if="canDownload && !selectionMode"
             v-tooltip.left="{ value: $t('views.recordings.download') }"
             rounded
             text
@@ -47,6 +47,13 @@
       </div>
 
       <div class="absolute bottom-2 left-2 flex items-center gap-1 z-[3]">
+        <div
+          v-if="selectionMode"
+          class="w-6 h-6 rounded-full border-2 flex items-center justify-center transition-colors shrink-0"
+          :class="selected ? 'bg-primary border-primary' : 'bg-black/40 border-white/80'"
+        >
+          <i-mdi:check v-if="selected" class="w-4 h-4 text-white" />
+        </div>
         <div v-for="type in displayTypes" :key="type" class="flex items-center justify-center w-5 h-5 rounded-md bg-black/60">
           <component :is="eventIcons[type] ?? eventIcons.motion" class="w-3 h-3 text-white/80" />
         </div>
@@ -234,6 +241,10 @@ async function triggerLoad(retries = 2): Promise<void> {
 }
 
 function handleClick(): void {
+  if (props.selectionMode) {
+    emit('select');
+    return;
+  }
   emit('scrollToEvent', props.event.startTime);
 }
 

@@ -34,10 +34,13 @@ export interface RecordingCardProps {
   loadThumbnails: (eventId: string, startMs: number) => Promise<EventThumbnails | null>;
   semanticScore?: number;
   thumbnailOverride?: ThumbnailOverride;
+  selectionMode?: boolean;
+  selected?: boolean;
 }
 
 export interface RecordingCardEmits {
   scrollToEvent: [timestamp: number];
+  select: [];
 }
 
 export interface RecordingsFilterSidebarProps {
