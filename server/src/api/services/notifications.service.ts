@@ -38,6 +38,10 @@ export class NotificationsService {
     await this.dbs.notificationsDB.put(userId, settings);
   }
 
+  public async patchSettings(userId: string, patch: Partial<Omit<DBNotificationSettings, '_id'>>): Promise<void> {
+    await this.dbs.commit(this.dbs.notificationsDB, userId, (current) => ({ ...(current ?? { _id: userId, enabled: false }), ...patch, _id: userId }));
+  }
+
   public async listDevices(userId: string, userRole: DBRoles): Promise<NotifierDeviceWithSource[]> {
     return this.proxyServer.notificationManager.listAllDevices(userId, userRole);
   }

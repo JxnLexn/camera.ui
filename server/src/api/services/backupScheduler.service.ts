@@ -232,7 +232,6 @@ export class BackupSchedulerService {
   }
 
   private async persist(settings: DBBackupSchedulerSettings): Promise<void> {
-    const record = this.dbs.settingsDB.get('settings') ?? { version: '' };
-    await this.dbs.settingsDB.put('settings', { ...record, backupScheduler: settings });
+    await this.dbs.commit(this.dbs.settingsDB, 'settings', (current) => ({ ...(current ?? { version: '' }), backupScheduler: settings }));
   }
 }

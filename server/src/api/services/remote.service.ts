@@ -33,17 +33,19 @@ export class RemoteService {
   }
 
   public async patch(infoData: DeepPartial<DBRemote> = {}): Promise<DBRemote> {
-    const info = this.info();
+    const info = await this.dbs.commit(this.dbs.remoteDB, 'remote', (current) => {
+      const record = current ?? dbRemoteSchema.parse({});
 
-    mergeWith(info, infoData, (source: any, target: any) => {
-      if (Array.isArray(source)) {
-        return target;
-      }
+      mergeWith(record, infoData, (source: any, target: any) => {
+        if (Array.isArray(source)) {
+          return target;
+        }
+      });
+
+      return record;
     });
 
-    await this.dbs.remoteDB.put('remote', info);
-
-    return info;
+    return info ?? this.info();
   }
 
   public isCloudConnected(): boolean {
@@ -57,17 +59,21 @@ export class RemoteService {
 
   public async patchCloud(patch: Partial<DBCloud>): Promise<DBCloud> {
     const before = this.getCloud().oauth?.grant_id;
-    const cloud = { ...this.getCloud(), ...patch };
-    await this.dbs.cloudDB.put('cloud', cloud);
+    const cloud = (await this.dbs.commit(this.dbs.cloudDB, 'cloud', (current) => ({ ...(current ?? {}), ...patch }))) ?? {};
     this.emitCloudCredsChangedIfNeeded(before, cloud.oauth?.grant_id);
     return cloud;
   }
 
   public async clearCloudServer(): Promise<void> {
-    const cloud = this.getCloud();
-    const before = cloud.oauth?.grant_id;
-    delete cloud.oauth;
-    await this.dbs.cloudDB.put('cloud', cloud);
+    const before = this.getCloud().oauth?.grant_id;
+
+    await this.dbs.commit(this.dbs.cloudDB, 'cloud', (current) => {
+      const cloud = current ?? {};
+      delete cloud.oauth;
+
+      return cloud;
+    });
+
     this.emitCloudCredsChangedIfNeeded(before, undefined);
   }
 
@@ -140,12 +146,15 @@ export class RemoteService {
   }
 
   public async clearPendingPair(): Promise<void> {
-    const cloud = this.getCloud();
-    if (!cloud.pending_pair) {
-      return;
-    }
-    delete cloud.pending_pair;
-    await this.dbs.cloudDB.put('cloud', cloud);
+    await this.dbs.commit(this.dbs.cloudDB, 'cloud', (current) => {
+      if (!current?.pending_pair) {
+        return undefined;
+      }
+
+      delete current.pending_pair;
+
+      return current;
+    });
   }
 
   public async updateCloudServer(enabled: boolean): Promise<void> {
@@ -175,11 +184,9 @@ export class RemoteService {
   }
 
   public async updateCloudServerName(name: string): Promise<void> {
-    const cloud = this.getCloud();
-    const previousName = cloud.name;
+    const previousName = this.getCloud().name;
 
-    cloud.name = name;
-    await this.dbs.cloudDB.put('cloud', cloud);
+    await this.dbs.commit(this.dbs.cloudDB, 'cloud', (current) => ({ ...(current ?? {}), name }));
 
     if (!(await this.cloudApi.credentialStore.peek())) {
       return; // not registered
@@ -191,8 +198,7 @@ export class RemoteService {
     try {
       await this.cloudApi.serverRoute.update({ name, disabled: !status.enabled });
     } catch (err) {
-      cloud.name = previousName;
-      await this.dbs.cloudDB.put('cloud', cloud);
+      await this.dbs.commit(this.dbs.cloudDB, 'cloud', (current) => ({ ...(current ?? {}), name: previousName }));
       throw err;
     }
   }

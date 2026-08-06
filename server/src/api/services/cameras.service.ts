@@ -107,22 +107,36 @@ export class CamerasService {
   }
 
   public async patchZones(cameraname: string, zoneData: DetectionZone[]): Promise<DBCamera | undefined> {
-    const camera = this.findByName(cameraname);
+    const existing = this.findByName(cameraname);
+    if (!existing) return undefined;
+
+    const camera = await this.dbs.commit(this.dbs.camerasDB, existing._id, (current) => {
+      if (!current) return undefined;
+
+      current.detectionZones = zoneData;
+
+      return current;
+    });
     if (!camera) return undefined;
 
-    camera.detectionZones = zoneData;
-    await this.dbs.camerasDB.put(camera._id, camera);
     this.api.updateCamera(this.transformCamera(camera));
 
     return camera;
   }
 
   public async patchLines(cameraname: string, lineData: DetectionLine[]): Promise<DBCamera | undefined> {
-    const camera = this.findByName(cameraname);
+    const existing = this.findByName(cameraname);
+    if (!existing) return undefined;
+
+    const camera = await this.dbs.commit(this.dbs.camerasDB, existing._id, (current) => {
+      if (!current) return undefined;
+
+      current.detectionLines = lineData;
+
+      return current;
+    });
     if (!camera) return undefined;
 
-    camera.detectionLines = lineData;
-    await this.dbs.camerasDB.put(camera._id, camera);
     this.api.updateCamera(this.transformCamera(camera));
 
     return camera;
@@ -136,26 +150,27 @@ export class CamerasService {
     return this.list().map((camera) => this.transformCamera(camera));
   }
 
-  // Called once at startup to remove references to uninstalled plugins
   public async cleanupNonExistentPlugins(): Promise<void> {
     const existingPluginNames = new Set<string>(this.pluginsService.listPlugins().map((p) => p.pluginName));
-    const tasks: Promise<unknown>[] = [];
+    const cameraIds = [...this.dbs.camerasDB.getRange()].map(({ value }) => value._id);
 
-    for (const { value: camera } of this.dbs.camerasDB.getRange()) {
-      let processedCamera = this.migrateAssignments(camera);
+    await Promise.all(
+      cameraIds.map((cameraId) =>
+        this.dbs.commit(this.dbs.camerasDB, cameraId, (current) => {
+          if (!current) return undefined;
 
-      const { camera: afterNonExistent, modified: mod1 } = this.cleanupPlugins(processedCamera, existingPluginNames);
-      processedCamera = afterNonExistent;
+          let processedCamera = this.migrateAssignments(current);
 
-      const { camera: afterDeselected, modified: mod2 } = this.cleanupDeselectedPluginAssignments(processedCamera);
-      processedCamera = afterDeselected;
+          const { camera: afterNonExistent, modified: mod1 } = this.cleanupPlugins(processedCamera, existingPluginNames);
+          processedCamera = afterNonExistent;
 
-      if (mod1 || mod2) {
-        tasks.push(this.dbs.camerasDB.put(processedCamera._id, processedCamera));
-      }
-    }
+          const { camera: afterDeselected, modified: mod2 } = this.cleanupDeselectedPluginAssignments(processedCamera);
+          processedCamera = afterDeselected;
 
-    await Promise.all(tasks);
+          return mod1 || mod2 ? processedCamera : undefined;
+        }),
+      ),
+    );
   }
 
   public listByPluginId(pluginId: string): DBCamera[] {
@@ -270,50 +285,61 @@ export class CamerasService {
   }
 
   public async patchCameraByName(cameraname: string, cameraData: DeepPartial<DBCamera>): Promise<DBCamera | undefined> {
-    const camera = this.findByName(cameraname);
-    if (!camera) return undefined;
+    const existing = this.findByName(cameraname);
+    if (!existing) return undefined;
 
-    if (cameraData.name && this.findByConflictingName(cameraData.name, camera._id)) {
+    if (cameraData.name && this.findByConflictingName(cameraData.name, existing._id)) {
       throw new Error(`Camera name "${cameraData.name}" is already in use`);
     }
 
-    const cameraController = this.api.getCamera(camera._id);
-    const cameraOld = structuredClone(camera);
+    const cameraController = this.api.getCamera(existing._id);
+    const cameraOld = structuredClone(existing);
 
     const isInputSourceArray = (value: unknown) => Array.isArray(value) && value.every((item) => item && typeof item === 'object');
 
-    mergeWith(camera, cameraData, (source: any[], target: any, key) => {
-      if (key === 'sources' && isInputSourceArray(source) && isInputSourceArray(target)) {
-        return (target as CameraInputSettings[]).map((srcItem) => {
-          const objItem: CameraInputSettings | undefined = source.find((o: any) => o.name === srcItem.name);
-          const sourceId = objItem?._id ?? srcItem._id;
-          return objItem ? { ...objItem, ...srcItem, _id: sourceId, name: objItem.name } : srcItem;
-        });
-      }
+    const applyPatch = (target: DBCamera): void => {
+      mergeWith(target, cameraData, (source: any[], mergeTarget: any, key) => {
+        if (key === 'sources' && isInputSourceArray(source) && isInputSourceArray(mergeTarget)) {
+          return (mergeTarget as CameraInputSettings[]).map((srcItem) => {
+            const objItem: CameraInputSettings | undefined = source.find((o: any) => o.name === srcItem.name);
+            const sourceId = objItem?._id ?? srcItem._id;
+            return objItem ? { ...objItem, ...srcItem, _id: sourceId, name: objItem.name } : srcItem;
+          });
+        }
 
-      if (key === 'plugins' || key === 'assignments') {
-        return source;
-      }
+        if (key === 'plugins' || key === 'assignments') {
+          return source;
+        }
 
-      if (Array.isArray(source)) {
-        return target;
-      }
-    });
+        if (Array.isArray(source)) {
+          return mergeTarget;
+        }
+      });
+    };
 
-    if (!isEqual(cameraOld, camera, true)) {
-      if (cameraOld.name !== camera.name) {
+    const patched = structuredClone(existing);
+    applyPatch(patched);
+
+    if (!isEqual(cameraOld, patched, true)) {
+      if (cameraOld.name !== patched.name) {
         await this.removeCameraSourcesFromConfig(cameraOld.name, cameraOld.sources);
       }
 
-      const orphanedSources = cameraOld.sources.filter((source) => !camera.sources.find((s) => s.name === source.name));
-      await this.removeCameraSourcesFromConfig(camera.name, orphanedSources);
+      const orphanedSources = cameraOld.sources.filter((source) => !patched.sources.find((s) => s.name === source.name));
+      await this.removeCameraSourcesFromConfig(patched.name, orphanedSources);
     }
 
-    await this.addCameraSourcesToConfig(camera._id, camera.name, camera.sources);
-    await this.dbs.camerasDB.put(camera._id, camera);
+    await this.addCameraSourcesToConfig(patched._id, patched.name, patched.sources);
 
-    // keep go2rtc's preload section in step with the disabled flag, a go2rtc
-    // restart must not preload a disabled camera
+    const camera = await this.dbs.commit(this.dbs.camerasDB, existing._id, (current) => {
+      if (!current) return undefined;
+
+      applyPatch(current);
+
+      return current;
+    });
+    if (!camera) return undefined;
+
     if (cameraOld.disabled !== camera.disabled) {
       this.dbs.syncCamerasToGo2RtcConfig();
     }
@@ -332,134 +358,150 @@ export class CamerasService {
   }
 
   public async enableAssignmentByName(cameraname: string, pluginNameOrId: string, assignmentType: SensorType | 'cameraController'): Promise<DBCamera | undefined> {
-    const camera = this.findByName(cameraname);
+    const existing = this.findByName(cameraname);
     const plugin = this.pluginsService.getPluginByName(pluginNameOrId) ?? this.pluginsService.getPluginById(pluginNameOrId);
 
-    if (!camera || !plugin || !VALID_SENSOR_TYPES.includes(assignmentType) || !camera.plugins.some((p) => p.name === plugin.pluginName)) {
-      return camera;
+    if (!existing || !plugin || !VALID_SENSOR_TYPES.includes(assignmentType) || !existing.plugins.some((p) => p.name === plugin.pluginName)) {
+      return existing;
     }
 
     const pluginInfo = { id: plugin.id, name: plugin.pluginName };
-    let mutated = false;
 
-    if (this.isMultiProviderType(assignmentType)) {
-      const key = assignmentType as keyof typeof camera.assignments;
-      if (!Array.isArray(camera.assignments[key])) {
-        (camera.assignments as Record<string, unknown>)[assignmentType] = [];
+    const camera = await this.dbs.commit(this.dbs.camerasDB, existing._id, (current) => {
+      if (!current) return undefined;
+
+      let mutated = false;
+
+      if (this.isMultiProviderType(assignmentType)) {
+        const key = assignmentType as keyof typeof current.assignments;
+        if (!Array.isArray(current.assignments[key])) {
+          (current.assignments as Record<string, unknown>)[assignmentType] = [];
+        }
+        const arr = current.assignments[key] as AssignedPlugin[];
+        if (!arr.some((p) => p.name === plugin.pluginName)) {
+          arr.push(pluginInfo);
+          mutated = true;
+        }
+      } else {
+        const currentAssignment = current.assignments[assignmentType as keyof typeof current.assignments];
+        const currentName = currentAssignment && !Array.isArray(currentAssignment) ? currentAssignment.name : undefined;
+
+        if (currentName !== plugin.pluginName) {
+          (current.assignments as Record<string, unknown>)[assignmentType] = pluginInfo;
+          mutated = true;
+        }
       }
-      const arr = camera.assignments[key] as AssignedPlugin[];
-      if (!arr.some((p) => p.name === plugin.pluginName)) {
-        arr.push(pluginInfo);
+
+      if (this.clearInvalidObjectAssist(current)) {
         mutated = true;
       }
-    } else {
-      const currentAssignment = camera.assignments[assignmentType as keyof typeof camera.assignments];
-      const currentName = currentAssignment && !Array.isArray(currentAssignment) ? currentAssignment.name : undefined;
 
-      if (currentName !== plugin.pluginName) {
-        (camera.assignments as Record<string, unknown>)[assignmentType] = pluginInfo;
-        mutated = true;
-      }
-    }
+      return mutated ? current : undefined;
+    });
 
-    if (this.clearInvalidObjectAssist(camera)) {
-      mutated = true;
-    }
-
-    if (mutated) {
-      await this.dbs.camerasDB.put(camera._id, camera);
+    if (camera) {
       this.api.updateCamera(this.transformCamera(camera));
     }
 
-    return camera;
+    return camera ?? existing;
   }
 
   public async disableAssignmentByName(cameraname: string, pluginNameOrId: string, assignmentType: SensorType | 'cameraController'): Promise<DBCamera | undefined> {
-    const camera = this.findByName(cameraname);
+    const existing = this.findByName(cameraname);
     const plugin = this.pluginsService.getPluginByName(pluginNameOrId) ?? this.pluginsService.getPluginById(pluginNameOrId);
 
-    if (!camera || !plugin || !VALID_SENSOR_TYPES.includes(assignmentType) || !camera.plugins.some((p) => p.name === plugin.pluginName)) {
-      return camera;
+    if (!existing || !plugin || !VALID_SENSOR_TYPES.includes(assignmentType) || !existing.plugins.some((p) => p.name === plugin.pluginName)) {
+      return existing;
     }
 
-    let mutated = false;
+    const camera = await this.dbs.commit(this.dbs.camerasDB, existing._id, (current) => {
+      if (!current) return undefined;
 
-    if (this.isMultiProviderType(assignmentType)) {
-      const key = assignmentType as keyof typeof camera.assignments;
-      const currentAssignments = camera.assignments[key];
-      if (Array.isArray(currentAssignments) && currentAssignments.some((p) => p.name === plugin.pluginName)) {
-        (camera.assignments as Record<string, unknown>)[assignmentType] = currentAssignments.filter((p) => p.name !== plugin.pluginName);
+      let mutated = false;
+
+      if (this.isMultiProviderType(assignmentType)) {
+        const key = assignmentType as keyof typeof current.assignments;
+        const currentAssignments = current.assignments[key];
+        if (Array.isArray(currentAssignments) && currentAssignments.some((p) => p.name === plugin.pluginName)) {
+          (current.assignments as Record<string, unknown>)[assignmentType] = currentAssignments.filter((p) => p.name !== plugin.pluginName);
+          mutated = true;
+        }
+      } else {
+        const currentAssignment = current.assignments[assignmentType as keyof typeof current.assignments];
+        const currentName = currentAssignment && !Array.isArray(currentAssignment) ? currentAssignment.name : undefined;
+
+        if (currentName === plugin.pluginName) {
+          (current.assignments as Record<string, unknown>)[assignmentType] = undefined;
+          mutated = true;
+        }
+      }
+
+      if (this.clearInvalidObjectAssist(current)) {
         mutated = true;
       }
-    } else {
-      const currentAssignment = camera.assignments[assignmentType as keyof typeof camera.assignments];
-      const currentName = currentAssignment && !Array.isArray(currentAssignment) ? currentAssignment.name : undefined;
 
-      if (currentName === plugin.pluginName) {
-        (camera.assignments as Record<string, unknown>)[assignmentType] = undefined;
-        mutated = true;
-      }
-    }
+      return mutated ? current : undefined;
+    });
 
-    if (this.clearInvalidObjectAssist(camera)) {
-      mutated = true;
-    }
-
-    if (mutated) {
-      await this.dbs.camerasDB.put(camera._id, camera);
+    if (camera) {
       this.api.updateCamera(this.transformCamera(camera));
     }
 
-    return camera;
+    return camera ?? existing;
   }
 
-  // All-in-one: add plugin and enable all its assignments (used by the "More" tab toggle)
   public async activatePluginByName(cameraname: string, pluginNameOrId: string): Promise<DBCamera | undefined> {
-    const camera = this.findByName(cameraname);
+    const existing = this.findByName(cameraname);
     const plugin = this.pluginsService.getPluginByName(pluginNameOrId) ?? this.pluginsService.getPluginById(pluginNameOrId);
 
-    if (!camera || !plugin) return camera;
+    if (!existing || !plugin) return existing;
 
-    const isNewPlugin = !camera.plugins.some((p) => p.name === plugin.pluginName);
+    const isNewPlugin = !existing.plugins.some((p) => p.name === plugin.pluginName);
     const pluginInfo = { id: plugin.id, name: plugin.pluginName };
-
-    if (isNewPlugin) {
-      camera.plugins.push(pluginInfo);
-    }
 
     const contract = plugin.contract;
     const assignmentTypes: (SensorType | 'hub')[] = contract.role === PluginRole.Hub ? ['hub'] : contract.provides;
 
-    for (const assignmentType of assignmentTypes) {
-      if (assignmentType === 'hub') {
-        if (!Array.isArray(camera.assignments.hub)) {
-          camera.assignments.hub = [];
-        }
-        if (!camera.assignments.hub.some((p) => p.name === plugin.pluginName)) {
-          camera.assignments.hub.push(pluginInfo);
-        }
-      } else if (this.isMultiProviderType(assignmentType)) {
-        const key = assignmentType as keyof typeof camera.assignments;
-        if (!Array.isArray(camera.assignments[key])) {
-          (camera.assignments as Record<string, unknown>)[assignmentType] = [];
-        }
-        const arr = camera.assignments[key] as AssignedPlugin[];
-        if (!arr.some((p) => p.name === plugin.pluginName)) {
-          arr.push(pluginInfo);
-        }
-      } else if (VALID_SENSOR_TYPES.includes(assignmentType)) {
-        // only assign if not already assigned to another plugin
-        const existing = (camera.assignments as Record<string, unknown>)[assignmentType] as AssignedPlugin | undefined;
-        if (!existing?.name) {
-          (camera.assignments as Record<string, unknown>)[assignmentType] = pluginInfo;
+    const camera = await this.dbs.commit(this.dbs.camerasDB, existing._id, (current) => {
+      if (!current) return undefined;
+
+      if (!current.plugins.some((p) => p.name === plugin.pluginName)) {
+        current.plugins.push(pluginInfo);
+      }
+
+      for (const assignmentType of assignmentTypes) {
+        if (assignmentType === 'hub') {
+          if (!Array.isArray(current.assignments.hub)) {
+            current.assignments.hub = [];
+          }
+          if (!current.assignments.hub.some((p) => p.name === plugin.pluginName)) {
+            current.assignments.hub.push(pluginInfo);
+          }
+        } else if (this.isMultiProviderType(assignmentType)) {
+          const key = assignmentType as keyof typeof current.assignments;
+          if (!Array.isArray(current.assignments[key])) {
+            (current.assignments as Record<string, unknown>)[assignmentType] = [];
+          }
+          const arr = current.assignments[key] as AssignedPlugin[];
+          if (!arr.some((p) => p.name === plugin.pluginName)) {
+            arr.push(pluginInfo);
+          }
+        } else if (VALID_SENSOR_TYPES.includes(assignmentType)) {
+          // only assign if not already assigned to another plugin
+          const assigned = (current.assignments as Record<string, unknown>)[assignmentType] as AssignedPlugin | undefined;
+          if (!assigned?.name) {
+            (current.assignments as Record<string, unknown>)[assignmentType] = pluginInfo;
+          }
         }
       }
-    }
 
-    this.clearInvalidObjectAssist(camera);
+      this.clearInvalidObjectAssist(current);
+
+      return current;
+    });
+    if (!camera) return undefined;
 
     const transformedCamera = this.transformCamera(camera);
-    await this.dbs.camerasDB.put(camera._id, camera);
     this.api.updateCamera(transformedCamera);
 
     if (isNewPlugin) {
@@ -470,20 +512,26 @@ export class CamerasService {
   }
 
   public async addPluginByName(cameraname: string, pluginNameOrId: string, _assignmentType: SensorType | 'cameraController' | 'hub'): Promise<DBCamera | undefined> {
-    const camera = this.findByName(cameraname);
+    const existing = this.findByName(cameraname);
     const plugin = this.pluginsService.getPluginByName(pluginNameOrId) ?? this.pluginsService.getPluginById(pluginNameOrId);
 
-    if (!camera || !plugin || camera.plugins.some((p) => p.name === plugin.pluginName)) {
-      return camera;
+    if (!existing || !plugin || existing.plugins.some((p) => p.name === plugin.pluginName)) {
+      return existing;
     }
 
-    camera.plugins.push({
-      id: plugin.id,
-      name: plugin.pluginName,
+    const camera = await this.dbs.commit(this.dbs.camerasDB, existing._id, (current) => {
+      if (!current || current.plugins.some((p) => p.name === plugin.pluginName)) return undefined;
+
+      current.plugins.push({
+        id: plugin.id,
+        name: plugin.pluginName,
+      });
+
+      return current;
     });
+    if (!camera) return existing;
 
     const transformedCamera = this.transformCamera(camera);
-    await this.dbs.camerasDB.put(camera._id, camera);
     this.api.updateCamera(transformedCamera);
 
     // backend filters which sensors are shown based on assignments
@@ -493,36 +541,41 @@ export class CamerasService {
   }
 
   public async removePluginByName(cameraname: string, pluginNameOrId: string): Promise<DBCamera | undefined> {
-    const camera = this.findByName(cameraname);
+    const existing = this.findByName(cameraname);
     const plugin = this.pluginsService.getPluginByName(pluginNameOrId) ?? this.pluginsService.getPluginById(pluginNameOrId);
 
-    if (!camera || !plugin || !camera.plugins.some((p) => p.name === plugin.pluginName)) {
-      return camera;
+    if (!existing || !plugin || !existing.plugins.some((p) => p.name === plugin.pluginName)) {
+      return existing;
     }
 
-    camera.plugins = camera.plugins.filter((p) => p.name !== plugin.pluginName);
+    const camera = await this.dbs.commit(this.dbs.camerasDB, existing._id, (current) => {
+      if (!current) return undefined;
 
-    const singleProviderKeys = [...getSingleProviderTypes().map((type) => SENSOR_TYPE_CONFIG[type].assignmentKey), 'cameraController'];
-    for (const key of singleProviderKeys) {
-      const assignment = camera.assignments[key as keyof typeof camera.assignments];
-      if (assignment && !Array.isArray(assignment) && assignment.name === plugin.pluginName) {
-        (camera.assignments as Record<string, unknown>)[key] = undefined;
+      current.plugins = current.plugins.filter((p) => p.name !== plugin.pluginName);
+
+      const singleProviderKeys = [...getSingleProviderTypes().map((type) => SENSOR_TYPE_CONFIG[type].assignmentKey), 'cameraController'];
+      for (const key of singleProviderKeys) {
+        const assignment = current.assignments[key as keyof typeof current.assignments];
+        if (assignment && !Array.isArray(assignment) && assignment.name === plugin.pluginName) {
+          (current.assignments as Record<string, unknown>)[key] = undefined;
+        }
       }
-    }
 
-    for (const sensorType of [...getMultiProviderTypes(), 'hub']) {
-      const key = sensorType === 'hub' ? 'hub' : SENSOR_TYPE_CONFIG[sensorType as SensorType].assignmentKey;
-      const assignments = camera.assignments[key as keyof typeof camera.assignments];
-      if (Array.isArray(assignments)) {
-        (camera.assignments as Record<string, unknown>)[key] = assignments.filter((p) => p.name !== plugin.pluginName);
+      for (const sensorType of [...getMultiProviderTypes(), 'hub']) {
+        const key = sensorType === 'hub' ? 'hub' : SENSOR_TYPE_CONFIG[sensorType as SensorType].assignmentKey;
+        const assignments = current.assignments[key as keyof typeof current.assignments];
+        if (Array.isArray(assignments)) {
+          (current.assignments as Record<string, unknown>)[key] = assignments.filter((p) => p.name !== plugin.pluginName);
+        }
       }
-    }
 
-    this.clearInvalidObjectAssist(camera);
+      this.clearInvalidObjectAssist(current);
+
+      return current;
+    });
+    if (!camera) return undefined;
 
     const transformedCamera = this.transformCamera(camera);
-
-    await this.dbs.camerasDB.put(camera._id, camera);
 
     await this.api.deselectCamera(plugin.id, transformedCamera);
 
@@ -535,26 +588,32 @@ export class CamerasService {
     const plugin = this.pluginsService.getPluginByName(pluginNameOrId) ?? this.pluginsService.getPluginById(pluginNameOrId);
     if (!plugin) return;
 
-    for (const { value: camera } of this.dbs.camerasDB.getRange()) {
-      if (!camera.plugins.some((p) => p.name === plugin.pluginName)) continue;
+    const affected = [...this.dbs.camerasDB.getRange()].filter(({ value }) => value.plugins.some((p) => p.name === plugin.pluginName)).map(({ value }) => value._id);
 
-      camera.plugins = camera.plugins.filter((p) => p.name !== plugin.pluginName);
+    for (const cameraId of affected) {
+      const camera = await this.dbs.commit(this.dbs.camerasDB, cameraId, (current) => {
+        if (!current) return undefined;
 
-      if (this.isMultiProviderType(assignmentType)) {
-        const key = assignmentType as keyof typeof camera.assignments;
-        const currentAssignments = camera.assignments[key];
-        if (Array.isArray(currentAssignments)) {
-          (camera.assignments as Record<string, unknown>)[assignmentType] = currentAssignments.filter((p) => p.name !== plugin.pluginName);
+        current.plugins = current.plugins.filter((p) => p.name !== plugin.pluginName);
+
+        if (this.isMultiProviderType(assignmentType)) {
+          const key = assignmentType as keyof typeof current.assignments;
+          const currentAssignments = current.assignments[key];
+          if (Array.isArray(currentAssignments)) {
+            (current.assignments as Record<string, unknown>)[assignmentType] = currentAssignments.filter((p) => p.name !== plugin.pluginName);
+          }
+        } else {
+          const assignment = current.assignments[assignmentType as keyof typeof current.assignments];
+          if (assignment && !Array.isArray(assignment) && assignment.name === plugin.pluginName) {
+            (current.assignments as Record<string, unknown>)[assignmentType] = undefined;
+          }
         }
-      } else {
-        const assignment = camera.assignments[assignmentType as keyof typeof camera.assignments];
-        if (assignment && !Array.isArray(assignment) && assignment.name === plugin.pluginName) {
-          (camera.assignments as Record<string, unknown>)[assignmentType] = undefined;
-        }
-      }
+
+        return current;
+      });
+      if (!camera) continue;
 
       const transformedCamera = this.transformCamera(camera);
-      await this.dbs.camerasDB.put(camera._id, camera);
 
       await this.api.deselectCamera(plugin.id, transformedCamera);
 
@@ -615,12 +674,13 @@ export class CamerasService {
   }
 
   public async setWorkerAgentId(cameraId: string, agentId: string | undefined): Promise<DBCamera | undefined> {
-    const camera = this.findById(cameraId);
-    if (!camera) return undefined;
+    return this.dbs.commit(this.dbs.camerasDB, cameraId, (current) => {
+      if (!current) return undefined;
 
-    camera.workerAgentId = agentId;
-    await this.dbs.camerasDB.put(camera._id, camera);
-    return camera;
+      current.workerAgentId = agentId;
+
+      return current;
+    });
   }
 
   public async streamSourceInfo(camera: DBCamera, source: CameraInput): Promise<Go2RTCProbe | undefined> {

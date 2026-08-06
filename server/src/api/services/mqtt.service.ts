@@ -32,9 +32,7 @@ export class MqttService {
   }
 
   public async patch(patch: PatchMqttInput): Promise<MqttInfo> {
-    const settings = this.mergeSettings(this.settings(), patch);
-
-    await this.dbs.mqttDB.put('mqtt', settings);
+    await this.dbs.commit(this.dbs.mqttDB, 'mqtt', (current) => this.mergeSettings(current ?? this.settings(), patch));
     await this.mqttManager.applySettings();
 
     return this.info();

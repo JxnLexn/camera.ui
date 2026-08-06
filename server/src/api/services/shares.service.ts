@@ -109,11 +109,15 @@ export class SharesService {
   }
 
   public async revoke(token: string): Promise<boolean> {
-    const share = this.dbs.sharesDB.get(token);
+    const share = await this.dbs.commit(this.dbs.sharesDB, token, (current) => {
+      if (!current) return undefined;
+
+      current.revoked = true;
+
+      return current;
+    });
     if (!share) return false;
 
-    share.revoked = true;
-    await this.dbs.sharesDB.put(token, share);
     await this.killShareConsumers(token);
     await this.authService.invalidateById(`share_${token}`);
     await this.deregisterFromCloud(token);
@@ -202,19 +206,24 @@ export class SharesService {
   }
 
   public async incrementViewers(token: string): Promise<void> {
-    const share = this.dbs.sharesDB.get(token);
-    if (!share) return;
-    share.currentViewers++;
-    share.totalViews++;
-    await this.dbs.sharesDB.put(token, share);
+    await this.dbs.commit(this.dbs.sharesDB, token, (current) => {
+      if (!current) return undefined;
+
+      current.currentViewers++;
+      current.totalViews++;
+
+      return current;
+    });
   }
 
   public async decrementViewers(token: string): Promise<void> {
-    const share = this.dbs.sharesDB.get(token);
-    if (share && share.currentViewers > 0) {
-      share.currentViewers--;
-      await this.dbs.sharesDB.put(token, share);
-    }
+    await this.dbs.commit(this.dbs.sharesDB, token, (current) => {
+      if (!current || current.currentViewers <= 0) return undefined;
+
+      current.currentViewers--;
+
+      return current;
+    });
 
     await this.authService.invalidateById(`share_${token}`);
   }

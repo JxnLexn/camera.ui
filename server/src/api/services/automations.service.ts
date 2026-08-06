@@ -53,21 +53,23 @@ export class AutomationsService {
   }
 
   public async update(id: string, input: PatchAutomationInput): Promise<DBAutomation | undefined> {
-    const automation = this.getById(id);
+    const automation = await this.dbs.commit(this.dbs.automationsDB, id, (current) => {
+      if (!current) return undefined;
+
+      if (input.name !== undefined) current.name = input.name;
+      if (input.enabled !== undefined) current.enabled = input.enabled;
+      if (input.nodes !== undefined) current.nodes = this.ensureWebhookSecrets(input.nodes);
+      if (input.edges !== undefined) current.edges = input.edges;
+      if (input.suppressDuplicates !== undefined) current.suppressDuplicates = input.suppressDuplicates;
+      if (input.singleExecution !== undefined) current.singleExecution = input.singleExecution;
+
+      current.requiresUpdate = false;
+      current.updatedAt = Date.now();
+
+      return current;
+    });
     if (!automation) return undefined;
 
-    if (input.name !== undefined) automation.name = input.name;
-    if (input.enabled !== undefined) automation.enabled = input.enabled;
-    if (input.nodes !== undefined) automation.nodes = this.ensureWebhookSecrets(input.nodes);
-    if (input.edges !== undefined) automation.edges = input.edges;
-    if (input.suppressDuplicates !== undefined) automation.suppressDuplicates = input.suppressDuplicates;
-    if (input.singleExecution !== undefined) automation.singleExecution = input.singleExecution;
-
-    // Clear requiresUpdate flag when flow is edited (user acknowledged the issue)
-    automation.requiresUpdate = false;
-    automation.updatedAt = Date.now();
-
-    await this.dbs.automationsDB.put(id, automation);
     this.notifyEngine(id);
 
     return automation;
@@ -110,30 +112,34 @@ export class AutomationsService {
   }
 
   public async setLastRun(id: string, lastRun: DBAutomation['lastRun']): Promise<void> {
-    const automation = this.getById(id);
-    if (!automation) return;
+    await this.dbs.commit(this.dbs.automationsDB, id, (current) => {
+      if (!current) return undefined;
 
-    automation.lastRun = lastRun;
-    await this.dbs.automationsDB.put(id, automation);
+      current.lastRun = lastRun;
+
+      return current;
+    });
   }
 
   public async disableFlowsReferencingCamera(cameraId: string): Promise<DBAutomation[]> {
-    const affected: DBAutomation[] = [];
+    const candidates = [...this.dbs.automationsDB.getRange()]
+      .filter(({ value }) => !value.requiresUpdate && value.nodes.some((n) => n.data.cameraId === cameraId || n.data.targetId === cameraId))
+      .map(({ value }) => value._id);
 
-    for (const { value: flow } of this.dbs.automationsDB.getRange()) {
-      if (flow.requiresUpdate) continue;
-      if (!flow.nodes.some((n) => n.data.cameraId === cameraId || n.data.targetId === cameraId)) continue;
+    const affected = await Promise.all(
+      candidates.map((id) =>
+        this.dbs.commit(this.dbs.automationsDB, id, (current) => {
+          if (!current || current.requiresUpdate) return undefined;
 
-      flow.requiresUpdate = true;
-      flow.enabled = false;
-      affected.push(flow);
-    }
+          current.requiresUpdate = true;
+          current.enabled = false;
 
-    if (affected.length) {
-      await Promise.all(affected.map((f) => this.dbs.automationsDB.put(f._id, f)));
-    }
+          return current;
+        }),
+      ),
+    );
 
-    return affected;
+    return affected.filter((flow) => flow !== undefined);
   }
 
   public async importBlueprint(input: ImportBlueprintInput): Promise<DBAutomation> {

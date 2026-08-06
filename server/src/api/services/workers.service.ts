@@ -43,23 +43,25 @@ export class WorkersService {
   }
 
   public async rememberWorker(agentId: string, name: string): Promise<void> {
-    const settings = this.readSettings();
-    const known = settings.knownWorkers ?? [];
-    const existing = known.find((worker) => worker.agentId === agentId);
+    await this.commitSettings((settings) => {
+      const known = settings.knownWorkers ?? [];
+      const existing = known.find((worker) => worker.agentId === agentId);
 
-    if (existing) {
-      // Only persist on change — this runs on every heartbeat.
-      if (existing.name === name && Date.now() - existing.lastSeen < 60_000) {
-        return;
+      if (existing) {
+        // Only persist on change — this runs on every heartbeat.
+        if (existing.name === name && Date.now() - existing.lastSeen < 60_000) {
+          return undefined;
+        }
+        existing.name = name;
+        existing.lastSeen = Date.now();
+      } else {
+        known.push({ agentId, name, lastSeen: Date.now() });
       }
-      existing.name = name;
-      existing.lastSeen = Date.now();
-    } else {
-      known.push({ agentId, name, lastSeen: Date.now() });
-    }
 
-    settings.knownWorkers = known;
-    await this.dbs.settingsDB.put('settings', settings);
+      settings.knownWorkers = known;
+
+      return settings;
+    });
   }
 
   public getWorkerDisplayName(agentId: string): string | undefined {
@@ -67,33 +69,41 @@ export class WorkersService {
   }
 
   public async renameWorker(agentId: string, displayName: string): Promise<void> {
-    const settings = this.readSettings();
-    const known = settings.knownWorkers?.find((worker) => worker.agentId === agentId);
-    if (!known) {
+    if (!this.listKnownWorkers().some((worker) => worker.agentId === agentId)) {
       throw new Error(`Worker ${agentId} is unknown`);
     }
 
-    known.displayName = displayName;
-    await this.dbs.settingsDB.put('settings', settings);
+    await this.commitSettings((settings) => {
+      const known = settings.knownWorkers?.find((worker) => worker.agentId === agentId);
+      if (!known) return undefined;
+
+      known.displayName = displayName;
+
+      return settings;
+    });
   }
 
   public async forgetWorker(agentId: string): Promise<void> {
-    const settings = this.readSettings();
-    if (!settings.knownWorkers?.length) return;
+    await this.commitSettings((settings) => {
+      if (!settings.knownWorkers?.length) return undefined;
 
-    settings.knownWorkers = settings.knownWorkers.filter((worker) => worker.agentId !== agentId);
-    await this.dbs.settingsDB.put('settings', settings);
+      settings.knownWorkers = settings.knownWorkers.filter((worker) => worker.agentId !== agentId);
+
+      return settings;
+    });
   }
 
   public async createPairingCode(): Promise<DBWorkerPairing> {
-    const settings = this.readSettings();
     const pairing: DBWorkerPairing = {
       code: randomBytes(8).toString('base64url'),
       expiresAt: Date.now() + PAIRING_TTL_MS,
     };
 
-    settings.workerPairings = [...this.prunePairings(settings), pairing];
-    await this.dbs.settingsDB.put('settings', settings);
+    await this.commitSettings((settings) => {
+      settings.workerPairings = [...this.prunePairings(settings), pairing];
+
+      return settings;
+    });
 
     return pairing;
   }
@@ -104,11 +114,11 @@ export class WorkersService {
   }
 
   public async consumePairingCode(code: string): Promise<void> {
-    // One-time — but only call this AFTER the pairing fully succeeded, so a
-    // failed attempt doesn't burn the code.
-    const settings = this.readSettings();
-    settings.workerPairings = this.prunePairings(settings).filter((pairing) => pairing.code !== code);
-    await this.dbs.settingsDB.put('settings', settings);
+    await this.commitSettings((settings) => {
+      settings.workerPairings = this.prunePairings(settings).filter((pairing) => pairing.code !== code);
+
+      return settings;
+    });
   }
 
   public listCredentials(): DBWorkerCredential[] {
@@ -116,7 +126,6 @@ export class WorkersService {
   }
 
   public async issueCredentials(agentId: string, name: string): Promise<DBWorkerCredential> {
-    const settings = this.readSettings();
     const credential: DBWorkerCredential = {
       agentId,
       name,
@@ -125,28 +134,38 @@ export class WorkersService {
       createdAt: Date.now(),
     };
 
-    settings.workerCredentials = [...(settings.workerCredentials ?? []).filter((cred) => cred.agentId !== agentId), credential];
-    await this.dbs.settingsDB.put('settings', settings);
+    await this.commitSettings((settings) => {
+      settings.workerCredentials = [...(settings.workerCredentials ?? []).filter((cred) => cred.agentId !== agentId), credential];
+
+      return settings;
+    });
 
     return credential;
   }
 
   public async revokeCredentials(agentId: string): Promise<boolean> {
-    const settings = this.readSettings();
-    const credentials = settings.workerCredentials ?? [];
-    const remaining = credentials.filter((cred) => cred.agentId !== agentId);
+    const settings = await this.commitSettings((current) => {
+      const credentials = current.workerCredentials ?? [];
+      const remaining = credentials.filter((cred) => cred.agentId !== agentId);
 
-    if (remaining.length === credentials.length) {
-      return false;
-    }
+      if (remaining.length === credentials.length) {
+        return undefined;
+      }
 
-    settings.workerCredentials = remaining;
-    await this.dbs.settingsDB.put('settings', settings);
-    return true;
+      current.workerCredentials = remaining;
+
+      return current;
+    });
+
+    return settings !== undefined;
   }
 
   private readSettings(): DBSettings {
     return this.dbs.settingsDB.get('settings') ?? { version: Database.VERSION };
+  }
+
+  private async commitSettings(apply: (settings: DBSettings) => DBSettings | undefined): Promise<DBSettings | undefined> {
+    return this.dbs.commit(this.dbs.settingsDB, 'settings', (current) => apply(current ?? { version: Database.VERSION }));
   }
 
   private prunePairings(settings: DBSettings): DBWorkerPairing[] {

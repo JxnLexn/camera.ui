@@ -63,19 +63,21 @@ export class ServerService {
   }
 
   public async patch(infoData: Partial<DBServer> = {}): Promise<DBServer> {
-    const info = this.info();
-
     infoData.serverAddresses = infoData.serverAddresses?.filter((address) => address !== '');
 
-    mergeWith(info, infoData, (source: any, target: any) => {
-      if (Array.isArray(source)) {
-        return target;
-      }
+    const info = await this.dbs.commit(this.dbs.serverDB, 'server', (current) => {
+      const record = current ?? this.info();
+
+      mergeWith(record, infoData, (source: any, target: any) => {
+        if (Array.isArray(source)) {
+          return target;
+        }
+      });
+
+      return record;
     });
 
-    await this.dbs.serverDB.put('server', info);
-
-    return info;
+    return info ?? this.info();
   }
 
   public async install(version = 'latest'): Promise<void> {

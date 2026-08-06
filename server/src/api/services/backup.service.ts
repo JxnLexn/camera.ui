@@ -1,4 +1,4 @@
-import { copy, move, pathExists, readJson, remove, writeJson } from 'fs-extra/esm';
+import { copy, ensureDir, move, pathExists, readJson, remove, writeJson } from 'fs-extra/esm';
 import { lstat, mkdtemp, writeFile } from 'node:fs/promises';
 import { platform, tmpdir } from 'node:os';
 import { dirname, join, resolve, sep } from 'node:path';
@@ -7,7 +7,6 @@ import { container } from 'tsyringe';
 
 import { ConfigService } from '../../services/config/index.js';
 import { ROOT_KEY_FILENAME } from '../utils/constants.js';
-import { moveFiles } from '../utils/moveFiles.js';
 import { PluginsService } from './plugins.service.js';
 
 import type { MultipartFile } from '@fastify/multipart';
@@ -169,8 +168,8 @@ export class BackupService {
   private async runRestoreBackup(file: UploadedBackupFile): Promise<any> {
     this.ensureStartupComplete();
 
-    const backupDirectory = await mkdtemp(join(tmpdir(), 'cameraui-restore-'));
-    const backupFile = join(backupDirectory, 'upload.tar.gz');
+    const uploadDirectory = await mkdtemp(join(tmpdir(), 'cameraui-restore-'));
+    const backupFile = join(uploadDirectory, 'upload.tar.gz');
 
     if (file.filepath) {
       await move(file.filepath, backupFile, { overwrite: true });
@@ -178,39 +177,40 @@ export class BackupService {
       await writeFile(backupFile, await file.toBuffer());
     }
 
-    await x({
-      cwd: backupDirectory,
-      file: backupFile,
-    });
+    const stagingPath = this.configService.RESTORE_STAGING_PATH;
 
-    const infoPath = join(backupDirectory, 'camera.ui.backup.json');
-    const storagePath = join(backupDirectory, 'storage');
+    try {
+      await remove(stagingPath);
+      await ensureDir(stagingPath);
 
-    if (!(await pathExists(infoPath)) || !(await pathExists(storagePath))) {
-      await remove(backupDirectory);
-      throw new Error('Uploaded file is not a valid camera.ui Backup Archive.');
+      await x({
+        cwd: stagingPath,
+        file: backupFile,
+      });
+
+      const infoPath = join(stagingPath, 'camera.ui.backup.json');
+      const storagePath = join(stagingPath, 'storage');
+
+      if (!(await pathExists(infoPath)) || !(await pathExists(storagePath))) {
+        throw new Error('Uploaded file is not a valid camera.ui Backup Archive.');
+      }
+
+      this.logger.attention('Starting backup restore...');
+
+      const infoFile: BackupInfo = await readJson(infoPath);
+
+      this.logger.debug('Backup Archive Information:', infoFile);
+
+      await writeFile(this.configService.RESTORE_READY_FILE, '');
+
+      this.logger.log('Backup is ready and will be restored on the next start');
+
+      return infoFile.localStorage;
+    } catch (error) {
+      await remove(stagingPath).catch(() => {});
+      throw error;
+    } finally {
+      await remove(uploadDirectory).catch(() => {});
     }
-
-    this.logger.attention('Starting backup restore...');
-
-    const infoFile: BackupInfo = await readJson(infoPath);
-
-    this.logger.debug('Backup Archive Information:', infoFile);
-
-    await moveFiles(storagePath, this.configService.STORAGE_PATH, {
-      overwrite: true,
-    });
-
-    await moveFiles(infoPath, join(this.configService.STORAGE_PATH, 'camera.ui.backup.json'), {
-      overwrite: true,
-    });
-
-    await writeFile(this.configService.RESTORE_RESET_IDENTITY_FILE, '');
-
-    await remove(backupDirectory);
-
-    this.logger.log('Backup was successfully restored');
-
-    return infoFile.localStorage;
   }
 }

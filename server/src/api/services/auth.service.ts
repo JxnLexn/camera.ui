@@ -121,15 +121,17 @@ export class AuthService {
   }
 
   public async bumpLastSeen(tokenId: string, ip: string): Promise<void> {
-    const token = this.dbs.tokensDB.get(tokenId);
-    if (!token) return;
+    await this.dbs.commit(this.dbs.tokensDB, tokenId, (current) => {
+      if (!current) return undefined;
 
-    const now = Date.now();
-    if (now - token.device.last_seen_at < 60_000 && token.device.ip === ip) return;
+      const now = Date.now();
+      if (now - current.device.last_seen_at < 60_000 && current.device.ip === ip) return undefined;
 
-    token.device.last_seen_at = now;
-    token.device.ip = ip;
-    await this.dbs.tokensDB.put(tokenId, token);
+      current.device.last_seen_at = now;
+      current.device.ip = ip;
+
+      return current;
+    });
   }
 
   public createToken(params: {
@@ -197,23 +199,26 @@ export class AuthService {
   public async rotate(oldToken: DBToken, newAccessToken: string): Promise<DBToken> {
     const now = Date.now();
     const window = oldToken.persistent ? TOKEN_LIFETIME.REFRESH_PERSISTENT_MS : TOKEN_LIFETIME.REFRESH_NON_PERSISTENT_MS;
+    const refreshToken = this.generateRefreshToken();
 
-    const rotated: DBToken = {
-      ...oldToken,
-      access_token: newAccessToken,
-      access_token_expires_at: now + TOKEN_LIFETIME.ACCESS_SECONDS * 1000,
-      refresh_token: this.generateRefreshToken(),
-      refresh_token_expires_at: oldToken.persistent ? now + window : oldToken.refresh_token_expires_at,
-      device: { ...oldToken.device, last_seen_at: now },
-      parent_token_id: oldToken.parent_token_id ?? oldToken.id,
-      previous_access_token: oldToken.access_token,
-      previous_refresh_token: oldToken.refresh_token,
-      rotated_at: now,
-    };
+    const rotated = await this.dbs.commit(this.dbs.tokensDB, oldToken.id, (current) => {
+      if (current && current.refresh_token !== oldToken.refresh_token) return undefined;
 
-    await this.dbs.tokensDB.put(rotated.id, rotated);
+      return {
+        ...(current ?? oldToken),
+        access_token: newAccessToken,
+        access_token_expires_at: now + TOKEN_LIFETIME.ACCESS_SECONDS * 1000,
+        refresh_token: refreshToken,
+        refresh_token_expires_at: oldToken.persistent ? now + window : oldToken.refresh_token_expires_at,
+        device: { ...oldToken.device, last_seen_at: now },
+        parent_token_id: oldToken.parent_token_id ?? oldToken.id,
+        previous_access_token: oldToken.access_token,
+        previous_refresh_token: oldToken.refresh_token,
+        rotated_at: now,
+      };
+    });
 
-    return rotated;
+    return rotated ?? this.dbs.tokensDB.get(oldToken.id) ?? oldToken;
   }
 
   public mergeDevice(token: DBToken, patch: Partial<DBTokenDevice>): DBToken {

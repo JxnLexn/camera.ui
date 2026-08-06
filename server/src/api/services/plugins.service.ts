@@ -142,7 +142,7 @@ export class PluginsService {
       throw new Error(`Plugin ${pluginName} not found`);
     }
 
-    await this.dbs.pluginsDB.put(plugin._id, { ...plugin, workerAgentId: agentId });
+    await this.dbs.commit(this.dbs.pluginsDB, plugin._id, (current) => (current ? { ...current, workerAgentId: agentId } : undefined));
   }
 
   public listByAgentId(agentId: string): DBPlugin[] {

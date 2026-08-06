@@ -40,22 +40,25 @@ export class UsersService {
   }
 
   public async patchUser(username: string, userData: Partial<DBUser> = {}): Promise<DBUser | undefined> {
-    const user = this.findByName(username);
-    if (!user) return undefined;
+    const existing = this.findByName(username);
+    if (!existing) return undefined;
 
-    const usernameChanged = userData.username !== undefined && userData.username !== user.username;
-    const passwordChanged = userData.password !== undefined && userData.password !== user.password;
-
-    mergeWith(user, userData, (source: any, target: any) => {
-      if (Array.isArray(source)) return target;
-    });
+    const usernameChanged = userData.username !== undefined && userData.username !== existing.username;
+    const passwordChanged = userData.password !== undefined && userData.password !== existing.password;
 
     if (usernameChanged || passwordChanged) {
-      await this.authService.invalidateSessionsByUserId(user._id);
+      await this.authService.invalidateSessionsByUserId(existing._id);
     }
 
-    await this.dbs.usersDB.put(user._id, user);
-    return user;
+    return this.dbs.commit(this.dbs.usersDB, existing._id, (current) => {
+      if (!current) return undefined;
+
+      mergeWith(current, userData, (source: any, target: any) => {
+        if (Array.isArray(source)) return target;
+      });
+
+      return current;
+    });
   }
 
   public async removeByName(username: string): Promise<void> {
@@ -79,120 +82,172 @@ export class UsersService {
   }
 
   public async createShortcut(username: string, cameraId: string, shortcutData: DBShortcut): Promise<DBShortcut[] | undefined> {
-    const user = this.findByName(username);
-    if (!user) return undefined;
+    const existing = this.findByName(username);
+    if (!existing) return undefined;
 
-    const prefs = (user.preferences.cameras[cameraId] ??= { shortcuts: [] });
-    prefs.shortcuts.push(shortcutData);
+    const user = await this.dbs.commit(this.dbs.usersDB, existing._id, (current) => {
+      if (!current) return undefined;
 
-    await this.dbs.usersDB.put(user._id, user);
-    return prefs.shortcuts;
+      const prefs = (current.preferences.cameras[cameraId] ??= { shortcuts: [] });
+      prefs.shortcuts.push(shortcutData);
+
+      return current;
+    });
+
+    return user?.preferences.cameras[cameraId]?.shortcuts;
   }
 
   public async patchShortcutById(username: string, cameraId: string, shortcutId: string, shortcutData: Partial<DBShortcut> = {}): Promise<DBShortcut[] | undefined> {
-    const user = this.findByName(username);
-    if (!user) return undefined;
+    const existing = this.findByName(username);
+    if (!existing) return undefined;
 
-    const prefs = (user.preferences.cameras[cameraId] ??= { shortcuts: [] });
-    const shortcut = prefs.shortcuts.find((s) => s._id === shortcutId);
+    const user = await this.dbs.commit(this.dbs.usersDB, existing._id, (current) => {
+      if (!current) return undefined;
 
-    if (shortcut) {
+      const prefs = (current.preferences.cameras[cameraId] ??= { shortcuts: [] });
+      const shortcut = prefs.shortcuts.find((s) => s._id === shortcutId);
+      if (!shortcut) return undefined;
+
       mergeWith(shortcut, shortcutData, (source: any, target: any) => {
         if (Array.isArray(source)) return target;
       });
-      await this.dbs.usersDB.put(user._id, user);
-    }
 
-    return prefs.shortcuts;
+      return current;
+    });
+
+    return (user ?? this.findById(existing._id))?.preferences.cameras[cameraId]?.shortcuts ?? [];
   }
 
   public async removeShortcutById(username: string, cameraId: string, shortcutId: string): Promise<DBShortcut[] | undefined> {
-    const user = this.findByName(username);
-    if (!user) return undefined;
+    const existing = this.findByName(username);
+    if (!existing) return undefined;
 
-    const prefs = (user.preferences.cameras[cameraId] ??= { shortcuts: [] });
-    prefs.shortcuts = prefs.shortcuts.filter((s) => s._id !== shortcutId);
+    const user = await this.dbs.commit(this.dbs.usersDB, existing._id, (current) => {
+      if (!current) return undefined;
 
-    await this.dbs.usersDB.put(user._id, user);
-    return prefs.shortcuts;
+      const prefs = (current.preferences.cameras[cameraId] ??= { shortcuts: [] });
+      prefs.shortcuts = prefs.shortcuts.filter((s) => s._id !== shortcutId);
+
+      return current;
+    });
+
+    return user?.preferences.cameras[cameraId]?.shortcuts;
   }
 
   public async removeAllShortcuts(username: string, cameraId: string): Promise<DBShortcut[] | undefined> {
-    const user = this.findByName(username);
-    if (!user) return undefined;
+    const existing = this.findByName(username);
+    if (!existing) return undefined;
 
-    const prefs = (user.preferences.cameras[cameraId] ??= { shortcuts: [] });
-    prefs.shortcuts = [];
+    const user = await this.dbs.commit(this.dbs.usersDB, existing._id, (current) => {
+      if (!current) return undefined;
 
-    await this.dbs.usersDB.put(user._id, user);
-    return prefs.shortcuts;
+      const prefs = (current.preferences.cameras[cameraId] ??= { shortcuts: [] });
+      prefs.shortcuts = [];
+
+      return current;
+    });
+
+    return user?.preferences.cameras[cameraId]?.shortcuts;
   }
 
   public async createView(username: string, viewData: DBCamviewLayout): Promise<DBCamviewLayout> {
-    const user = this.findByName(username);
-    if (user) {
-      user.preferences.camview.views.push(viewData);
-      await this.dbs.usersDB.put(user._id, user);
-    }
+    const existing = this.findByName(username);
+    if (!existing) return viewData;
+
+    await this.dbs.commit(this.dbs.usersDB, existing._id, (current) => {
+      if (!current) return undefined;
+
+      current.preferences.camview.views.push(viewData);
+
+      return current;
+    });
+
     return viewData;
   }
 
   public async patchViewById(username: string, viewid: string, viewData: Partial<DBCamviewLayout> = {}): Promise<DBCamviewLayout | undefined> {
-    const user = this.findByName(username);
-    const view = user?.preferences.camview.views.find((v) => v._id === viewid);
+    const existing = this.findByName(username);
+    if (!existing) return undefined;
 
-    if (user && view) {
+    const user = await this.dbs.commit(this.dbs.usersDB, existing._id, (current) => {
+      if (!current) return undefined;
+
+      const view = current.preferences.camview.views.find((v) => v._id === viewid);
+      if (!view) return undefined;
+
       mergeWith(view, viewData, (source: any, target: any) => {
         if (Array.isArray(source)) return target;
       });
-      await this.dbs.usersDB.put(user._id, user);
-    }
 
-    return view;
+      return current;
+    });
+
+    return user?.preferences.camview.views.find((v) => v._id === viewid);
   }
 
   public async removeViewById(username: string, viewid: string): Promise<DBCamviewLayout[] | undefined> {
-    const user = this.findByName(username);
-    if (!user) return undefined;
+    const existing = this.findByName(username);
+    if (!existing) return undefined;
 
-    user.preferences.camview.views = user.preferences.camview.views.filter((v) => v._id !== viewid);
-    await this.dbs.usersDB.put(user._id, user);
+    const user = await this.dbs.commit(this.dbs.usersDB, existing._id, (current) => {
+      if (!current) return undefined;
 
-    return user.preferences.camview.views;
+      current.preferences.camview.views = current.preferences.camview.views.filter((v) => v._id !== viewid);
+
+      return current;
+    });
+
+    return user?.preferences.camview.views;
   }
 
   public async removeAllViews(username: string): Promise<DBCamviewLayout[] | undefined> {
-    const user = this.findByName(username);
-    if (!user) return undefined;
+    const existing = this.findByName(username);
+    if (!existing) return undefined;
 
-    user.preferences.camview.views = [];
-    await this.dbs.usersDB.put(user._id, user);
+    const user = await this.dbs.commit(this.dbs.usersDB, existing._id, (current) => {
+      if (!current) return undefined;
 
-    return user.preferences.camview.views;
+      current.preferences.camview.views = [];
+
+      return current;
+    });
+
+    return user?.preferences.camview.views;
   }
 
   public async resetPreferences(username: string): Promise<void> {
-    const user = this.findByName(username);
-    if (!user) return;
+    const existing = this.findByName(username);
+    if (!existing) return;
 
-    user.preferences = {
-      camview: { views: [] },
-      cameras: {},
-    };
+    await this.dbs.commit(this.dbs.usersDB, existing._id, (current) => {
+      if (!current) return undefined;
 
-    await this.dbs.usersDB.put(user._id, user);
-  }
-
-  public async resetAllPreferences(): Promise<void> {
-    const tasks: Promise<unknown>[] = [];
-    for (const { value: user } of this.dbs.usersDB.getRange()) {
-      user.preferences = {
+      current.preferences = {
         camview: { views: [] },
         cameras: {},
       };
-      tasks.push(this.dbs.usersDB.put(user._id, user));
-    }
-    await Promise.all(tasks);
+
+      return current;
+    });
+  }
+
+  public async resetAllPreferences(): Promise<void> {
+    const userIds = this.list().map((user) => user._id);
+
+    await Promise.all(
+      userIds.map((userId) =>
+        this.dbs.commit(this.dbs.usersDB, userId, (current) => {
+          if (!current) return undefined;
+
+          current.preferences = {
+            camview: { views: [] },
+            cameras: {},
+          };
+
+          return current;
+        }),
+      ),
+    );
   }
 
   public async removeCameraFromPreferences(cameraId: string): Promise<void> {
@@ -201,48 +256,56 @@ export class UsersService {
   }
 
   public async removeCameraFromAllShortcuts(cameraId: string): Promise<void> {
-    const tasks: Promise<unknown>[] = [];
+    const userIds = this.list().map((user) => user._id);
 
-    for (const { value: user } of this.dbs.usersDB.getRange()) {
-      let mutated = false;
+    await Promise.all(
+      userIds.map((userId) =>
+        this.dbs.commit(this.dbs.usersDB, userId, (current) => {
+          if (!current) return undefined;
 
-      // the deleted camera's own view dies with it, shortcuts included
-      if (user.preferences.cameras[cameraId]) {
-        delete user.preferences.cameras[cameraId];
-        mutated = true;
-      }
+          let mutated = false;
 
-      for (const cameraPreference of Object.values(user.preferences.cameras)) {
-        if (!cameraPreference) continue;
+          // the deleted camera's own view dies with it, shortcuts included
+          if (current.preferences.cameras[cameraId]) {
+            delete current.preferences.cameras[cameraId];
+            mutated = true;
+          }
 
-        const before = cameraPreference.shortcuts.length;
-        cameraPreference.shortcuts = cameraPreference.shortcuts.filter((shortcut) => shortcut.type !== 'camera' || shortcut.cameraId !== cameraId);
+          for (const cameraPreference of Object.values(current.preferences.cameras)) {
+            if (!cameraPreference) continue;
 
-        if (cameraPreference.shortcuts.length !== before) mutated = true;
-      }
+            const before = cameraPreference.shortcuts.length;
+            cameraPreference.shortcuts = cameraPreference.shortcuts.filter((shortcut) => shortcut.type !== 'camera' || shortcut.cameraId !== cameraId);
 
-      if (mutated) tasks.push(this.dbs.usersDB.put(user._id, user));
-    }
+            if (cameraPreference.shortcuts.length !== before) mutated = true;
+          }
 
-    await Promise.all(tasks);
+          return mutated ? current : undefined;
+        }),
+      ),
+    );
   }
 
   public async removeCameraFromAllViews(cameraId: string): Promise<void> {
-    const tasks: Promise<unknown>[] = [];
+    const userIds = this.list().map((user) => user._id);
 
-    for (const { value: user } of this.dbs.usersDB.getRange()) {
-      let mutated = false;
+    await Promise.all(
+      userIds.map((userId) =>
+        this.dbs.commit(this.dbs.usersDB, userId, (current) => {
+          if (!current) return undefined;
 
-      for (const view of user.preferences.camview.views) {
-        const before = view.cameras.length;
-        view.cameras = view.cameras.filter((camera) => camera.cameraId !== cameraId);
-        if (view.cameras.length !== before) mutated = true;
-      }
+          let mutated = false;
 
-      if (mutated) tasks.push(this.dbs.usersDB.put(user._id, user));
-    }
+          for (const view of current.preferences.camview.views) {
+            const before = view.cameras.length;
+            view.cameras = view.cameras.filter((camera) => camera.cameraId !== cameraId);
+            if (view.cameras.length !== before) mutated = true;
+          }
 
-    await Promise.all(tasks);
+          return mutated ? current : undefined;
+        }),
+      ),
+    );
   }
 
   public getHiddenDevices(username: string): DBHiddenDevice[] {
@@ -251,37 +314,50 @@ export class UsersService {
   }
 
   public async hideDevice(username: string, device: DBHiddenDevice): Promise<DBHiddenDevice[]> {
-    const user = this.findByName(username);
-    if (!user) return [];
+    const existing = this.findByName(username);
+    if (!existing) return [];
 
-    const discovery = (user.preferences.discovery ??= { hiddenDevices: [] });
+    const user = await this.dbs.commit(this.dbs.usersDB, existing._id, (current) => {
+      if (!current) return undefined;
 
-    if (!discovery.hiddenDevices.some((d) => d.id === device.id)) {
+      const discovery = (current.preferences.discovery ??= { hiddenDevices: [] });
+      if (discovery.hiddenDevices.some((d) => d.id === device.id)) return undefined;
+
       discovery.hiddenDevices.push(device);
-      await this.dbs.usersDB.put(user._id, user);
-    }
 
-    return discovery.hiddenDevices;
+      return current;
+    });
+
+    return (user ?? this.findById(existing._id))?.preferences.discovery?.hiddenDevices ?? [];
   }
 
   public async unhideDevice(username: string, deviceId: string): Promise<DBHiddenDevice[]> {
-    const user = this.findByName(username);
-    if (!user) return [];
+    const existing = this.findByName(username);
+    if (!existing) return [];
 
-    const discovery = (user.preferences.discovery ??= { hiddenDevices: [] });
-    discovery.hiddenDevices = discovery.hiddenDevices.filter((d) => d.id !== deviceId);
+    const user = await this.dbs.commit(this.dbs.usersDB, existing._id, (current) => {
+      if (!current) return undefined;
 
-    await this.dbs.usersDB.put(user._id, user);
-    return discovery.hiddenDevices;
+      const discovery = (current.preferences.discovery ??= { hiddenDevices: [] });
+      discovery.hiddenDevices = discovery.hiddenDevices.filter((d) => d.id !== deviceId);
+
+      return current;
+    });
+
+    return user?.preferences.discovery?.hiddenDevices ?? [];
   }
 
   public async updateHiddenDevices(username: string, hiddenDevices: DBHiddenDevice[]): Promise<void> {
-    const user = this.findByName(username);
-    if (!user) return;
+    const existing = this.findByName(username);
+    if (!existing) return;
 
-    user.preferences.discovery ??= { hiddenDevices: [] };
-    user.preferences.discovery.hiddenDevices = hiddenDevices;
+    await this.dbs.commit(this.dbs.usersDB, existing._id, (current) => {
+      if (!current) return undefined;
 
-    await this.dbs.usersDB.put(user._id, user);
+      current.preferences.discovery ??= { hiddenDevices: [] };
+      current.preferences.discovery.hiddenDevices = hiddenDevices;
+
+      return current;
+    });
   }
 }
