@@ -4,7 +4,41 @@ All notable changes to this project will be documented in this file.
 
 ## [2.1.4]
 
+### Added
+
+- **Home lists every moment of an event, the way the timeline does.** A visit that pauses and picks up again gives you one card per phase, each with its own picture and time. Before that, a whole event shared a single card.
+
+### Changed
+
+- **A card shows the time of the picture on it.** A card could read 08:01 while its picture was taken at 08:28, somewhere in the middle of a long event. Clicking it now starts playback a few seconds before that moment, and it works the same way on the home screen, in the timeline and in the recordings view.
+
+- **Events follow the scene instead of a stopwatch.** An event ends when the scene is quiet, not after a fixed countdown. Someone who stops for a moment or is briefly hidden keeps their event instead of starting a second one, and a parked car no longer holds an event open or takes over its picture. When that car drives off, it counts as activity again.
+
+- **Detection keeps hold of people in poor conditions.** Bad light, a partly hidden person or quick movement used to split one visit into several events with several notifications. It stays one visit now.
+
+- **Grouped recordings show what else happened in the event.** The other moments sit as small previews on the card and are visible without hovering, and each preview opens its own moment. Repeats of the same picture are gone.
+
 ### Fixed
+
+- **A running event no longer disappears from the home screen.** Live events could vanish from the camera strip after a few seconds and only came back when the page was reloaded.
+
+- **Downloads take the quality you are watching.** Exporting from the timeline or downloading from the event view always produced the highest quality, no matter which one was playing. Both now follow the picked quality, so a low quality clip stays small. The export dialog under Recordings keeps its own quality choice.
+
+- **Camera shortcuts open at the time you are watching.** During playback, hovering a shortcut always showed the other camera from the moment playback had started, so after a few minutes the preview was minutes behind. It now picks up the position on screen, at the same speed, and opening the camera from the shortcut lands there too.
+
+- **Removing the PiP source of a camera source sticks.** Clearing it reported a successful save, but the old source was still there after a reload, because the cleared field never made it into the request. Changing it to another source always worked.
+
+- **Tapo cameras added over ONVIF have working snapshots.** They offer a third, low quality MJPEG stream that we took as the snapshot source, but the camera only serves two streams at a time, so that source could never connect while the video was running. Snapshots now come from a stream that is already open, which also spares the camera a connection. Cameras you already added are corrected on the next start.
+
+- **Zone edits stick now.** The zone editor saved zones and lines in two requests at the same time, and they could overwrite each other, so a changed zone was back to its old shape the next time you opened the editor, even though the save reported success. Windows setups were hit hardest.
+
+- **Two changes at the same time no longer cancel each other out.** Anything saved in parallel, from a phone and a browser at once, or by the server itself while you were editing, could quietly lose one of the two. It affected camera settings, shortcuts and camview layouts, backup and worker settings, share counters and notification history. Every change is written as one indivisible step now.
+
+- **Plugins keep saving when their storage folder disappears.** If that folder is removed while camera.ui runs, a failed restore was one way to cause it, every setting a plugin tried to save failed until it was restarted, with "failed to persist" errors in the log. The folder is recreated on the next save now.
+
+- **Restoring a backup works on Windows.** The restore replaced the database while the server was still using it, which Windows does not allow, so it stopped with a "resource busy" error. The uploaded backup is now put aside and applied during the restart that follows, when nothing is holding the files.
+
+- **Windows: snapshots and streams work again when camera.ui is installed for all users.** In that setup the bundled ffmpeg sits under "C:\Program Files", and the space in that path cut the ffmpeg command in half, so snapshots and transcoded streams died with an exec error. Paths with spaces are handled now, nothing to change in your setup.
 
 - **Opening an event no longer starts the video too late.** A passing car was often already halfway through the frame, and you had to rewind by hand to see it enter. Events now play from a few seconds before the motion that started them, so the beginning of the scene is on screen right away.
 
