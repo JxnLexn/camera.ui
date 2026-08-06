@@ -79,7 +79,13 @@ def _replace_with_retry(tmp_path: str, path: str) -> None:
 def _write_store_file_sync(path: str, buf: bytes) -> None:
     tmp_path = f"{path}.tmp-{os.getpid()}"
     try:
-        fd = os.open(tmp_path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o644)
+        try:
+            fd = os.open(tmp_path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o644)
+        except FileNotFoundError:
+            # the volume can be pulled away under a running plugin (backup
+            # restore, manual cleanup), writing again must recreate it
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            fd = os.open(tmp_path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o644)
         try:
             os.write(fd, buf)
             os.fsync(fd)

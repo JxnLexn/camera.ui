@@ -1,4 +1,4 @@
-import { copyFile, open, readFile, readdir, rename, unlink } from 'node:fs/promises';
+import { copyFile, mkdir, open, readFile, readdir, rename, unlink } from 'node:fs/promises';
 import { basename, dirname, join } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 
@@ -31,7 +31,15 @@ export async function writeStoreFile(path: string, payload: Record<string, any>)
   const tmpPath = `${path}.tmp-${process.pid}`;
 
   try {
-    const handle = await open(tmpPath, 'w');
+    // the volume can be pulled away under a running plugin (backup restore,
+    // manual cleanup), writing again must recreate it
+    const handle = await open(tmpPath, 'w').catch(async (error) => {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+        throw error;
+      }
+      await mkdir(dirname(path), { recursive: true });
+      return open(tmpPath, 'w');
+    });
     try {
       await handle.writeFile(buf);
       await handle.sync();
