@@ -236,10 +236,7 @@ export class MqttBridge {
 
     setTimeout(() => {
       for (const unsubscribe of unsubscribers) unsubscribe();
-      const current = dbs.mqttDB.get('mqtt');
-      if (current) {
-        dbs.mqttDB.put('mqtt', { ...current, legacySensorSweepDone: true }).catch(() => {});
-      }
+      dbs.commit(dbs.mqttDB, 'mqtt', (current) => (current ? { ...current, legacySensorSweepDone: true } : undefined)).catch(() => {});
     }, 10_000).unref();
   }
 

@@ -120,19 +120,33 @@ export class NotificationManager {
   }
 
   public async clearHistory(userId: string): Promise<void> {
-    const dropped = this.historyFor(userId).map((n) => n.id);
-    await this.putHistory(userId, []);
+    const dropped: string[] = [];
+
+    await this.commitHistory(userId, (items) => {
+      dropped.push(...items.map((n) => n.id));
+
+      return [];
+    });
+
     this.emitToUser(userId, 'history', []);
     await this.dropImages(dropped);
   }
 
   public async removeByTag(userId: string, tag: string): Promise<boolean> {
-    const items = this.historyFor(userId);
-    const next = items.filter((n) => n.tag !== tag);
-    if (next.length === items.length) return false;
-    await this.putHistory(userId, next);
+    const dropped: string[] = [];
+
+    const next = await this.commitHistory(userId, (items) => {
+      const remaining = items.filter((n) => n.tag !== tag);
+      if (remaining.length === items.length) return undefined;
+
+      dropped.push(...items.filter((n) => n.tag === tag).map((n) => n.id));
+
+      return remaining;
+    });
+    if (!next) return false;
+
     this.emitToUser(userId, 'history', next);
-    await this.dropImages(items.filter((n) => n.tag === tag).map((n) => n.id));
+    await this.dropImages(dropped);
     return true;
   }
 
@@ -143,26 +157,35 @@ export class NotificationManager {
   }
 
   public async markAllSeen(userId: string): Promise<void> {
-    const items = this.historyFor(userId);
-    let changed = false;
     const now = Date.now();
-    for (const n of items) {
-      if (n.seenAt == null) {
-        n.seenAt = now;
-        changed = true;
+
+    const items = await this.commitHistory(userId, (current) => {
+      let changed = false;
+      for (const n of current) {
+        if (n.seenAt == null) {
+          n.seenAt = now;
+          changed = true;
+        }
       }
-    }
-    if (!changed) return;
-    await this.putHistory(userId, items);
+
+      return changed ? current : undefined;
+    });
+    if (!items) return;
+
     this.emitToUser(userId, 'history', items);
   }
 
   public async markSeen(userId: string, id: string): Promise<void> {
-    const items = this.historyFor(userId);
-    const item = items.find((n) => n.id === id);
-    if (!item || item.seenAt != null) return;
-    item.seenAt = Date.now();
-    await this.putHistory(userId, items);
+    const items = await this.commitHistory(userId, (current) => {
+      const item = current.find((n) => n.id === id);
+      if (!item || item.seenAt != null) return undefined;
+
+      item.seenAt = Date.now();
+
+      return current;
+    });
+    if (!items) return;
+
     this.emitToUser(userId, 'history', items);
   }
 
@@ -270,14 +293,11 @@ export class NotificationManager {
   }
 
   public async setGlobalSuppressed(suppressed: boolean): Promise<void> {
-    const current = this.dbs.settingsDB.get('settings');
-    if (!current) return;
-    await this.dbs.settingsDB.put('settings', { ...current, notificationsSuppressed: suppressed });
+    await this.dbs.commit(this.dbs.settingsDB, 'settings', (current) => (current ? { ...current, notificationsSuppressed: suppressed } : undefined));
   }
 
   public async setUserSuppressed(userId: string, suppressed: boolean): Promise<void> {
-    const settings = await this.notificationsService.getSettings(userId);
-    await this.notificationsService.setSettings(userId, { ...settings, suppressed });
+    await this.notificationsService.patchSettings(userId, { suppressed });
   }
 
   public async registerDevice(pluginName: string, ownerUserId: string, input: Record<string, unknown>): Promise<NotifierDevice> {
@@ -443,20 +463,23 @@ export class NotificationManager {
       data: n.data,
     };
 
-    const items = this.historyFor(userId);
     const dropped: string[] = [];
-    let deduped = items;
-    if (stored.tag) {
-      deduped = items.filter((h) => h.tag !== stored.tag);
-      dropped.push(...items.filter((h) => h.tag === stored.tag).map((h) => h.id));
-    }
-    deduped.unshift(stored);
-    if (deduped.length > HISTORY_LIMIT) {
-      dropped.push(...deduped.slice(HISTORY_LIMIT).map((h) => h.id));
-      deduped.length = HISTORY_LIMIT;
-    }
 
-    await this.putHistory(userId, deduped);
+    await this.commitHistory(userId, (items) => {
+      let deduped = items;
+      if (stored.tag) {
+        deduped = items.filter((h) => h.tag !== stored.tag);
+        dropped.push(...items.filter((h) => h.tag === stored.tag).map((h) => h.id));
+      }
+      deduped.unshift(stored);
+      if (deduped.length > HISTORY_LIMIT) {
+        dropped.push(...deduped.slice(HISTORY_LIMIT).map((h) => h.id));
+        deduped.length = HISTORY_LIMIT;
+      }
+
+      return deduped;
+    });
+
     this.emitToUser(userId, 'notification', stored);
     await this.dropImages(dropped);
   }
@@ -515,8 +538,17 @@ export class NotificationManager {
     return this.dbs.notificationHistoryDB.get(userId)?.items ?? [];
   }
 
-  private async putHistory(userId: string, items: StoredNotification[]): Promise<void> {
-    await this.dbs.notificationHistoryDB.put(userId, { _id: userId, items });
+  // notifications for the same user can land at the same time, each one
+  // rewrites the whole history array
+  private async commitHistory(userId: string, apply: (items: StoredNotification[]) => StoredNotification[] | undefined): Promise<StoredNotification[] | undefined> {
+    const record = await this.dbs.commit(this.dbs.notificationHistoryDB, userId, (current) => {
+      const items = apply(current?.items ?? []);
+      if (!items) return undefined;
+
+      return { _id: userId, items };
+    });
+
+    return record?.items;
   }
 }
 

@@ -28,9 +28,9 @@ import {
   NOTIFICATIONS_ID,
   PLUGINS_ID,
   REMOTE_ID,
-  SERVER_ID,
   SENSOR_HISTORY_ID,
   SENSORS_ID,
+  SERVER_ID,
   SETTINGS_ID,
   SHARES_ID,
   TOKENS_ID,
@@ -51,7 +51,7 @@ import {
 } from './record-schemas.js';
 import { SelfCheck } from './selfcheck.js';
 
-import type { Database as DB, RootDatabase as RootDB } from 'lmdb';
+import type { Database as DB, Key, RootDatabase as RootDB } from 'lmdb';
 import type { ConfigService } from '../../services/config/index.js';
 import type { LoggerService } from '../../services/logger/index.js';
 import type { DBToken } from '../types/index.js';
@@ -80,7 +80,7 @@ import type {
 const INGRESS_USERNAME = 'homeassistant';
 
 export class Database {
-  static readonly VERSION = '2.1.0';
+  static readonly VERSION = '2.1.1';
 
   public workerStateDB!: DB<DBWorkerState, 'state'>;
 
@@ -191,6 +191,19 @@ export class Database {
 
     await this.lowdb.close();
     this.logger.debug('Databases closed!');
+  }
+
+  public async commit<V, K extends Key>(db: DB<V, K>, key: K, apply: (record: V | undefined) => V | undefined): Promise<V | undefined> {
+    return db.transaction(() => {
+      const next = apply(db.get(key));
+      if (next === undefined) {
+        return undefined;
+      }
+
+      db.put(key, next);
+
+      return next;
+    });
   }
 
   public async updateCameras(): Promise<void> {
