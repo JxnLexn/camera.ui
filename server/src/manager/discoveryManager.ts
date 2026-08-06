@@ -839,21 +839,11 @@ export class DiscoveryManager implements DiscoveryManagerInterface {
       });
     });
 
-    // Snapshot priority: dedicated ONVIF snapshot > MJPEG profile (frames are
-    // already JPEG → no transcode) > high-res video via go2rtc frame.jpeg.
     if (onvifSnapshot) {
       sources.push({
         name: 'Snapshot',
         role: 'snapshot',
         urls: [onvifSnapshot.url],
-        hotMode: false,
-        preload: false,
-      });
-    } else if (mjpegStreams.length && !onlyMjpeg) {
-      sources.push({
-        name: 'Snapshot',
-        role: 'snapshot',
-        urls: [mjpegStreams[0].url],
         hotMode: false,
         preload: false,
       });
