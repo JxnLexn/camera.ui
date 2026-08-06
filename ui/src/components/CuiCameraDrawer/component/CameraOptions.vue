@@ -131,12 +131,26 @@ const isLoading = computed(() => cameraLoading.value || cameraDeviceLoading.valu
 
 const showSaveButton = computed(() => currentSegment.value === 'sources' || currentSegment.value === 'settings');
 
+function withPipSources(values: Record<string, any>): Record<string, any> {
+  if (!Array.isArray(values.sources)) {
+    return values;
+  }
+
+  return {
+    ...values,
+    sources: values.sources.map((source: { _id?: string }, index: number) => {
+      const formSource = cameraForm.value?.sources.find((s) => s._id && s._id === source._id) ?? cameraForm.value?.sources[index];
+      return { ...source, childSourceId: formSource?.childSourceId ?? null };
+    }),
+  };
+}
+
 async function onFormSubmit() {
   const result = await formRef.value?.validate();
   if (result?.valid && result.values) {
     const newName = result.values.name;
     patchCamera(
-      { cameraname: cameraName.value, cameraData: result.values },
+      { cameraname: cameraName.value, cameraData: withPipSources(result.values) },
       {
         onSuccess: () => {
           if (newName && newName !== cameraName.value) {

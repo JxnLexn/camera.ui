@@ -25,6 +25,7 @@ export interface ThumbnailOverride {
   url: string;
   type: string;
   label?: string;
+  anchorMs?: number;
 }
 
 export interface RecordingCardProps {

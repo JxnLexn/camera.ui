@@ -18,11 +18,14 @@
           </template>
 
           <template v-else>
-            <div v-for="event in visibleEvents" :key="event.id" class="event-card flex-none w-[140px] mr-3">
+            <div v-for="item in visibleEvents" :key="item.key" class="event-card flex-none w-[140px] mr-3">
               <CameraEvent
-                :event="event"
-                :camera-name="cameraMap.get(event.cameraId)"
-                :camera="cameraById.get(event.cameraId)"
+                :event="item.event"
+                :seg-index="item.segIndex"
+                :segment="item.segment"
+                :live="item.live"
+                :camera-name="cameraMap.get(item.event.cameraId)"
+                :camera="cameraById.get(item.event.cameraId)"
                 :load-thumbnails="loadThumbnails"
                 :click-disabled="isSwiping"
               />
@@ -116,7 +119,7 @@ const pageSize = computed(() => {
   return Math.ceil(w / EVENT_CARD_WIDTH) + 10;
 });
 
-const { events, isLoading, hasMore, loadMore, loadThumbnails } = useDetectionEvents({
+const { segmentItems, isLoading, hasMore, loadMore, loadThumbnails } = useDetectionEvents({
   availableCameraIds,
   realtime: true,
   pageSize: pageSize.value,
@@ -131,7 +134,7 @@ const { start: startSwipeReset } = useTimeoutFn(
   { immediate: false },
 );
 
-const displayEvents = computed(() => events.value);
+const displayEvents = computed(() => segmentItems.value);
 const visibleCardCount = computed(() => Math.ceil((containerWidth.value || 800) / EVENT_CARD_WIDTH));
 const needsMoreEvents = computed(() => displayEvents.value.length < visibleCardCount.value && hasMore.value);
 const noEvents = computed(() => !isLoading.value && displayEvents.value.length === 0 && !hasMore.value);
@@ -238,7 +241,7 @@ useInfiniteScroll(scrollContainerRef, loadMore, {
 watch(containerWidth, () => updateBleed());
 
 watch(
-  () => displayEvents.value[0]?.id,
+  () => displayEvents.value[0]?.key,
   (newId) => {
     if (!newId || newId === previousFirstId) return;
     const wasFirst = previousFirstId === undefined;

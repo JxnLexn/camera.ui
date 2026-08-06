@@ -68,8 +68,8 @@
       </div>
 
       <div
-        v-if="stripThumbnails.length > 1 && !thumbnailOverride"
-        class="absolute bottom-1 right-1 flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity duration-200 z-[3]"
+        v-if="stripThumbnails.length > 0 && !thumbnailOverride"
+        class="absolute bottom-1 right-1 flex gap-0.5 opacity-85 group-hover:opacity-100 transition-opacity duration-200 z-[3]"
       >
         <div v-for="(thumb, i) in stripThumbnails.slice(0, 4)" :key="i" class="w-7 h-7 rounded overflow-hidden border border-white/20 bg-neutral-800">
           <img :src="thumb.url" :alt="thumb.type" decoding="async" loading="lazy" class="w-full h-full object-cover" />
@@ -83,7 +83,9 @@
 import { EventHoverPreviewKey, getPrimaryThumbnailFromCache, thumbnailToUrl, useEventStore } from '@camera.ui/nvr';
 
 import { extractErrorMessage } from '@/common/utils.js';
+import { eventAnchorTime, segmentLabel } from '@/utils/eventAnchor.js';
 import { resolveEventIcons } from '@/utils/eventIcons.js';
+import { isDuplicateThumbnail } from '@/utils/thumbnailDedupe.js';
 
 import type { EventThumbnails } from '@camera.ui/nvr';
 import type { RecordingCardEmits, RecordingCardProps } from './types.js';
@@ -138,7 +140,9 @@ const primary = computed(() => {
 });
 
 const thumbnailUrl = computed(() => props.thumbnailOverride?.url ?? primary.value?.url);
-const primaryLabel = computed(() => (props.thumbnailOverride ? props.thumbnailOverride.label : primary.value?.label));
+// the label belongs to one specific thumbnail — on a grouped card it would
+// caption an image the card does not show
+const primaryLabel = computed(() => (props.thumbnailOverride ? props.thumbnailOverride.label : undefined));
 const primaryType = computed(() => props.thumbnailOverride?.type ?? primary.value?.type ?? props.event.types[0] ?? 'motion');
 
 const uniqueTypes = computed(() => {
@@ -157,9 +161,18 @@ const stripThumbnails = computed<{ url: string; type: string }[]>(() => {
 
   const primaryUrl = primary.value?.url;
   const items: { url: string; type: string }[] = [];
+  const seen: Uint8Array[] = [];
 
-  const addItem = (url: string | undefined, type: string): boolean => {
-    if (!url || url === primaryUrl || items.length >= 5) return false;
+  const addItem = (data: Uint8Array | undefined, type: string): boolean => {
+    if (!data || items.length >= 5) return false;
+    const url = thumbnailToUrl(data);
+    if (!url) return false;
+    if (url === primaryUrl) {
+      seen.push(data);
+      return false;
+    }
+    if (isDuplicateThumbnail(data, seen)) return false;
+    seen.push(data);
     items.push({ url, type });
     return true;
   };
@@ -167,7 +180,7 @@ const stripThumbnails = computed<{ url: string; type: string }[]>(() => {
   // Attributes (faces, plates, classifications)
   if (thumbs.attributes) {
     for (const [key, data] of Object.entries(thumbs.attributes)) {
-      addItem(thumbnailToUrl(data), key.split(':')[0]);
+      addItem(data, key.split(':')[0]);
     }
   }
 
@@ -176,7 +189,7 @@ const stripThumbnails = computed<{ url: string; type: string }[]>(() => {
     for (const type of DETECTION_PRIORITY) {
       for (const [key, data] of Object.entries(thumbs.detections)) {
         if (key.endsWith(`:${type}`)) {
-          addItem(thumbnailToUrl(data), type);
+          addItem(data, type);
           break;
         }
       }
@@ -184,7 +197,7 @@ const stripThumbnails = computed<{ url: string; type: string }[]>(() => {
     for (const [key, data] of Object.entries(thumbs.detections)) {
       const label = key.includes(':') ? key.split(':').slice(1).join(':') : key;
       if (!(DETECTION_PRIORITY as readonly string[]).includes(label)) {
-        addItem(thumbnailToUrl(data), label);
+        addItem(data, label);
       }
     }
   }
@@ -193,7 +206,8 @@ const stripThumbnails = computed<{ url: string; type: string }[]>(() => {
   if (thumbs.scenes) {
     const sceneKeys = Object.keys(thumbs.scenes).sort((a, b) => Number(a) - Number(b));
     for (const sk of sceneKeys) {
-      addItem(thumbnailToUrl(thumbs.scenes[sk]), 'scene');
+      // type it by what the span showed, so the tile carries a real icon
+      addItem(thumbs.scenes[sk], segmentLabel(props.event, sk));
     }
   }
 
@@ -226,6 +240,17 @@ function handleMouseLeave(): void {
   preview.onHoverEnd();
 }
 
+watch(
+  () => eventStore.storeVersion.value,
+  () => {
+    if (props.thumbnailOverride) return;
+    const cached = eventStore.getCachedThumbnails(props.event.id);
+    if (!cached) return;
+    loadedThumbs.value = cached;
+    if (getPrimaryThumbnailFromCache(cached, props.event).url) thumbnailState.value = 'loaded';
+  },
+);
+
 async function triggerLoad(retries = 2): Promise<void> {
   const thumbs = await props.loadThumbnails(props.event.id, props.event.startTime);
   if (thumbs) {
@@ -236,7 +261,7 @@ async function triggerLoad(retries = 2): Promise<void> {
     await new Promise((r) => setTimeout(r, 500));
     return triggerLoad(retries - 1);
   } else {
-    thumbnailState.value = 'empty';
+    thumbnailState.value = props.event.state === 'active' ? 'loading' : 'empty';
   }
 }
 
@@ -245,7 +270,7 @@ function handleClick(): void {
     emit('select');
     return;
   }
-  emit('scrollToEvent', props.event.startTime);
+  emit('scrollToEvent', props.thumbnailOverride?.anchorMs ?? eventAnchorTime(props.event));
 }
 
 async function handleDownload(): Promise<void> {

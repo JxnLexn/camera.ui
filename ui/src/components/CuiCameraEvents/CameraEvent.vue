@@ -59,13 +59,15 @@
 </template>
 
 <script setup lang="ts">
-import { EventHoverPreviewKey, getPrimaryThumbnailFromCache, getPrimaryType } from '@camera.ui/nvr';
+import { EventHoverPreviewKey, getPrimaryThumbnailFromCache, getPrimaryType, getSegmentThumbnailFromCache, useEventStore } from '@camera.ui/nvr';
 import SparklesIcon from '~icons/tabler/sparkles';
 
 import CameraEventDialog from '@/components/CuiDialog/templates/CameraStreamEvent/CameraStreamEvent.vue';
+import { eventAnchorTime } from '@/utils/eventAnchor.js';
 import { resolveEventIcons } from '@/utils/eventIcons.js';
 
 import type { CameraStreamEventProps } from '@/components/CuiDialog/templates/CameraStreamEvent/types.js';
+import type { EventThumbnails } from '@camera.ui/nvr';
 import type { DynamicDialogInstance } from 'primevue/dynamicdialogoptions';
 import type { CameraEventProps } from './types.js';
 
@@ -73,6 +75,7 @@ const props = defineProps<CameraEventProps>();
 
 const dialog = useCuiDialog();
 const preview = inject(EventHoverPreviewKey, undefined);
+const eventStore = useEventStore('@camera.ui/camera-ui-nvr');
 
 // Live edge threshold — events starting within this window open as live stream.
 const LIVE_EDGE_MS = 10_000;
@@ -93,20 +96,25 @@ const { icons: eventIcons, generic: genericIcon } = resolveEventIcons();
 const typeIcon = computed<Component>(() => eventIcons[thumbnailType.value] ?? genericIcon);
 
 const formatTime = computed(() => {
-  const date = new Date(props.event.startTime);
+  const date = new Date(props.segment?.firstSeen ?? props.event.thumbnailAt ?? props.event.startTime);
   return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 });
 
-const isActive = computed(() => props.event.state === 'active');
-const hasDescription = computed(() => !isActive.value && props.event.segments?.some((s) => s?.description));
-const descriptionTitle = computed(() => props.event.segments?.find((s) => s?.description)?.description?.title);
+const anchorTime = computed(() => props.segment?.firstSeen ?? eventAnchorTime(props.event));
+
+const isActive = computed(() => (props.segment ? props.live === true : props.event.state === 'active'));
+const description = computed(() => (props.segment ? props.segment.description : props.event.segments?.find((s) => s?.description)?.description));
+const hasDescription = computed(() => !isActive.value && Boolean(description.value));
+const descriptionTitle = computed(() => description.value?.title);
 
 function handleMouseEnter(): void {
   if (!preview || !props.event.endTime) return;
   const canvas = previewCanvasRef.value;
   if (!canvas) return;
   isPreviewActive.value = true;
-  preview.onHoverStart(canvas, props.event.cameraId, props.event.id, props.event.startTime, props.event.endTime);
+  const from = props.segment?.firstSeen ?? props.event.startTime;
+  const to = props.segment?.lastSeen ?? props.event.endTime;
+  preview.onHoverStart(canvas, props.event.cameraId, props.event.id, from, to);
 }
 
 function handleMouseLeave(): void {
@@ -115,10 +123,26 @@ function handleMouseLeave(): void {
   preview.onHoverEnd();
 }
 
+function applyThumbnails(thumbs: EventThumbnails): boolean {
+  const primary =
+    props.segment && props.segIndex !== undefined
+      ? getSegmentThumbnailFromCache(thumbs, props.segIndex, props.segment)
+      : getPrimaryThumbnailFromCache(thumbs, props.event);
+  if (!primary.url) return false;
+  thumbnailUrl.value = primary.url;
+  thumbnailLabel.value = primary.label;
+  thumbnailType.value = primary.type;
+  thumbnailState.value = 'loaded';
+  return true;
+}
+
 async function triggerLoad(retries = 2): Promise<void> {
   const thumbs = await props.loadThumbnails(props.event.id, props.event.startTime);
   if (thumbs) {
-    const primary = getPrimaryThumbnailFromCache(thumbs, props.event);
+    const primary =
+      props.segment && props.segIndex !== undefined
+        ? getSegmentThumbnailFromCache(thumbs, props.segIndex, props.segment)
+        : getPrimaryThumbnailFromCache(thumbs, props.event);
     if (primary.url) {
       thumbnailUrl.value = primary.url;
       thumbnailLabel.value = primary.label;
@@ -133,7 +157,8 @@ async function triggerLoad(retries = 2): Promise<void> {
     await new Promise((r) => setTimeout(r, 500));
     return triggerLoad(retries - 1);
   }
-  thumbnailState.value = 'empty';
+  // a running event gets its picture later; the store watcher fills it in
+  thumbnailState.value = isActive.value ? 'loading' : 'empty';
 }
 
 function openCameraEvent(): void {
@@ -143,7 +168,7 @@ function openCameraEvent(): void {
   // Active events further in the past → open at event start (scrub)
   const isNearLive = isActive.value && Date.now() - props.event.startTime < LIVE_EDGE_MS;
 
-  const desc = props.event.segments?.find((s) => s?.description)?.description;
+  const desc = description.value;
 
   const headerAction = [
     {
@@ -161,7 +186,7 @@ function openCameraEvent(): void {
       hideConfirmButton: true,
       contentProps: {
         camera: props.camera,
-        eventTimestamp: isNearLive ? undefined : props.event.startTime,
+        eventTimestamp: isNearLive ? undefined : anchorTime.value,
       },
       headerActions: desc ? headerAction : undefined,
       draggable: true,
@@ -169,7 +194,7 @@ function openCameraEvent(): void {
       dismissableMask: false,
       modal: false,
       dialogContentClass: '!px-0 h-full',
-      goTo: `/cameras/${props.camera.name}${isNearLive ? '' : `?startTs=${props.event.startTime}`}`,
+      goTo: `/cameras/${props.camera.name}${isNearLive ? '' : `?startTs=${anchorTime.value}`}`,
     },
     dialogSize: {
       desktop: {
@@ -192,6 +217,15 @@ const { stop: stopObserver } = useIntersectionObserver(
   },
   {
     threshold: 0.1,
+  },
+);
+
+watch(
+  () => eventStore.storeVersion.value,
+  () => {
+    if (!loadTriggered) return;
+    const cached = eventStore.getCachedThumbnails(props.event.id);
+    if (cached) applyThumbnails(cached);
   },
 );
 

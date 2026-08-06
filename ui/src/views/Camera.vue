@@ -379,7 +379,10 @@ async function onTrimExport() {
 
   trimExporting.value = true;
   try {
-    const result = await nvrPlugin.nvrExport(cameraId.value, startMs * 1000, endMs * 1000, { timelapseIntervalSec: timelapseIntervalSec || undefined });
+    const result = await nvrPlugin.nvrExport(cameraId.value, startMs * 1000, endMs * 1000, {
+      timelapseIntervalSec: timelapseIntervalSec || undefined,
+      sourceRole: nvrController.effectiveRole.value || undefined,
+    });
     await download({ url: result.url, filename: result.filename });
   } catch (error) {
     log.error('Export failed:', error);
@@ -389,8 +392,6 @@ async function onTrimExport() {
   }
 }
 
-// Pre-set mode so CuiCameraCard skips live autostart when navigating with ?startTs=
-// flush: 'sync' ensures mode is set BEFORE child components mount (CuiCameraPipCard checks nvrMode for autoStart)
 watch(
   startTs,
   (ts) => {
@@ -401,10 +402,6 @@ watch(
   { immediate: true, flush: 'sync' },
 );
 
-// Auto-play at startTs when cameraId resolves after navigation with ?startTs=
-// Guard: camera.name must match route param to prevent play() with stale cameraId
-// (tanstack-query resolves cached data async — cameraId can briefly hold the OLD camera's ID).
-// play() defers internally when the container isn't bound yet, so no container check here.
 watch(
   [cameraId, startTs],
   ([id, ts]) => {

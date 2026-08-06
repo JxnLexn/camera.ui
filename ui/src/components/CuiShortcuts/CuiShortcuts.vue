@@ -497,7 +497,7 @@ import {
   useCameraUi,
   useSensors,
 } from '@camera.ui/browser';
-import { createNvrPlayback, NvrPlaybackKey, useNvrCtx } from '@camera.ui/nvr';
+import { createNvrPlayback, NvrPlaybackKey, playheadUs, useNvrCtx } from '@camera.ui/nvr';
 import {
   BatteryProperty,
   ChargingState,
@@ -959,7 +959,7 @@ function onMouseUpCallback(isLongPress: boolean, shortcut: DBCameraShortcut) {
       onHover(shortcut._id, true);
     } else {
       // Capture NVR handoff timestamp before clearing hover (which stops preview).
-      const nvrHandoffTs = isNvrActive.value && parentNvr ? Math.floor(parentNvr.currentTimestamp.value / 1000) : undefined;
+      const nvrHandoffTs = isNvrActive.value && parentNvr ? Math.floor(playheadUs(parentNvr) / 1000) : undefined;
       onHover(shortcut._id, false);
       routeCamera(shortcut.cameraId, nvrHandoffTs);
     }
@@ -1410,7 +1410,8 @@ watch(activeHoveredShortcut, (shortcut, oldShortcut) => {
   }
   if (shortcut && parentNvr && isNvrActive.value) {
     const ctrl = getOrCreateFollower(shortcut);
-    ctrl.play(parentNvr.currentTimestamp.value, true);
+    ctrl.setSpeed(parentNvr.speed.value);
+    ctrl.play(playheadUs(parentNvr), true);
   }
 });
 
@@ -1425,7 +1426,7 @@ watch(
         ctrl.stop();
         break;
       case 'play':
-        ctrl.play(parentNvr.currentTimestamp.value, true);
+        ctrl.play(playheadUs(parentNvr), true);
         break;
       case 'pause':
         ctrl.pause();

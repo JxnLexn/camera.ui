@@ -1195,23 +1195,15 @@ function lineSvgEditor(line: DetectionLine) {
 
 async function onConfirm(): Promise<void | null> {
   try {
-    const promises: Promise<any>[] = [];
+    await patchCameraZones({
+      cameraname: cameraName.value,
+      zoneData: detectionZones.value,
+    });
 
-    promises.push(
-      patchCameraZones({
-        cameraname: cameraName.value,
-        zoneData: detectionZones.value,
-      }),
-    );
-
-    promises.push(
-      patchCameraLines({
-        cameraname: cameraName.value,
-        lineData: detectionLines.value,
-      }),
-    );
-
-    await Promise.all(promises);
+    await patchCameraLines({
+      cameraname: cameraName.value,
+      lineData: detectionLines.value,
+    });
   } catch (error) {
     toast.add({ severity: 'error', detail: error, life: 3000 });
     return null;

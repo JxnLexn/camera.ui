@@ -205,11 +205,13 @@ import CameraEventDialog from '@/components/CuiDialog/templates/CameraStreamEven
 import ExportRecordings from '@/components/CuiDialog/templates/ExportRecordings/ExportRecordings.vue';
 import CuiMenu from '@/components/CuiMenu/CuiMenu.vue';
 import RecordingsFilterSidebar from '@/components/CuiRecordings/RecordingsFilterSidebar.vue';
+import { segmentLabel } from '@/utils/eventAnchor.js';
+import { isDuplicateThumbnail } from '@/utils/thumbnailDedupe.js';
 
 import type { CameraStreamEventProps } from '@/components/CuiDialog/templates/CameraStreamEvent/types.js';
 import type { GridRegion } from '@/components/CuiGridSearch/types.js';
 import type { MenuItem } from '@/components/CuiMenu/types.js';
-import type { RecordingsFilterState } from '@/components/CuiRecordings/types.js';
+import type { RecordingsFilterState, ThumbnailOverride } from '@/components/CuiRecordings/types.js';
 import type { EventThumbnails, GetEventsOptions } from '@camera.ui/nvr';
 import type { BoundingBox, DetectionEvent } from '@camera.ui/sdk';
 import type { DBCamera } from '@shared/types';
@@ -217,7 +219,7 @@ import type { DBCamera } from '@shared/types';
 interface UngroupedItem {
   event: DetectionEvent;
   key: string;
-  thumbnailOverride?: { url: string; type: string; label?: string };
+  thumbnailOverride?: ThumbnailOverride;
 }
 
 const camerasQuery = new CamerasQuery();
@@ -477,13 +479,16 @@ function boxOverlapsRegions(box: BoundingBox, regions: GridRegion[]): boolean {
   return false;
 }
 
-function flattenCachedThumbnails(thumbs: EventThumbnails, event: DetectionEvent): { key: string; url: string; type: string; label?: string }[] {
-  const entries: { key: string; url: string; type: string; label?: string }[] = [];
+function flattenCachedThumbnails(thumbs: EventThumbnails, event: DetectionEvent): { key: string; url: string; type: string; label?: string; anchorMs?: number }[] {
+  const entries: { key: string; url: string; type: string; label?: string; anchorMs?: number }[] = [];
+  const bytes: Uint8Array[] = [];
+  const segAnchor = (segKey: string): number | undefined => event.segments?.[Number(segKey)]?.firstSeen;
 
   if (thumbs.attributes) {
     for (const [key, data] of Object.entries(thumbs.attributes)) {
       const url = thumbnailToUrl(data);
       if (!url) continue;
+      bytes.push(data);
       const colonIdx = key.indexOf(':');
       entries.push({
         key: `${event.id}:attr:${key}`,
@@ -498,8 +503,9 @@ function flattenCachedThumbnails(thumbs: EventThumbnails, event: DetectionEvent)
     for (const [key, data] of Object.entries(thumbs.detections)) {
       const url = thumbnailToUrl(data);
       if (!url) continue;
+      bytes.push(data);
       const label = key.includes(':') ? key.split(':').slice(1).join(':') : key;
-      entries.push({ key: `${event.id}:det:${key}`, url, type: label });
+      entries.push({ key: `${event.id}:det:${key}`, url, type: label, anchorMs: segAnchor(key.split(':')[0]) });
     }
   }
 
@@ -507,15 +513,16 @@ function flattenCachedThumbnails(thumbs: EventThumbnails, event: DetectionEvent)
     for (const [key, data] of Object.entries(thumbs.scenes)) {
       const url = thumbnailToUrl(data);
       if (!url) continue;
-      entries.push({ key: `${event.id}:scene:${key}`, url, type: 'scene' });
+      bytes.push(data);
+      entries.push({ key: `${event.id}:scene:${key}`, url, type: segmentLabel(event, key), anchorMs: segAnchor(key) });
     }
   }
 
-  // Deduplicate by URL (same thumbnail data can appear in scenes + detections)
-  const seen = new Set<string>();
-  return entries.filter((e) => {
-    if (seen.has(e.url)) return false;
-    seen.add(e.url);
+  const seen: Uint8Array[] = [];
+  return entries.filter((_entry, i) => {
+    const data = bytes[i];
+    if (!data || isDuplicateThumbnail(data, seen)) return false;
+    seen.push(data);
     return true;
   });
 }
@@ -543,7 +550,7 @@ function buildUngroupedItems(events: DetectionEvent[]): UngroupedItem[] {
         items.push({
           event,
           key: i === 0 ? event.id : entry.key,
-          thumbnailOverride: { url: entry.url, type: entry.type, label: entry.label },
+          thumbnailOverride: { url: entry.url, type: entry.type, label: entry.label, anchorMs: entry.anchorMs },
         });
       });
     }

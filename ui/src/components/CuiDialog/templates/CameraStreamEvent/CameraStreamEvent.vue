@@ -136,6 +136,7 @@ async function handleDownload(): Promise<void> {
       ev.cameraId,
       ev.startMs * 1000, // ms → μs
       ev.endMs * 1000,
+      { sourceRole: nvrController.effectiveRole.value || undefined },
     );
     await download({ url: result.url, filename: result.filename });
   } catch (error) {

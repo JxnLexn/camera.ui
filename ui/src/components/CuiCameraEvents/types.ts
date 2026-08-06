@@ -1,5 +1,5 @@
 import type { EventThumbnails } from '@camera.ui/nvr';
-import type { DetectionEvent } from '@camera.ui/sdk';
+import type { DetectionEvent, EventSegment } from '@camera.ui/sdk';
 import type { DBCamera } from '@shared/types';
 
 export interface CuiCameraEventsProps {
@@ -10,6 +10,9 @@ export type EventType = 'motion' | 'person' | 'face' | 'vehicle' | 'animal' | 'p
 
 export interface CameraEventProps {
   event: DetectionEvent;
+  segIndex?: number;
+  segment?: EventSegment;
+  live?: boolean;
   cameraName?: string;
   camera?: DBCamera;
   loadThumbnails: (eventId: string, startMs: number) => Promise<EventThumbnails | null>;
