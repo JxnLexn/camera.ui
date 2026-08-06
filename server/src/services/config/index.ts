@@ -3,11 +3,11 @@ import { IS_DEV, IS_DOCKER, IS_ELECTRON, isEqual, mergeWith, structuredClone } f
 import { go2rtcPath } from '@camera.ui/go2rtc';
 import { natsServerPath } from '@camera.ui/nats';
 import { tunnelPath } from '@camera.ui/tunnel';
-import { emptyDirSync, ensureDirSync, ensureFileSync, pathExistsSync, readJsonSync, removeSync, writeJsonSync } from 'fs-extra/esm';
+import { emptyDirSync, ensureDirSync, ensureFileSync, moveSync, pathExistsSync, readJsonSync, removeSync, writeJsonSync } from 'fs-extra/esm';
 import { dump, load } from 'js-yaml';
 import { ffmpegPath, isFfmpegAvailable } from 'node-av';
 import { createHash, randomBytes } from 'node:crypto';
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { arch, platform, release, tmpdir, type } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
@@ -19,6 +19,7 @@ import { patchConfigSchema } from '../../api/schemas/config.schema.js';
 import { patchGo2RtcSchema } from '../../api/schemas/go2rtc.schema.js';
 import { CertificateGeneration } from '../../api/utils/cert.js';
 import { HOST_CERT_FILENAME, HOST_KEY_FILENAME, OLD_ROOT_CERT_FILENAME, OLD_ROOT_KEY_FILENAME, ROOT_CERT_FILENAME } from '../../api/utils/constants.js';
+import { execSafePath } from '../../utils/path.js';
 import { DEFAULT_CONFIG, DEFAULT_GO2RTC_CONFIG, ELECTRON_ASAR_UNPACKED } from './constants.js';
 
 import type { LoggerOptions } from '@camera.ui/common/logger';
@@ -27,7 +28,7 @@ import type { Database } from '../../api/database/index.js';
 import type { Go2RtcApi } from '../../go2rtc/api/index.js';
 import type { DeepPartial } from '../../types.js';
 import type { LoggerService } from '../logger/index.js';
-import type { EnvironmentInfo, Go2RtcConfig, IConfig, Secrets, SSLConfig } from './types.js';
+import type { ConfigServiceOptions, EnvironmentInfo, Go2RtcConfig, IConfig, Secrets, SSLConfig } from './types.js';
 
 const __require = createRequire(import.meta.url);
 const __filename = fileURLToPath(import.meta.url);
@@ -72,6 +73,8 @@ export class ConfigService {
 
   readonly PLUGINS_STORAGE_PATH: string;
   readonly PLUGINS_INSTALL_PATH: string;
+  readonly RESTORE_STAGING_PATH: string;
+  readonly RESTORE_READY_FILE: string;
 
   readonly REPORTS_FILE: string;
   readonly LOG_FILE: string;
@@ -154,7 +157,7 @@ export class ConfigService {
     };
   }
 
-  constructor(homePath?: string) {
+  constructor(homePath?: string, options: ConfigServiceOptions = {}) {
     container.registerInstance('configService', this);
 
     this.logger = container.resolve<LoggerService>('logger');
@@ -185,6 +188,8 @@ export class ConfigService {
 
     this.PLUGINS_STORAGE_PATH = join(this.STORAGE_PATH, 'plugins', 'storage');
     this.PLUGINS_INSTALL_PATH = join(this.HOME_PATH, 'plugins');
+    this.RESTORE_STAGING_PATH = join(this.HOME_PATH, 'restore');
+    this.RESTORE_READY_FILE = join(this.RESTORE_STAGING_PATH, '.ready');
 
     this.GO2RTC_BINARY = go2rtcPath().replace('app.asar', ELECTRON_ASAR_UNPACKED);
     this.TUNNEL_BINARY = tunnelPath().replace('app.asar', ELECTRON_ASAR_UNPACKED);
@@ -192,6 +197,11 @@ export class ConfigService {
 
     this.SECRETS_FILE = join(this.STORAGE_PATH, '.camera.ui.secrets');
     this.LOG_FILE = join(this.STORAGE_PATH, 'camera.ui.log');
+
+    if (options.applyPendingRestore) {
+      this.applyPendingRestore();
+    }
+
     this.SECRETS = this.updateSecrets();
 
     this.createDirs();
@@ -469,6 +479,37 @@ export class ConfigService {
     this.writeGo2RtcConfigFile();
   }
 
+  private applyPendingRestore(): void {
+    if (!existsSync(this.RESTORE_READY_FILE)) {
+      removeSync(this.RESTORE_STAGING_PATH);
+      return;
+    }
+
+    const stagedStorage = join(this.RESTORE_STAGING_PATH, 'storage');
+    const stagedInfo = join(this.RESTORE_STAGING_PATH, 'camera.ui.backup.json');
+
+    this.logger.attention('Restoring backup...');
+
+    try {
+      if (existsSync(stagedStorage)) {
+        for (const entry of readdirSync(stagedStorage)) {
+          moveSync(join(stagedStorage, entry), join(this.STORAGE_PATH, entry), { overwrite: true });
+        }
+      }
+
+      if (existsSync(stagedInfo)) {
+        moveSync(stagedInfo, this.BACKUP_INFO_FILE, { overwrite: true });
+      }
+
+      writeFileSync(this.RESTORE_RESET_IDENTITY_FILE, '');
+      removeSync(this.RESTORE_STAGING_PATH);
+
+      this.logger.log('Backup was successfully restored');
+    } catch (error) {
+      this.logger.error(`Backup restore failed: ${error.message}`);
+    }
+  }
+
   private defaultConfig(): IConfig {
     const defaultConfig = structuredClone(DEFAULT_CONFIG);
     defaultConfig.ssl.certFile = join(this.STORAGE_PATH, HOST_CERT_FILENAME);
@@ -599,9 +640,9 @@ export class ConfigService {
     const bundledFfmpeg = isFfmpegAvailable() ? ffmpegPath().replace('app.asar', ELECTRON_ASAR_UNPACKED) : undefined;
 
     if (customFfmpeg && existsSync(customFfmpeg)) {
-      config.ffmpeg.bin = customFfmpeg;
+      config.ffmpeg.bin = execSafePath(customFfmpeg);
     } else if (bundledFfmpeg) {
-      config.ffmpeg.bin = bundledFfmpeg;
+      config.ffmpeg.bin = execSafePath(bundledFfmpeg);
     } else {
       config.ffmpeg.bin = platform() === 'win32' ? 'ffmpeg.exe' : 'ffmpeg';
     }

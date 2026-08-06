@@ -79,7 +79,7 @@ class CameraUi {
 
     this.homePath = process.argv[2];
 
-    this.configService = new ConfigService(this.homePath);
+    this.configService = new ConfigService(this.homePath, { applyPendingRestore: true });
     reapTrackedProcessesOnExit(this.configService);
 
     const logLevel = this.configService.config.logger?.level === 'debug' ? 'debug' : this.configService.config.logger?.level === 'trace' ? 'trace' : 'log';

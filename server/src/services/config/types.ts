@@ -212,3 +212,7 @@ export interface SSLConfig {
   key: Buffer;
   ca: Buffer;
 }
+
+export interface ConfigServiceOptions {
+  applyPendingRestore?: boolean;
+}
