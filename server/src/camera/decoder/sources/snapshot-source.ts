@@ -63,6 +63,10 @@ export class SnapshotSource {
     return this.frameScaler;
   }
 
+  public get lastFrameAt(): number {
+    return this.cachedFrameAt;
+  }
+
   public start(): void {
     if (this.shouldRun) return;
     this.shouldRun = true;

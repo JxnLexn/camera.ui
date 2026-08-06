@@ -3,7 +3,6 @@ import { randomUUID } from 'node:crypto';
 import { NamespaceManager } from '../../rpc/namespaces.js';
 import { boxIntersectsPolygon } from '../utils/filter.js';
 import { MAX_UNTRACKED_PLATES, normalizePlateText, PlateVoteTracker } from './plate-vote.js';
-import { STATIONARY_SPEED_THRESHOLD } from './stationary-suppressor.js';
 
 import type { RPCClient } from '@camera.ui/rpc';
 import type {
@@ -22,6 +21,7 @@ import type {
   Point,
 } from '@camera.ui/sdk';
 import type { DetectionThumbnail } from '../../rpc/interfaces/detection.js';
+import type { BestShot } from './best-shot-store.js';
 import type { LineCrossingEvent } from './detection-pipeline.js';
 
 export interface TrackedSecondary {
@@ -35,12 +35,13 @@ export interface TrackedClipEmbedding extends ClipEmbedding, TrackedSecondary {}
 
 export interface NormalizedDetectionZone {
   name: string;
-  // 0-1 normalized, closed (first point repeated)
   points: Point[];
 }
 
 export interface ProcessedDetectionData {
   hasCascadeTrigger: boolean;
+  /** Any activity span open (world track lifecycles or external report window). */
+  hasOpenSpans?: boolean;
   motion?: {
     detected: boolean;
   };
@@ -72,6 +73,7 @@ export interface ProcessedDetectionData {
 
 const UPDATE_THROTTLE_MS = 1000;
 const MIN_MOVING_SPEED = 0.05;
+const STATIONARY_SPEED_THRESHOLD = 0.002;
 
 function jpegInfo(jpeg: Buffer): string {
   let i = 2;
@@ -108,22 +110,27 @@ interface ThumbnailCandidate {
 
 export class DetectionEventManager {
   private static readonly MAX_PLATE_THUMBNAILS = 16;
+  private static readonly SEGMENT_LINGER_MS = 10_000;
 
   private activeEvent: DetectionEvent | null = null;
   private activeSegment: EventSegment | null = null;
-  private segmentTimer: NodeJS.Timeout | null = null;
   private segmentIndex = 0;
   private lastPublishTime = 0;
 
-  private sceneThumbnail: ThumbnailCandidate | null = null;
   private sceneThumbnailShipped = false;
-  private detectionLabelThumbnails = new Map<string, ThumbnailCandidate>();
   private attributeThumbnails = new Map<string, ThumbnailCandidate>();
+  private bestShotResolver?: (trackIds: Iterable<number>, label?: string) => BestShot | undefined;
+  private segmentTrackIds = new Set<number>();
+  private eventTrackIds = new Set<number>();
+  private lastPushedShotTs = 0;
+  private eventThumbnailAt = 0;
+  private segmentClosePendingSince: number | null = null;
+  private lingerTimer: NodeJS.Timeout | null = null;
+  private onSegmentClosedCallback?: () => void;
 
   private eventThumbnail: Buffer | null = null;
   private needsEventThumbnail = false;
 
-  private eventBestShot: ThumbnailCandidate | null = null;
   private eventBestShotPushed = false;
   private eventBestShotDirty = false;
 
@@ -151,6 +158,22 @@ export class DetectionEventManager {
     this.onEventEndCallback = callback;
   }
 
+  public onSegmentClosed(callback: () => void): void {
+    this.onSegmentClosedCallback = callback;
+  }
+
+  public setBestShotResolver(resolver: (trackIds: Iterable<number>, label?: string) => BestShot | undefined): void {
+    this.bestShotResolver = resolver;
+  }
+
+  private segmentShot(label?: string): BestShot | undefined {
+    return this.bestShotResolver?.(this.segmentTrackIds, label);
+  }
+
+  private eventShot(): BestShot | undefined {
+    return this.bestShotResolver?.(this.eventTrackIds);
+  }
+
   public processResults(data: ProcessedDetectionData): void {
     const now = data.timestamp;
     const triggers = this.extractTriggers(data, now);
@@ -167,6 +190,7 @@ export class DetectionEventManager {
     // publish immediately, the UI shouldn't wait for the next throttled update
     if (data.eventThumbnail && this.needsEventThumbnail) {
       this.eventThumbnail = data.eventThumbnail;
+      this.eventThumbnailAt = now;
       this.needsEventThumbnail = false;
       this.publishEventThumbnail();
     }
@@ -184,10 +208,15 @@ export class DetectionEventManager {
       }
     }
 
-    if (hasDetections && data.hasCascadeTrigger) {
+    if (data.hasOpenSpans) {
+      this.segmentClosePendingSince = null;
+      if (this.lingerTimer) {
+        clearTimeout(this.lingerTimer);
+        this.lingerTimer = null;
+      }
       if (!this.activeSegment) {
-        this.openSegment(data, now);
-      } else {
+        if (hasDetections) this.openSegment(data, now);
+      } else if (hasDetections) {
         this.enrichSegment(data, now);
         if (data.thumbnails && data.thumbnails.length > 0) {
           this.updateThumbnails(data.thumbnails);
@@ -196,8 +225,25 @@ export class DetectionEventManager {
         this.updateTypes();
         this.publishSegmentThrottled('segment-update');
       }
-      this.resetSegmentTimer(data.segmentTimeout);
+    } else if (this.activeSegment && this.segmentClosePendingSince === null) {
+      // all spans closed: linger before deciding — a span reopening in the
+      // window continues this segment (detector flicker or a camera
+      // re-reporting is not a new visit). The boundary stays back-stamped:
+      // lastSeen keeps the last real detection, the linger only delays the
+      // decision. Timer-driven so tickless (class-b) cameras close too
+      this.segmentClosePendingSince = now;
+      this.lingerTimer = setTimeout(() => {
+        this.lingerTimer = null;
+        if (this.segmentClosePendingSince === null) return;
+        this.segmentClosePendingSince = null;
+        this.closeSegment();
+        this.onSegmentClosedCallback?.();
+      }, DetectionEventManager.SEGMENT_LINGER_MS);
     }
+  }
+
+  public hasActiveSegment(): boolean {
+    return this.activeSegment !== null;
   }
 
   public forceEndActiveEvent(): void {
@@ -205,30 +251,27 @@ export class DetectionEventManager {
   }
 
   public destroy(): void {
-    if (this.segmentTimer) {
-      clearTimeout(this.segmentTimer);
-      this.segmentTimer = null;
-    }
     if (this.activeEvent) this.endEvent();
   }
 
-  public publishEventThumbnail(jpeg?: Buffer, source: 'scene' | 'best-shot' = 'scene'): void {
+  public publishEventThumbnail(jpeg?: Buffer, source: 'scene' | 'best-shot' = 'scene', capturedAt?: number): void {
     if (!this.activeEvent) return;
     // a late scene re-shoot (HQ warm-up) must not undo an object crop
     if (source === 'scene' && this.eventBestShotPushed) return;
     if (jpeg) {
       this.eventThumbnail = jpeg;
+      this.eventThumbnailAt = capturedAt ?? Date.now();
       this.needsEventThumbnail = false;
     }
     if (!this.eventThumbnail) return;
     this.logger.trace(`[event] thumbnail id=${this.activeEvent.id.slice(0, 8)} ${jpegInfo(this.eventThumbnail)}`);
     this.activeEvent.segments = [];
     this.activeEvent.thumbnail = this.eventThumbnail;
+    this.activeEvent.thumbnailAt = this.eventThumbnailAt || undefined;
     this.publish('update');
     this.activeEvent.thumbnail = undefined;
 
-    if (this.activeSegment && !this.sceneThumbnail) {
-      this.sceneThumbnail = { jpeg: this.eventThumbnail, score: 0, area: 0, onEdge: false, hasAttribute: false };
+    if (this.activeSegment && !this.segmentShot()) {
       this.publishSegment('segment-update');
     }
   }
@@ -256,11 +299,14 @@ export class DetectionEventManager {
     this.segmentIndex = 0;
     this.needsEventThumbnail = true;
     this.eventThumbnail = null;
-    this.eventBestShot = null;
     this.eventBestShotPushed = false;
     this.eventBestShotDirty = false;
+    this.eventTrackIds.clear();
+    this.lastPushedShotTs = 0;
+    this.eventThumbnailAt = 0;
     if (data.eventThumbnail) {
       this.eventThumbnail = data.eventThumbnail;
+      this.eventThumbnailAt = now;
       this.needsEventThumbnail = false;
     }
 
@@ -269,6 +315,7 @@ export class DetectionEventManager {
     // next coordinator tick delivers it via update
     if (this.eventThumbnail) {
       this.activeEvent.thumbnail = this.eventThumbnail;
+      this.activeEvent.thumbnailAt = this.eventThumbnailAt || undefined;
     }
     this.publish('start');
     if (this.activeEvent) this.activeEvent.thumbnail = undefined;
@@ -277,21 +324,22 @@ export class DetectionEventManager {
     const thumbInfo = this.eventThumbnail ? jpegInfo(this.eventThumbnail) : 'pending';
     this.logger.log(`[event] start id=${this.activeEvent.id.slice(0, 8)} triggers=[${triggerTypes}] types=[${this.activeEvent.types.join(',')}] thumb=${thumbInfo}`);
 
-    if (this.hasNewDetections(data) && data.hasCascadeTrigger) {
+    if (this.hasNewDetections(data) && data.hasOpenSpans) {
       this.openSegment(data, now);
-      this.resetSegmentTimer(data.segmentTimeout);
     }
   }
 
   private endEvent(): void {
     if (!this.activeEvent) return;
 
-    if (this.eventBestShotDirty && this.eventBestShot) {
-      this.publishEventThumbnail(this.eventBestShot.jpeg, 'best-shot');
+    if (this.eventBestShotDirty) {
+      const shot = this.eventShot();
+      if (shot) this.publishEventThumbnail(shot.jpeg, 'best-shot', shot.capturedAt);
     }
-    this.eventBestShot = null;
     this.eventBestShotPushed = false;
     this.eventBestShotDirty = false;
+    this.eventTrackIds.clear();
+    this.lastPushedShotTs = 0;
 
     this.closeSegment();
 
@@ -308,12 +356,12 @@ export class DetectionEventManager {
 
     this.activeEvent = null;
     this.activeSegment = null;
-    this.eventPlateVotes.clear();
-
-    if (this.segmentTimer) {
-      clearTimeout(this.segmentTimer);
-      this.segmentTimer = null;
+    this.segmentClosePendingSince = null;
+    if (this.lingerTimer) {
+      clearTimeout(this.lingerTimer);
+      this.lingerTimer = null;
     }
+    this.eventPlateVotes.clear();
 
     if (this.onEventEndCallback) {
       this.onEventEndCallback();
@@ -386,11 +434,6 @@ export class DetectionEventManager {
 
     this.segmentIndex++;
     this.activeSegment = null;
-
-    if (this.segmentTimer) {
-      clearTimeout(this.segmentTimer);
-      this.segmentTimer = null;
-    }
   }
 
   private enrichTriggers(triggers: EventTrigger[], now: number): void {
@@ -411,6 +454,14 @@ export class DetectionEventManager {
   }
 
   private enrichSegment(data: ProcessedDetectionData, now: number): void {
+    for (const object of data.objects) {
+      const trackId = 'trackId' in object ? (object as Detection & { trackId?: number }).trackId : undefined;
+      if (trackId !== undefined) {
+        this.segmentTrackIds.add(trackId);
+        this.eventTrackIds.add(trackId);
+      }
+    }
+    this.maybePushBestShot();
     if (!this.activeSegment) return;
 
     this.activeSegment.lastSeen = now;
@@ -632,7 +683,7 @@ export class DetectionEventManager {
   private updateTypes(): void {
     if (!this.activeEvent) return;
 
-    const types = new Set<string>();
+    const types = new Set<string>(this.activeEvent.types);
 
     for (const t of this.activeEvent.triggers) types.add(t.type);
     // activeEvent.segments is only filled during publishSegment, include the
@@ -650,50 +701,25 @@ export class DetectionEventManager {
     return data.objects.length > 0 || data.faces.length > 0 || data.plates.length > 0 || data.classifiers.length > 0;
   }
 
-  private resetSegmentTimer(timeoutSeconds: number): void {
-    if (this.segmentTimer) clearTimeout(this.segmentTimer);
-    this.segmentTimer = setTimeout(() => {
-      this.segmentTimer = null;
-      this.closeSegment();
-    }, timeoutSeconds * 1000);
-  }
-
   private updateThumbnails(thumbnails: DetectionThumbnail[]): void {
     for (const thumb of thumbnails) {
       const label = thumb.label;
+      if (!label.startsWith('face:') && !label.startsWith('plate:') && !label.startsWith('class:')) continue;
+      this.updateBestCandidate(this.attributeThumbnails, label, thumb);
+      // a moving vehicle produces a distinct plate crop almost every frame, cap retention
+      if (label.startsWith('plate:')) this.prunePlateThumbnails();
+    }
+  }
 
-      if (label.startsWith('face:') || label.startsWith('plate:') || label.startsWith('class:')) {
-        this.updateBestCandidate(this.attributeThumbnails, label, thumb);
-        // a moving vehicle produces a distinct plate crop almost every frame, cap retention
-        if (label.startsWith('plate:')) this.prunePlateThumbnails();
-      } else {
-        const hasAttr = thumbnails.some((t) => t.label.startsWith('face:') || t.label.startsWith('plate:') || t.label.startsWith('class:'));
-        const candidate: ThumbnailCandidate = {
-          jpeg: thumb.jpeg,
-          score: thumb.score,
-          area: thumb.area,
-          onEdge: thumb.onEdge,
-          hasAttribute: hasAttr,
-          trackId: thumb.trackId,
-          speed: thumb.speed,
-        };
-
-        if (!this.sceneThumbnail || this.isBetterScene(candidate, this.sceneThumbnail)) {
-          this.sceneThumbnail = candidate;
-        }
-
-        if (!this.eventBestShot || this.isBetterScene(candidate, this.eventBestShot)) {
-          this.eventBestShot = candidate;
-          if (this.eventBestShotPushed) {
-            this.eventBestShotDirty = true;
-          } else {
-            this.eventBestShotPushed = true;
-            this.publishEventThumbnail(candidate.jpeg, 'best-shot');
-          }
-        }
-
-        this.updateBestCandidate(this.detectionLabelThumbnails, label, thumb);
-      }
+  private maybePushBestShot(): void {
+    const shot = this.eventShot();
+    if (!shot || shot.capturedAt === this.lastPushedShotTs) return;
+    this.lastPushedShotTs = shot.capturedAt;
+    if (this.eventBestShotPushed) {
+      this.eventBestShotDirty = true;
+    } else {
+      this.eventBestShotPushed = true;
+      this.publishEventThumbnail(shot.jpeg, 'best-shot', shot.capturedAt);
     }
   }
 
@@ -739,23 +765,6 @@ export class DetectionEventManager {
     }
   }
 
-  private isBetterScene(candidate: ThumbnailCandidate, current: ThumbnailCandidate): boolean {
-    if (candidate.hasAttribute && !current.hasAttribute) return true;
-
-    const cm = DetectionEventManager.isMoving(candidate);
-    const currM = DetectionEventManager.isMoving(current);
-
-    if (cm && !currM) {
-      this.logger.trace(`Scene thumbnail: prefer moving track#${candidate.trackId} (speed=${candidate.speed?.toFixed(4)}) over static track#${current.trackId}`);
-      return true;
-    }
-    if (!cm && currM) return false;
-    if (candidate.onEdge && !current.onEdge) return false;
-    if (candidate.score > current.score * 1.05) return true;
-    if (candidate.area > current.area * 1.1) return true;
-    return false;
-  }
-
   private static isMoving(c: ThumbnailCandidate): boolean {
     return (c.speed ?? 0) >= MIN_MOVING_SPEED;
   }
@@ -763,15 +772,16 @@ export class DetectionEventManager {
   private injectSegmentThumbnails(): void {
     if (!this.activeSegment) return;
 
-    if (this.sceneThumbnail) {
-      this.activeSegment.thumbnail = this.sceneThumbnail.jpeg;
+    const scene = this.segmentShot();
+    if (scene) {
+      this.activeSegment.thumbnail = scene.jpeg;
+      this.activeSegment.thumbnailAt = scene.capturedAt;
     }
 
     for (const detection of this.activeSegment.detections) {
-      const detCand = this.detectionLabelThumbnails.get(detection.label);
-      if (!detCand) continue;
-      if (detCand.jpeg === this.sceneThumbnail?.jpeg) continue;
-      detection.thumbnail = detCand.jpeg;
+      const shot = this.segmentShot(detection.label);
+      if (!shot || shot.jpeg === scene?.jpeg) continue;
+      detection.thumbnail = shot.jpeg;
     }
 
     for (const attr of this.activeSegment.attributes) {
@@ -798,9 +808,8 @@ export class DetectionEventManager {
   }
 
   private clearSegmentThumbnails(): void {
-    this.sceneThumbnail = null;
     this.sceneThumbnailShipped = false;
-    this.detectionLabelThumbnails.clear();
+    this.segmentTrackIds.clear();
     this.attributeThumbnails.clear();
     this.segmentFaceTrackIds.clear();
     this.segmentPlateAttrIndex.clear();
@@ -829,13 +838,18 @@ export class DetectionEventManager {
     } else if (type === 'segment-start') {
       this.injectSegmentThumbnails();
       this.publish(type);
-      this.sceneThumbnailShipped = this.sceneThumbnail !== null;
+      this.sceneThumbnailShipped = this.segmentShot() !== undefined;
       this.stripSegmentThumbnails();
-    } else if (!this.sceneThumbnailShipped && this.sceneThumbnail) {
-      this.activeSegment.thumbnail = this.sceneThumbnail.jpeg;
-      this.publish(type);
-      this.activeSegment.thumbnail = undefined;
-      this.sceneThumbnailShipped = true;
+    } else if (!this.sceneThumbnailShipped) {
+      const scene = this.segmentShot();
+      if (scene) {
+        this.activeSegment.thumbnail = scene.jpeg;
+        this.publish(type);
+        this.activeSegment.thumbnail = undefined;
+        this.sceneThumbnailShipped = true;
+      } else {
+        this.publish(type);
+      }
     } else {
       this.publish(type);
     }
@@ -905,10 +919,8 @@ export class DetectionEventManager {
     }
 
     const thumbParts: string[] = [];
-    if (this.sceneThumbnail) thumbParts.push(`scene:${jpegInfo(this.sceneThumbnail.jpeg)}`);
-    for (const [label, cand] of this.detectionLabelThumbnails) {
-      thumbParts.push(cand.jpeg === this.sceneThumbnail?.jpeg ? `${label}:=scene` : `${label}:${jpegInfo(cand.jpeg)}`);
-    }
+    const scene = this.segmentShot();
+    if (scene) thumbParts.push(`scene:${jpegInfo(scene.jpeg)}`);
     for (const [label, cand] of this.attributeThumbnails) thumbParts.push(`${label}:${jpegInfo(cand.jpeg)}`);
     parts.push(`thumbs=${thumbParts.length}${thumbParts.length > 0 ? ` [${thumbParts.join(' ')}]` : ''}`);
 

@@ -1,16 +1,16 @@
-import {
-  merge as rustMerge,
-  nms as rustNms,
-  nmsIndices as rustNmsIndices,
-  ObjectTracker as RustObjectTracker,
-  type Detection as RustDetection,
-  type DetectionLine as RustDetectionLine,
-  type DetectionZone as RustDetectionZone,
-  type LineCrossingEvent as RustLineCrossingEvent,
-  type TrackedDetection as RustTrackedDetection,
-} from '@camera.ui/rust-postprocessor';
+import { CameraWorld, merge as rustMerge, nms as rustNms, nmsIndices as rustNmsIndices } from '@camera.ui/rust-postprocessor';
+import { createWriteStream, existsSync, mkdirSync } from 'node:fs';
+import { join } from 'node:path';
 
-import type { BoundingBox, CameraDetectionSettings, Detection, DetectionLabel, DetectionLine, DetectionZone, TrackedDetection, VideoFrameData } from '@camera.ui/sdk';
+import type {
+  Detection as RustDetection,
+  DetectionLine as RustDetectionLine,
+  DetectionZone as RustDetectionZone,
+  LineCrossingEvent as RustLineCrossingEvent,
+  WorldEvent,
+  WorldObject,
+} from '@camera.ui/rust-postprocessor';
+import type { BoundingBox, CameraDetectionSettings, Detection, DetectionLabel, DetectionLine, DetectionZone, TrackedDetection } from '@camera.ui/sdk';
 
 const NMS_IOU_THRESHOLD = 0.45;
 const NMS_CONFIDENCE_THRESHOLD = 0.25;
@@ -18,16 +18,6 @@ const OBJECT_MERGE_IOU_THRESHOLD = 0.3;
 const OBJECT_MERGE_CLOSE_THRESHOLD = 0.0;
 const MOTION_MERGE_IOU_THRESHOLD = 0.01;
 const MOTION_MERGE_CLOSE_THRESHOLD = 0.1;
-const TRACKER_IOU_THRESHOLD = 0.1;
-const TRACKER_HIT_COUNTER_MAX = 30;
-const TRACKER_INITIALIZATION_DELAY = 3;
-const TRACK_CONFIRM_MS = 300;
-const TRACK_KEEPALIVE_MS = 3000;
-const CADENCE_SWITCH_AFTER_MS = 5000;
-const CADENCE_SWITCH_SPACING_MS = 60_000;
-const MOTION_MATCH_ABOVE_MS = 400;
-const CADENCE_BUCKETS_MS = [100, 150, 200, 300, 500, 700, 1000, 1500, 2000, 3000];
-
 export const PAN_TO_IMAGE_RATIO = 4.0;
 
 export interface LineCrossingEvent {
@@ -48,6 +38,7 @@ export interface PipelineResult {
   crossings: LineCrossingEvent[];
   created: number[];
   removed: number[];
+  events: WorldEvent[];
 }
 
 function toRustDetection(det: Detection): RustDetection {
@@ -74,21 +65,21 @@ function fromRustDetection(det: RustDetection): Detection {
   };
 }
 
-function fromRustTracked(det: RustTrackedDetection): TrackedDetection {
+function fromWorldObject(obj: WorldObject): TrackedDetection {
   return {
-    label: det.label as DetectionLabel,
-    confidence: det.confidence,
+    label: obj.label as DetectionLabel,
+    confidence: obj.confidence,
     box: {
-      x: det.x,
-      y: det.y,
-      width: det.width,
-      height: det.height,
+      x: obj.x,
+      y: obj.y,
+      width: obj.width,
+      height: obj.height,
     },
-    trackId: det.trackId,
-    trackAge: det.trackAge,
-    trackLost: det.trackLost,
-    trackSpeed: det.trackSpeed,
-    trackVelocity: { x: det.trackVelocityX, y: det.trackVelocityY },
+    trackId: obj.trackId,
+    trackAge: 0,
+    trackLost: false,
+    trackSpeed: obj.speed,
+    trackVelocity: { x: obj.velocityX, y: obj.velocityY },
   };
 }
 
@@ -114,19 +105,6 @@ function toRustLines(lines: DetectionLine[]): RustDetectionLine[] {
   }));
 }
 
-function quantizeCadence(intervalMs: number): number {
-  let best = CADENCE_BUCKETS_MS[0];
-  let bestDistance = Number.POSITIVE_INFINITY;
-  for (const bucket of CADENCE_BUCKETS_MS) {
-    const distance = Math.abs(Math.log(intervalMs / bucket));
-    if (distance < bestDistance) {
-      bestDistance = distance;
-      best = bucket;
-    }
-  }
-  return best;
-}
-
 function fromRustCrossing(event: RustLineCrossingEvent, lookup: Map<number, BoundingBox>): LineCrossingEvent {
   const box = lookup.get(event.trackId);
   const w = box?.width ?? 0;
@@ -145,131 +123,68 @@ function fromRustCrossing(event: RustLineCrossingEvent, lookup: Map<number, Boun
   };
 }
 
-export interface TrackerCadence {
-  initializationDelay: number;
-  hitCounterMax: number;
-  motionTolerance?: number;
+function createTickRecorder(): ((line: string) => void) | undefined {
+  const home = process.env.CAMERA_UI_HOME_PATH;
+  const toggleDir = home ? join(home, 'detection-record') : undefined;
+  const dir = process.env.CAMERA_UI_DETECTION_RECORD_DIR ?? (toggleDir && existsSync(toggleDir) ? toggleDir : undefined);
+  if (!dir) return undefined;
+  mkdirSync(dir, { recursive: true });
+  const stream = createWriteStream(join(dir, `${process.env.CAMERA_ID ?? 'camera'}-${Date.now()}.jsonl`), { flags: 'a' });
+  return (line) => stream.write(`${line}\n`);
+}
+
+const recordTick = createTickRecorder();
+
+function recordConfig(config: Record<string, unknown>): void {
+  recordTick?.(JSON.stringify({ config }));
 }
 
 export class DetectionPipeline {
-  private aspectRatio: number;
-  private tracker: RustObjectTracker;
-
-  private zones: DetectionZone[];
+  private aspectRatio = 16 / 9;
+  private world: CameraWorld;
   private lines: DetectionLine[] = [];
-  private minConfidence: number;
-  private reidHitCounterMax = 0;
-
-  private cadence: TrackerCadence = { initializationDelay: TRACKER_INITIALIZATION_DELAY, hitCounterMax: TRACKER_HIT_COUNTER_MAX };
-  private cadenceIntervalMs = CADENCE_BUCKETS_MS[0];
-  private pendingCadenceSince = 0;
-  private lastCadenceSwitchAt = 0;
+  private suppressStatic: boolean;
 
   constructor(zones: DetectionZone[], settings: CameraDetectionSettings) {
-    this.aspectRatio = 16 / 9;
-    this.zones = zones;
-    this.minConfidence = settings.object.confidence;
-    this.tracker = this.createTracker();
+    this.world = new CameraWorld();
+    const rustZones = toRustZones(zones);
+    this.world.setZones(rustZones);
+    this.world.setMinConfidence(settings.object.confidence);
+    this.suppressStatic = settings.object.suppressStatic ?? true;
+    recordConfig({ zones: rustZones, minConfidence: settings.object.confidence });
   }
 
   public updateZones(zones: DetectionZone[]): void {
-    this.zones = zones;
-    this.tracker.setZones(toRustZones(zones));
+    const rustZones = toRustZones(zones);
+    this.world.setZones(rustZones);
+    recordConfig({ zones: rustZones });
   }
 
   public updateLines(lines: DetectionLine[], aspectRatio?: number): void {
     if (aspectRatio !== undefined) this.aspectRatio = aspectRatio;
     this.lines = lines;
-    this.tracker.setLines(toRustLines(lines), this.aspectRatio);
+    const rustLines = toRustLines(lines);
+    this.world.setLines(rustLines, this.aspectRatio);
+    recordConfig({ lines: rustLines, aspectRatio: this.aspectRatio });
   }
 
   public updateSettings(settings: CameraDetectionSettings): void {
-    this.minConfidence = settings.object.confidence;
-    this.tracker.setMinConfidence(settings.object.confidence);
+    this.world.setMinConfidence(settings.object.confidence);
+    this.suppressStatic = settings.object.suppressStatic ?? true;
+    recordConfig({ minConfidence: settings.object.confidence });
   }
 
-  public setReidHitCounterMax(frames: number): void {
-    this.reidHitCounterMax = frames;
-    this.tracker.setReidHitCounterMax(frames);
+  public notifyCameraMove(): void {
+    this.world.notifyCameraMove();
   }
 
-  public syncDetectionCadence(intervalMs: number): TrackerCadence | undefined {
-    if (intervalMs <= 0) return undefined;
-
-    const bucket = quantizeCadence(intervalMs);
-    // hysteresis: jitter around the current bucket must not thrash the tracker
-    if (bucket === this.cadenceIntervalMs || Math.abs(intervalMs - this.cadenceIntervalMs) < this.cadenceIntervalMs * 0.25) {
-      this.pendingCadenceSince = 0;
-      return undefined;
-    }
-
-    const target: TrackerCadence = {
-      initializationDelay: Math.min(TRACKER_INITIALIZATION_DELAY, Math.max(1, Math.round(TRACK_CONFIRM_MS / bucket))),
-      hitCounterMax: Math.min(TRACKER_HIT_COUNTER_MAX, Math.max(2, Math.round(TRACK_KEEPALIVE_MS / bucket))),
-    };
-
-    // below ~2.5/s a walking object out-runs its own box between detections,
-    // IoU hits 0 and only distance matching can follow; tolerance scales with
-    // the gap, capped so distant objects still can't steal each other's ids
-    if (bucket >= MOTION_MATCH_ABOVE_MS) {
-      target.motionTolerance = Math.min(0.4, 0.05 + (0.25 * bucket) / 1000);
-    }
-
-    if (
-      target.initializationDelay === this.cadence.initializationDelay &&
-      target.hitCounterMax === this.cadence.hitCounterMax &&
-      target.motionTolerance === this.cadence.motionTolerance
-    ) {
-      this.cadenceIntervalMs = bucket;
-      this.pendingCadenceSince = 0;
-      return undefined;
-    }
-
-    const now = Date.now();
-    if (this.lastCadenceSwitchAt !== 0 && now - this.lastCadenceSwitchAt < CADENCE_SWITCH_SPACING_MS) return undefined;
-
-    if (this.tracker.trackCount > 0) {
-      if (this.pendingCadenceSince === 0) {
-        this.pendingCadenceSince = now;
-        return undefined;
-      }
-      if (now - this.pendingCadenceSince < CADENCE_SWITCH_AFTER_MS) return undefined;
-    }
-
-    this.cadence = target;
-    this.cadenceIntervalMs = bucket;
-    this.pendingCadenceSince = 0;
-    this.lastCadenceSwitchAt = now;
-    this.tracker = this.createTracker();
-
-    return target;
-  }
-
-  private createTracker(): RustObjectTracker {
-    const tracker = new RustObjectTracker({
-      iouThreshold: TRACKER_IOU_THRESHOLD,
-      hitCounterMax: this.cadence.hitCounterMax,
-      initializationDelay: this.cadence.initializationDelay,
-      motionTolerance: this.cadence.motionTolerance,
-    });
-
-    tracker.setMinConfidence(this.minConfidence);
-    tracker.setZones(toRustZones(this.zones));
-    if (this.lines.length > 0) tracker.setLines(toRustLines(this.lines), this.aspectRatio);
-    if (this.reidHitCounterMax > 0) tracker.setReidHitCounterMax(this.reidHitCounterMax);
-
-    return tracker;
-  }
-
-  public refreshReid(): void {
-    this.tracker.refreshReid();
-  }
-
-  public process(rawDetections: Detection[], frame: VideoFrameData, poseDelta?: { panDelta: number; tiltDelta: number }): PipelineResult {
+  public process(rawDetections: Detection[], poseDelta?: { panDelta: number; tiltDelta: number }): PipelineResult {
     const flat = rawDetections.length === 0 ? [] : this.runNmsAndMergeFlat(rawDetections);
     const cameraMotion = poseDelta ? { x: -poseDelta.panDelta * PAN_TO_IMAGE_RATIO, y: poseDelta.tiltDelta * PAN_TO_IMAGE_RATIO } : undefined;
-    const result = this.tracker.update(flat, Date.now(), frame.data as Buffer, frame.width, frame.height, cameraMotion);
-    const tracked = result.tracked.map(fromRustTracked);
+    const tMs = Date.now();
+    recordTick?.(JSON.stringify({ tMs, detections: flat, cameraMotion }));
+    const result = this.world.ingest(tMs, flat, cameraMotion);
+    const tracked = (this.suppressStatic ? result.tracked.filter((t) => t.state !== 'stationary') : result.tracked).map(fromWorldObject);
     const boxLookup = new Map<number, BoundingBox>();
     for (const t of tracked) {
       if (t.trackId !== undefined) boxLookup.set(t.trackId, t.box);
@@ -280,6 +195,7 @@ export class DetectionPipeline {
       crossings: result.crossings.map((c) => fromRustCrossing(c, boxLookup)),
       created: result.created,
       removed: result.removed,
+      events: result.events,
     };
   }
 
@@ -307,14 +223,14 @@ export class DetectionPipeline {
     const flat = detections.map(toRustDetection);
     const merged = rustMerge(flat, MOTION_MERGE_IOU_THRESHOLD, MOTION_MERGE_CLOSE_THRESHOLD);
     if (merged.length === 0) return [];
-    const indices = this.tracker.filterIndices(merged);
+    const indices = this.world.filterIndices(merged);
     return indices.map((i) => fromRustDetection(merged[i]));
   }
 
   public runZoneFilter(detections: Detection[]): Detection[] {
     if (detections.length === 0) return [];
     const flat = detections.map(toRustDetection);
-    const indices = this.tracker.filterIndices(flat);
+    const indices = this.world.filterIndices(flat);
     return indices.map((i) => detections[i]);
   }
 
@@ -328,16 +244,12 @@ export class DetectionPipeline {
       confidence: item.confidence,
       label,
     }));
-    const indices = this.tracker.filterIndices(flat);
+    const indices = this.world.filterIndices(flat);
     return indices.map((i) => items[i]);
   }
 
-  public cleanup(): void {
-    this.tracker.reset();
-  }
-
   public retainTracks(trackIds: number[]): number[] {
-    return this.tracker.retainTracks(trackIds);
+    return trackIds;
   }
 
   private runNmsAndMergeFlat(rawDetections: Detection[]): RustDetection[] {

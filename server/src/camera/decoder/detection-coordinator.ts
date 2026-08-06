@@ -1,11 +1,14 @@
 import { PromiseTimeout, sleep } from '@camera.ui/common/utils';
 import { isNoRespondersError, RPCClass, RPCMethod } from '@camera.ui/rpc';
 import { SensorType } from '@camera.ui/sdk';
+import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 
 import { NamespaceManager } from '../../rpc/namespaces.js';
 import { DETECTION_SENSOR_TYPES } from '../../sensors/types.js';
 import { normalizeZone } from '../utils/filter.js';
 import { AudioDetectionLoop } from './audio-loop.js';
+import { BestShotStore, compositionBox } from './best-shot-store.js';
 import { CascadeManager } from './cascade-manager.js';
 import { DetectionPipeline } from './detection-pipeline.js';
 import { DwellManager } from './dwell-manager.js';
@@ -17,7 +20,6 @@ import { PtzAutotracker } from './ptz/autotracker.js';
 import { ReconnectBackoff } from './reconnect-backoff.js';
 import { SecondaryStage } from './secondary-stage.js';
 import { FrameSource } from './sources/frame-source.js';
-import { StationarySuppressor } from './stationary-suppressor.js';
 import { DETECT_TIMEOUT_MS, ensureDetectionBoxes, MOTION_WIDTH_MAP } from './types.js';
 
 import type { Logger } from '@camera.ui/common/logger';
@@ -33,6 +35,7 @@ import type {
   ClipEmbedding,
   ClipResult,
   Detection,
+  DetectionLabel,
   DetectionLine,
   DetectionZone,
   FaceDetection,
@@ -49,7 +52,7 @@ import type { Frame } from 'node-av/lib';
 import type { CoordinatorSensorInfo, DetectionPluginInterface, DetectionResults } from '../../rpc/interfaces/detection.js';
 import type { CameraDeviceInterface } from '../../rpc/interfaces/device.js';
 import type { SensorWriteMessage } from '../../rpc/interfaces/sensor.js';
-import type { LineCrossingEvent } from './detection-pipeline.js';
+import type { LineCrossingEvent, PipelineResult } from './detection-pipeline.js';
 import type { NormalizedDetectionZone, ProcessedDetectionData } from './event-manager.js';
 import type { LetterboxGeometry } from './frame-scaler.js';
 import type { RegisteredPlugin } from './plugin-registry.js';
@@ -89,15 +92,16 @@ export class DetectionCoordinator {
   private frameSource: FrameSource;
   private frameScaler: FrameScaler;
 
+  private readonly bestShots = new BestShotStore();
   private readonly plugins = new PluginRegistry();
   private readonly pipeline: DetectionPipeline;
-  private readonly stationary: StationarySuppressor;
   private readonly secondaries: SecondaryStage;
   private readonly thumbnailer: EventThumbnailer;
   private readonly audioLoop: AudioDetectionLoop;
   private readonly ptzAutotracker: PtzAutotracker;
   private readonly eventManager: DetectionEventManager;
   private readonly cascade = new CascadeManager();
+  private readonly worldSpans = new Set<number>();
   private readonly dwell = new DwellManager();
   private readonly videoBackoff = new ReconnectBackoff();
 
@@ -158,7 +162,6 @@ export class DetectionCoordinator {
     this.frameSource = new FrameSource(frameSourceConfig, logger);
     this.frameScaler = new FrameScaler(null, logger);
     this.pipeline = new DetectionPipeline(config.zones, config.detectionSettings);
-    this.stationary = new StationarySuppressor(logger);
     this.secondaries = new SecondaryStage(this, this.plugins, this.pipeline, this.frameScaler, this.proxy, logger);
 
     if (config.lines.length > 0) {
@@ -166,7 +169,13 @@ export class DetectionCoordinator {
     }
 
     this.eventManager = new DetectionEventManager(config.cameraId, this.proxy, this.logger);
+    this.eventManager.setBestShotResolver((trackIds, label) => this.bestShots.bestOf(trackIds, label));
     this.eventManager.onEventEnd(() => this.handleEventEnded());
+    this.eventManager.onSegmentClosed(() => {
+      if (!this.dwell.hasActive() && this.worldSpans.size === 0) {
+        this.eventManager.forceEndActiveEvent();
+      }
+    });
 
     this.thumbnailer = new EventThumbnailer(
       {
@@ -202,10 +211,8 @@ export class DetectionCoordinator {
 
     this.cascadeUnsubscribe = this.cascade.onChange((event) => {
       if (event.type === 'activated') {
-        this.pipeline.setReidHitCounterMax(this.cascadeTimeoutSeconds * this.targetFps);
         this.startAdHocVideoLoopIfNeeded();
       } else {
-        this.pipeline.setReidHitCounterMax(0);
         this.stopAdHocVideoLoopIfIdle();
         this.handleCascadeDeactivated();
       }
@@ -228,7 +235,9 @@ export class DetectionCoordinator {
           this.writeSensorProperties(event.sensorId, { detected: false, blocked: false });
         }
         this.activeSensorTriggerTypes.delete(event.sensorId);
-        if (!this.dwell.hasActive()) {
+
+        this.eventManager.processResults(this.buildSnapshot());
+        if (!this.dwell.hasActive() && this.worldSpans.size === 0 && !this.eventManager.hasActiveSegment()) {
           this.eventManager.forceEndActiveEvent();
         }
       }
@@ -287,7 +296,6 @@ export class DetectionCoordinator {
     this.eventManager.destroy();
     this.adHocVideoLoop = false;
     this.frameScaler.dispose();
-    this.pipeline.cleanup();
     this.currentDetectionState = {};
   }
 
@@ -403,11 +411,10 @@ export class DetectionCoordinator {
             }
             this.eventManager.processResults(snapshot);
           } else {
-            const objectDetections = this.pipeline.processExternal(objects.detections);
             const sceneJpeg = await this.secondaries.detectFullFrame(fetched.frame, results);
             try {
               // face/plate crops feed the segment attributes
-              results.thumbnails = await this.secondaries.generateThumbnails(fetched.frame, this.frameScaler, false, objectDetections, results);
+              results.thumbnails = await this.secondaries.generateThumbnails(fetched.frame, this.frameScaler, false, results);
             } catch (error) {
               this.logger.error('Thumbnail generation error:', error);
             }
@@ -494,6 +501,12 @@ export class DetectionCoordinator {
     return this.plugins.has(sensorType);
   }
 
+  private externalObjectSpanActive(): boolean {
+    const objectPlugin = this.plugins.get(SensorType.Object);
+    if (!objectPlugin || objectPlugin.requiresFrames) return false;
+    return this.dwell.isActive(objectPlugin.sensorId);
+  }
+
   private get cascadeEnabled(): boolean {
     return this.config.detectionSettings.cascadeDetection !== false;
   }
@@ -546,13 +559,6 @@ export class DetectionCoordinator {
   }
 
   private handleEventEnded(): void {
-    if (this.config.detectionSettings.object.suppressStatic ?? true) {
-      this.stationary.retainAcrossEvent((trackIds) => this.pipeline.retainTracks(trackIds));
-    } else {
-      this.pipeline.cleanup();
-      this.stationary.clear();
-    }
-    this.stationary.resetEventState();
     this.activeSensorTriggerTypes.clear();
     this.currentDetectionState = {};
   }
@@ -583,11 +589,12 @@ export class DetectionCoordinator {
     const cs = this.currentDetectionState;
     return {
       hasCascadeTrigger: this.cascade.isActive,
+      hasOpenSpans: this.worldSpans.size > 0 || this.externalObjectSpanActive(),
       motion: cs.motion ? { detected: cs.motion.detected ?? false } : undefined,
       audio: cs.audio ? { detected: cs.audio.detected ?? false, detections: cs.audio.detections ?? [] } : undefined,
       cascadeTriggered: cs.cascadeTriggered,
       sensorTriggers: [...new Set(this.activeSensorTriggerTypes.values())],
-      objects: cs.object?.detected ? this.stationary.excludeSealed(cs.object.detections) : [],
+      objects: cs.object?.detected ? cs.object.detections : [],
       faces: cs.face?.detections ?? [],
       faceEmbeddingModel: cs.faceEmbeddingModel,
       plates: cs.licensePlate?.detections ?? [],
@@ -689,7 +696,7 @@ export class DetectionCoordinator {
       // the dwell bridges single missed frames; anchored stationary tracks
       // don't refresh it, so parked objects can't hold events open
       const detections = (properties.detections as TrackedDetection[] | undefined) ?? [];
-      if (this.stationary.evaluate(detections)) {
+      if (detections.length > 0) {
         this.dwell.refresh(sensorId, OBJECT_DWELL_SECONDS);
         // a confirmed object re-arms the cascade like motion does: a time-based
         // motion sensor (ONVIF cool-down) must not blind detection and split
@@ -705,7 +712,6 @@ export class DetectionCoordinator {
           this.currentDetectionState.object.detected = false;
           this.currentDetectionState.object.detections = [];
         }
-        this.stationary.logSuppressedOnce(detections);
       }
     }
 
@@ -855,8 +861,7 @@ export class DetectionCoordinator {
       this.clearSecondaryBboxes(plugin.sensorId);
     }
 
-    // image-space anchors don't survive a camera move, they re-form after
-    this.stationary.dropForCameraMove();
+    this.pipeline.notifyCameraMove();
   }
 
   private clearSecondaryBboxes(sensorId: string): void {
@@ -891,6 +896,7 @@ export class DetectionCoordinator {
 
     this.logger.debug('Stopping video detection loop');
     this.loopRunning = false;
+    this.worldSpans.clear();
 
     const doStop = async () => {
       await this.frameSource.stop();
@@ -997,11 +1003,6 @@ export class DetectionCoordinator {
     let objectDetections: Detection[] = [];
     const results: DetectionResults = { timestamp: t0 };
 
-    // keeps dead tracks from expiring during the cascade window
-    if (this.cascade.isActive) {
-      this.pipeline.refreshReid();
-    }
-
     // while the PTZ repositions: motion and object keep running so the
     // background model and track ids survive the pan, but nothing below
     // reaches dwell/events until the settle window ends
@@ -1073,7 +1074,15 @@ export class DetectionCoordinator {
           // Kalman state; the pose delta keeps predictions stable across pans
           const poseDelta = this.ptzAutotracker.consumePoseDelta();
           const detected = FrameScaler.undoLetterbox(ensureDetectionBoxes(result.detections), objectFrame.geometry);
-          const pipelineResult = this.pipeline.process(detected, objectFrame.tracking, poseDelta);
+          const pipelineResult = this.pipeline.process(detected, poseDelta);
+          await this.captureBestShots(pipelineResult.events, rawFrame);
+
+          // open spans and a lingering segment keep the cascade armed: the
+          // world can only observe absence or a reappearance while it still
+          // receives ticks
+          if (this.cascadeEnabled && (this.worldSpans.size > 0 || this.eventManager.hasActiveSegment())) {
+            this.cascade.triggerMomentary(this.cascadeTimeoutSeconds);
+          }
 
           // track id churn is invisible in the event log without this
           if (pipelineResult.created.length > 0 || pipelineResult.removed.length > 0) {
@@ -1081,7 +1090,7 @@ export class DetectionCoordinator {
               const t = pipelineResult.tracked.find((d) => d.trackId === id);
               return `${t?.label ?? 'unknown'}#${id}`;
             });
-            const died = pipelineResult.removed.map((id) => `#${id}${this.stationary.isAnchored(id) ? ' (anchored!)' : ''}`);
+            const died = pipelineResult.removed.map((id) => `#${id}`);
             this.logger.trace(
               `[tracker] ${born.length ? `born: ${born.join(', ')}` : ''}${born.length && died.length ? ' — ' : ''}${died.length ? `died: ${died.join(', ')}` : ''}`,
             );
@@ -1172,6 +1181,12 @@ export class DetectionCoordinator {
 
     this.eventManager.processResults(snapshot);
 
+    // spans can outlive every trigger dwell (gate case); once spans, dwells
+    // and the segment linger are all quiet the event ends here
+    if (this.worldSpans.size === 0 && !this.dwell.hasActive() && !this.eventManager.hasActiveSegment()) {
+      this.eventManager.forceEndActiveEvent();
+    }
+
     // covers the window where the HQ source wasn't ready at event start
     if (wantsEventThumb && !hqThumbAttached) {
       this.thumbnailer.upgradeEventThumbnailAsync();
@@ -1179,16 +1194,17 @@ export class DetectionCoordinator {
   }
 
   private async runSecondariesAndThumbnails(rawFrame: Frame, objectDetections: Detection[], results: DetectionResults): Promise<void> {
-    objectDetections = this.stationary.excludeSealed(objectDetections);
     if (objectDetections.length === 0) return;
 
+    const frameAt = Date.now();
     await this.secondaries.detect(rawFrame, objectDetections, results);
 
     try {
       // detectors ran on the substream frame, thumbnails prefer the HQ frame
-      const hq = await this.thumbnailer.acquireHqFrame({ width: rawFrame.width, height: rawFrame.height });
+      // when one exists from the same moment
+      const hq = await this.thumbnailer.acquireHqFrame({ width: rawFrame.width, height: rawFrame.height }, frameAt);
       try {
-        results.thumbnails = await this.secondaries.generateThumbnails(hq?.frame ?? rawFrame, hq?.scaler ?? this.frameScaler, hq !== null, objectDetections, results);
+        results.thumbnails = await this.secondaries.generateThumbnails(hq?.frame ?? rawFrame, hq?.scaler ?? this.frameScaler, hq !== null, results);
       } finally {
         hq?.frame[Symbol.dispose]?.();
       }
@@ -1252,6 +1268,60 @@ export class DetectionCoordinator {
     return false;
   }
 
+  private bestShotDebugDir(): string | undefined {
+    const home = process.env.CAMERA_UI_HOME_PATH;
+    const dir = process.env.CAMERA_UI_DETECTION_RECORD_DIR ?? (home ? join(home, 'detection-record') : undefined);
+    if (!dir || !existsSync(dir)) return undefined;
+    return join(dir, 'bestshots');
+  }
+
+  private async captureBestShots(events: PipelineResult['events'], frame: Frame): Promise<void> {
+    for (const event of events) {
+      const obj = event.object;
+      // activity spans: entered/woke/recovered open, departed/settled/lost
+      // close — they hold the event and drive the segment lifecycle; with
+      // suppressStatic off, settling is not the end of relevance
+      const suppressStatic = this.config.detectionSettings.object.suppressStatic ?? true;
+      const recoveredRelevant = event.eventType === 'objectRecovered' && (obj.state !== 'stationary' || !suppressStatic);
+      if (event.eventType === 'objectEntered' || event.eventType === 'objectWoke' || recoveredRelevant) {
+        this.worldSpans.add(obj.trackId);
+      } else if (event.eventType === 'objectDeparted' || event.eventType === 'objectLost' || (event.eventType === 'objectSettled' && suppressStatic)) {
+        this.worldSpans.delete(obj.trackId);
+      }
+      if (event.eventType === 'objectEntered') {
+        this.bestShots.confirm(obj.trackId);
+      } else if (event.eventType === 'objectDeparted') {
+        this.bestShots.release(obj.trackId);
+      } else if (event.eventType === 'bestShotUpdated') {
+        const box = compositionBox(obj.label, { x: obj.x, y: obj.y, width: obj.width, height: obj.height });
+        try {
+          const crops = await this.frameScaler.cropToJPEG(frame, [{ label: obj.label as DetectionLabel, confidence: obj.confidence, box }], {
+            padding: 0,
+            maxWidth: 640,
+            quality: 85,
+          });
+          if (crops[0]) {
+            this.bestShots.put(obj.trackId, {
+              jpeg: crops[0].jpeg,
+              score: obj.confidence * Math.sqrt(obj.width * obj.height),
+              capturedAt: Date.now(),
+              label: obj.label,
+              box,
+            });
+            const debugDir = this.bestShotDebugDir();
+            if (debugDir) {
+              mkdirSync(debugDir, { recursive: true });
+              writeFileSync(join(debugDir, `${obj.label}-${obj.trackId}-${Date.now()}.jpg`), crops[0].jpeg);
+            }
+          }
+        } catch (error) {
+          this.logger.debug('Best-shot crop failed:', error);
+        }
+      }
+    }
+    this.bestShots.prune(Date.now());
+  }
+
   private async scaleForMotion(rawFrame: Frame): Promise<VideoFrameData | undefined> {
     const motionPlugin = this.plugins.get(SensorType.Motion);
     if (!motionPlugin?.requiresFrames) return undefined;
@@ -1289,8 +1359,6 @@ export class DetectionCoordinator {
     this.objectIntervalMs = this.objectIntervalMs * 0.8 + delta * 0.2;
     this.objectIntervalSamples++;
     if (this.objectIntervalSamples < CADENCE_MIN_SAMPLES) return;
-
-    this.pipeline.syncDetectionCadence(this.objectIntervalMs);
   }
 
   private async scaleForObject(rawFrame: Frame): Promise<PluginFrame | undefined> {

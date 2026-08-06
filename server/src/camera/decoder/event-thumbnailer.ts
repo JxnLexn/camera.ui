@@ -11,7 +11,9 @@ import type { CoordinatorSourceUrl } from './types.js';
 export const EVENT_THUMB_MAX_WIDTH = 640;
 export const EVENT_THUMB_HQ_MAX_WIDTH = 960;
 export const EVENT_THUMB_HQ_QUALITY = 75;
+
 const HQ_FRAME_MAX_AGE_MS = 500;
+const HQ_PAIR_TOLERANCE_MS = 300;
 
 interface EventThumbnailerDeps {
   frameSource: FrameSource;
@@ -65,7 +67,7 @@ export class EventThumbnailer {
     await this.hqSource?.stop();
   }
 
-  public async acquireHqFrame(reference?: { width: number; height: number }): Promise<{ frame: Frame; scaler: FrameScaler } | null> {
+  public async acquireHqFrame(reference?: { width: number; height: number }, pairedToMs?: number): Promise<{ frame: Frame; scaler: FrameScaler } | null> {
     const source = this.hqSource;
     if (!source?.isRunning || !source.hasBuffer) return null;
     const scaler = source.scaler;
@@ -73,6 +75,11 @@ export class EventThumbnailer {
 
     const frame = await source.getFrame(HQ_FRAME_MAX_AGE_MS);
     if (!frame) return null;
+
+    if (pairedToMs !== undefined && Math.abs(source.lastFrameAt - pairedToMs) > HQ_PAIR_TOLERANCE_MS) {
+      frame[Symbol.dispose]?.();
+      return null;
+    }
 
     if (reference) {
       const refAspect = reference.width / reference.height;

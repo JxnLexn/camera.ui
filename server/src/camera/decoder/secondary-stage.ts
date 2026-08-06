@@ -3,6 +3,7 @@ import { isNoRespondersError } from '@camera.ui/rpc';
 import { SensorType } from '@camera.ui/sdk';
 
 import { NamespaceManager } from '../../rpc/namespaces.js';
+import { faceCompositionBox } from './best-shot-store.js';
 import { EVENT_THUMB_MAX_WIDTH } from './event-thumbnailer.js';
 import { MIN_PLATE_LENGTH, normalizePlateText } from './plate-vote.js';
 import { hasSecondaryModelSpec, isVideoInputSpec } from './plugin-registry.js';
@@ -73,50 +74,25 @@ export class SecondaryStage {
     }
   }
 
-  public async generateThumbnails(
-    sourceFrame: Frame,
-    scaler: FrameScaler,
-    usingHq: boolean,
-    objectDetections: Detection[],
-    results: DetectionResults,
-  ): Promise<DetectionThumbnail[]> {
+  public async generateThumbnails(sourceFrame: Frame, scaler: FrameScaler, usingHq: boolean, results: DetectionResults): Promise<DetectionThumbnail[]> {
     const thumbnails: DetectionThumbnail[] = [];
     const attributePadding = usingHq ? 0.4 : 0.75;
     const detectionMaxWidth = usingHq ? DETECTION_THUMB_HQ_MAX_WIDTH : DETECTION_THUMB_MAX_WIDTH;
     const detectionMinCrop = usingHq ? DETECTION_THUMB_HQ_MIN_CROP : DETECTION_THUMB_MIN_CROP;
     const detectionQuality = usingHq ? DETECTION_THUMB_HQ_QUALITY : undefined;
 
-    const objectCrops = await scaler.cropToJPEG(sourceFrame, objectDetections, {
-      maxWidth: detectionMaxWidth,
-      padding: 0.15,
-      minCrop: detectionMinCrop,
-      quality: detectionQuality,
-    });
-    for (const crop of objectCrops) {
-      const detection = objectDetections[crop.index];
-      if (detection) {
-        thumbnails.push({
-          label: detection.label,
-          score: detection.confidence,
-          jpeg: crop.jpeg,
-          area: detection.box.width * detection.box.height,
-          onEdge: this.isOnEdge(detection.box),
-          trackId: 'trackId' in detection ? (detection as TrackedDetection).trackId : undefined,
-          speed: 'trackSpeed' in detection ? (detection as TrackedDetection).trackSpeed : undefined,
-        });
-      }
-    }
-
     const settings = this.coordinator.detectionSettings;
 
     if (results.face?.detections) {
       const faceMinConfidence = settings.face?.confidence ?? 0;
       const faces = results.face.detections.filter((d) => d.confidence >= faceMinConfidence);
-      const faceCrops = await scaler.cropToJPEG(sourceFrame, faces, {
-        maxWidth: ATTRIBUTE_THUMB_MAX_WIDTH,
-        padding: attributePadding,
-        minCrop: ATTRIBUTE_THUMB_MIN_CROP,
-      });
+      const minW = ATTRIBUTE_THUMB_MIN_CROP / sourceFrame.width;
+      const minH = ATTRIBUTE_THUMB_MIN_CROP / sourceFrame.height;
+      const faceCrops = await scaler.cropToJPEG(
+        sourceFrame,
+        faces.map((d) => ({ ...d, box: faceCompositionBox(d.box, minW, minH) })),
+        { maxWidth: ATTRIBUTE_THUMB_MAX_WIDTH, padding: 0, minCrop: 0 },
+      );
       for (const crop of faceCrops) {
         const detection = faces[crop.index];
         if (detection) {
