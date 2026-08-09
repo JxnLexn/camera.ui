@@ -311,7 +311,8 @@ export function validateValue(value: any, schema: JsonSchemaWithoutKey): boolean
     case 'string':
       if (isEnumType(schema)) {
         if (schema.multiple) {
-          return Array.isArray(value) && value.every((v) => schema.enum.includes(v));
+          if (!Array.isArray(value) || !value.every((v) => schema.enum.includes(v))) return false;
+          return schema.minItems === undefined || value.length >= schema.minItems;
         } else {
           return schema.enum.includes(value);
         }
@@ -332,9 +333,12 @@ export function validateValue(value: any, schema: JsonSchemaWithoutKey): boolean
     case 'boolean':
       return typeof value === 'boolean';
 
-    case 'array':
+    case 'array': {
       if (!Array.isArray(value)) return false;
-      return value.every((item) => validateValue(item, (schema as JsonSchemaArray).items));
+      const arraySchema = schema as JsonSchemaArray;
+      if (arraySchema.minItems !== undefined && value.length < arraySchema.minItems) return false;
+      return value.every((item) => validateValue(item, arraySchema.items));
+    }
 
     case 'object': {
       if (typeof value !== 'object' || value === null || Array.isArray(value)) return false;
@@ -425,6 +429,8 @@ export function validateConfig(config: Record<string, any>, schemas: JsonSchema[
             fieldErrors.push('Value must be an array');
           } else if (!value.every((v) => schema.enum.includes(v))) {
             fieldErrors.push('Invalid selection');
+          } else if (schema.minItems !== undefined && value.length < schema.minItems) {
+            fieldErrors.push(`Select at least ${schema.minItems}`);
           }
         } else if (!schema.enum.includes(value)) {
           fieldErrors.push('Invalid selection');
@@ -433,6 +439,9 @@ export function validateConfig(config: Record<string, any>, schemas: JsonSchema[
         if (!Array.isArray(value)) {
           fieldErrors.push('Value must be an array');
         } else {
+          if (schema.minItems !== undefined && value.length < schema.minItems) {
+            fieldErrors.push(`At least ${schema.minItems} entries required`);
+          }
           value.forEach((item, index) => {
             if (!validateValue(item, schema.items)) {
               fieldErrors.push(`Invalid item at index ${index}`);
@@ -470,7 +479,9 @@ export function generateZodSchemaField(schema: JsonSchema): zod.ZodTypeAny {
               .refine((val) => schema.enum.includes(val), { error: 'Invalid selection' }),
           );
 
-          if (schema.required) {
+          if (schema.minItems !== undefined) {
+            arraySchema = arraySchema.min(schema.minItems, { error: `Select at least ${schema.minItems}` });
+          } else if (schema.required) {
             arraySchema = arraySchema.min(1, { error: 'Required' });
           }
 
@@ -523,10 +534,14 @@ export function generateZodSchemaField(schema: JsonSchema): zod.ZodTypeAny {
     case 'boolean':
       return schema.required ? zod.boolean() : zod.boolean().optional();
 
-    case 'array':
+    case 'array': {
       const schemaItems = schema.items ? generateZodSchemaField(schema.items as any) : zod.any();
-      const arraySchema = zod.array(schemaItems);
+      let arraySchema = zod.array(schemaItems);
+      if (schema.minItems !== undefined) {
+        arraySchema = arraySchema.min(schema.minItems, { error: `At least ${schema.minItems} entries required` });
+      }
       return schema.required ? arraySchema : arraySchema.optional();
+    }
 
     case 'object': {
       const shape: Record<string, zod.ZodTypeAny> = {};
