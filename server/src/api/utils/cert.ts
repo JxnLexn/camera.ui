@@ -1,3 +1,4 @@
+import { fetchViableNetworkAddresses } from '@camera.ui/common/network';
 import forge from 'node-forge';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { isIPv4, isIPv6 } from 'node:net';
@@ -240,6 +241,14 @@ export class CertificateGeneration {
     const workersConfig = configService.config.workers;
     if (workersConfig?.enabled && workersConfig.address && !requiredAddresses.includes(workersConfig.address)) {
       requiredAddresses.push(workersConfig.address);
+    }
+
+    // apps dial the advertised interface addresses directly (LAN IPv4, ULA/GUA
+    // IPv6) and pin only the CA, so the leaf must cover every one of them
+    for (const { address } of fetchViableNetworkAddresses()) {
+      if (!requiredAddresses.includes(address)) {
+        requiredAddresses.push(address);
+      }
     }
 
     const certExists = existsSync(sslConfig.certFile) && existsSync(sslConfig.keyFile) && existsSync(sslConfig.caFile);
