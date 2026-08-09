@@ -109,7 +109,7 @@ export class FrameDecodingHandler implements CapabilityHandler<WorkerCapability.
 
   private forkFrameWorker(config: RemoteCameraConfig): ChildProcess {
     const proxyAuth = this.natsServer.localAuth;
-    const processName = 'camera.ui - Frame Worker (remote)';
+    const processName = `camera.ui - Frame Worker [${config.cameraName}] (remote)`;
 
     const env: Record<string, string> = {
       CAMERA_ID: config.cameraId,

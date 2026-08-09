@@ -6,12 +6,7 @@ export type SystemEvent = 'system:started' | 'system:shutdown' | 'system:notific
 export type PluginEvent = 'plugin:started' | 'plugin:stopped' | 'plugin:error' | 'plugin:crashed';
 
 export type CameraEvent =
-  | 'camera:connected'
-  | 'camera:disconnected'
-  | 'camera:frameworker:started'
-  | 'camera:frameworker:stopped'
-  | 'camera:property:changed'
-  | 'camera:snapshot:updated';
+  'camera:connected' | 'camera:disconnected' | 'camera:frameworker:started' | 'camera:frameworker:stopped' | 'camera:property:changed' | 'camera:snapshot:updated';
 
 export type SensorEvent =
   | 'sensor:property:changed'

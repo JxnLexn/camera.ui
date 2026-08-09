@@ -1,4 +1,5 @@
 process.title = process.argv[2] ?? 'camera.ui - Frame Worker';
+const REMOTE_SUFFIX = process.title.includes('(remote)') ? ' (remote)' : '';
 
 import { Logger } from '@camera.ui/common/logger';
 import { SignalHandler } from '@camera.ui/common/utils';
@@ -137,8 +138,14 @@ export class FrameWorkerChild {
   }
 
   @RPCMethod
+  public updateNvrRpc(namespace?: string): void {
+    this.detectionCoordinator?.updateNvrRpc(namespace);
+  }
+
+  @RPCMethod
   public updateCameraName(name: string): void {
     this.logger.suffix = name;
+    process.title = `camera.ui - Frame Worker [${name}]${REMOTE_SUFFIX}`;
   }
 
   private async onStart(): Promise<void> {
