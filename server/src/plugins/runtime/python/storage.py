@@ -351,13 +351,30 @@ class DeviceStorage(DeviceStorageInterface):
                 if schema and schema["type"] != "submit" and "onSet" in schema:
                     self.__run_on_set_detached(schema.get("onSet", None), config_key, new_value, old_value)
 
+    @staticmethod
+    def __call_on_set(on_set_function: Any, new_value: Any, old_value: Any) -> Any:
+        try:
+            params = inspect.signature(on_set_function).parameters.values()
+        except (TypeError, ValueError):
+            return on_set_function(new_value, old_value)
+
+        if any(p.kind is p.VAR_POSITIONAL for p in params):
+            return on_set_function(new_value, old_value)
+
+        positional = [p for p in params if p.kind in (p.POSITIONAL_ONLY, p.POSITIONAL_OR_KEYWORD)]
+        if len(positional) >= 2:
+            return on_set_function(new_value, old_value)
+        if len(positional) == 1:
+            return on_set_function(new_value)
+        return on_set_function()
+
     def __run_on_set_detached(self, on_set_function: Any, key: str, new_value: Any, old_value: Any) -> None:
         if not on_set_function:
             return
 
         async def _run() -> None:
             try:
-                res = on_set_function(new_value, old_value)
+                res = self.__call_on_set(on_set_function, new_value, old_value)
                 if inspect.iscoroutine(res):
                     await res
             except Exception as error:
