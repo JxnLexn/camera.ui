@@ -1,5 +1,6 @@
 import type { CameraActivityMode, VideoStreamingMode } from '@camera.ui/browser';
-import type { EventDescription, StreamingRole } from '@camera.ui/sdk';
+import type { EventDescription } from '@camera.ui/nvr';
+import type { StreamingRole } from '@camera.ui/sdk';
 import type { DBCamera } from '@shared/types';
 import type { CardProps } from 'primevue';
 import type { HTMLAttributes } from 'vue';

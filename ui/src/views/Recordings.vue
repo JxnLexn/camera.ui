@@ -105,7 +105,7 @@
                 :camera="cameraById.get(item.event.cameraId)"
                 :load-thumbnails="loadThumbnails"
                 :semantic-score="semanticEventIds.get(item.event.id)"
-                :thumbnail-override="item.thumbnailOverride"
+                :seg-index="item.segIndex"
                 :selection-mode="selectionMode"
                 :selected="selectedIds.has(item.event.id)"
                 @select="toggleSelection(item.event.id)"
@@ -192,7 +192,7 @@
 </template>
 
 <script setup lang="ts">
-import { EventHoverPreviewKey, getPrimaryThumbnailFromCache, thumbnailToUrl, useDetectionEvents, useEventHoverPreview, useSemanticSearch } from '@camera.ui/nvr';
+import { EventHoverPreviewKey, useDetectionEvents, useEventHoverPreview, useSemanticSearch } from '@camera.ui/nvr';
 import SelectAllIcon from '~icons/fluent/select-all-on-20-filled';
 import CloseIcon from '~icons/mdi/close';
 import TrashIcon from '~icons/mdi/delete-outline';
@@ -205,21 +205,19 @@ import CameraEventDialog from '@/components/CuiDialog/templates/CameraStreamEven
 import ExportRecordings from '@/components/CuiDialog/templates/ExportRecordings/ExportRecordings.vue';
 import CuiMenu from '@/components/CuiMenu/CuiMenu.vue';
 import RecordingsFilterSidebar from '@/components/CuiRecordings/RecordingsFilterSidebar.vue';
-import { segmentLabel } from '@/utils/eventAnchor.js';
-import { isDuplicateThumbnail } from '@/utils/thumbnailDedupe.js';
 
 import type { CameraStreamEventProps } from '@/components/CuiDialog/templates/CameraStreamEvent/types.js';
 import type { GridRegion } from '@/components/CuiGridSearch/types.js';
 import type { MenuItem } from '@/components/CuiMenu/types.js';
-import type { RecordingsFilterState, ThumbnailOverride } from '@/components/CuiRecordings/types.js';
-import type { EventThumbnails, GetEventsOptions } from '@camera.ui/nvr';
-import type { BoundingBox, DetectionEvent } from '@camera.ui/sdk';
+import type { RecordingsFilterState } from '@/components/CuiRecordings/types.js';
+import type { GetEventsOptions, RecordedEvent } from '@camera.ui/nvr';
+import type { BoundingBox } from '@camera.ui/sdk';
 import type { DBCamera } from '@shared/types';
 
 interface UngroupedItem {
-  event: DetectionEvent;
+  event: RecordedEvent;
   key: string;
-  thumbnailOverride?: ThumbnailOverride;
+  segIndex?: number;
 }
 
 const camerasQuery = new CamerasQuery();
@@ -279,9 +277,6 @@ const filters = ref<RecordingsFilterState>({
   minSemanticScore: 0.5,
   onlyWithRecordings: true,
 });
-// Stabilized: only emits a new object reference when the serialized value actually changes.
-// withRecordingInfo is always requested so the download button can gate on real footage
-// even when the "only with recordings" filter is off.
 const serverFilter = shallowRef<GetEventsOptions>({ state: 'ended', hasDetections: true, withRecordingInfo: true, hasRecording: true });
 let _prevFilterJSON = JSON.stringify(serverFilter.value);
 const ungrouped = ref(false);
@@ -327,7 +322,7 @@ const allCameraIds = computed(() => {
 
 registerScrollToTop(() => gridRef.value?.scrollToTop());
 
-const { events, isLoading, hasMore, loadMore, loadThumbnails, getCachedThumbnails, deleteEvents } = useDetectionEvents({
+const { events, isLoading, hasMore, loadMore, loadThumbnails, deleteEvents } = useDetectionEvents({
   availableCameraIds: allCameraIds,
   cameraIds,
   realtime: true,
@@ -479,81 +474,17 @@ function boxOverlapsRegions(box: BoundingBox, regions: GridRegion[]): boolean {
   return false;
 }
 
-function flattenCachedThumbnails(thumbs: EventThumbnails, event: DetectionEvent): { key: string; url: string; type: string; label?: string; anchorMs?: number }[] {
-  const entries: { key: string; url: string; type: string; label?: string; anchorMs?: number }[] = [];
-  const bytes: Uint8Array[] = [];
-  const segAnchor = (segKey: string): number | undefined => event.segments?.[Number(segKey)]?.firstSeen;
-
-  if (thumbs.attributes) {
-    for (const [key, data] of Object.entries(thumbs.attributes)) {
-      const url = thumbnailToUrl(data);
-      if (!url) continue;
-      bytes.push(data);
-      const colonIdx = key.indexOf(':');
-      entries.push({
-        key: `${event.id}:attr:${key}`,
-        url,
-        type: colonIdx >= 0 ? key.substring(0, colonIdx) : key,
-        label: colonIdx >= 0 ? key.substring(colonIdx + 1) : undefined,
-      });
-    }
-  }
-
-  if (thumbs.detections) {
-    for (const [key, data] of Object.entries(thumbs.detections)) {
-      const url = thumbnailToUrl(data);
-      if (!url) continue;
-      bytes.push(data);
-      const label = key.includes(':') ? key.split(':').slice(1).join(':') : key;
-      entries.push({ key: `${event.id}:det:${key}`, url, type: label, anchorMs: segAnchor(key.split(':')[0]) });
-    }
-  }
-
-  if (thumbs.scenes) {
-    for (const [key, data] of Object.entries(thumbs.scenes)) {
-      const url = thumbnailToUrl(data);
-      if (!url) continue;
-      bytes.push(data);
-      entries.push({ key: `${event.id}:scene:${key}`, url, type: segmentLabel(event, key), anchorMs: segAnchor(key) });
-    }
-  }
-
-  const seen: Uint8Array[] = [];
-  return entries.filter((_entry, i) => {
-    const data = bytes[i];
-    if (!data || isDuplicateThumbnail(data, seen)) return false;
-    seen.push(data);
-    return true;
-  });
-}
-
-function buildUngroupedItems(events: DetectionEvent[]): UngroupedItem[] {
+function buildUngroupedItems(events: RecordedEvent[]): UngroupedItem[] {
   const items: UngroupedItem[] = [];
   for (const event of events) {
-    const thumbs = getCachedThumbnails(event.id);
-    if (!thumbs) {
+    const segments = event.segments ?? [];
+    if (segments.length <= 1) {
       items.push({ event, key: event.id });
       continue;
     }
-    const entries = flattenCachedThumbnails(thumbs, event);
-
-    const primaryInfo = getPrimaryThumbnailFromCache(thumbs, event);
-    if (primaryInfo.url) {
-      const idx = entries.findIndex((e) => e.url === primaryInfo.url);
-      if (idx > 0) entries.unshift(...entries.splice(idx, 1));
-    }
-
-    if (entries.length <= 1) {
-      items.push({ event, key: event.id });
-    } else {
-      entries.forEach((entry, i) => {
-        items.push({
-          event,
-          key: i === 0 ? event.id : entry.key,
-          thumbnailOverride: { url: entry.url, type: entry.type, label: entry.label, anchorMs: entry.anchorMs },
-        });
-      });
-    }
+    segments.forEach((segment, index) => {
+      if (segment) items.push({ event, key: `${event.id}:seg:${index}`, segIndex: index });
+    });
   }
   return items;
 }
@@ -573,7 +504,7 @@ function onSemanticSearch(query: string): void {
   runSemanticSearch(query);
 }
 
-function openRecordingDialog(event: DetectionEvent): void {
+function openRecordingDialog(event: RecordedEvent): void {
   const camera = cameraById.value.get(event.cameraId);
   if (!camera) return;
 
@@ -656,7 +587,6 @@ watch(ungrouped, (isUngrouped) => {
   }
 });
 
-// Incremental update: keep existing items, add new, remove stale
 watch(displayEvents, (events) => {
   if (!ungrouped.value) return;
 

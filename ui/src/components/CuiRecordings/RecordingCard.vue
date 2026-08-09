@@ -46,46 +46,48 @@
         <p class="text-[10px] text-white/70">{{ formatDateTime }}</p>
       </div>
 
-      <div class="absolute bottom-2 left-2 flex items-center gap-1 z-[3]">
+      <div ref="footerRef" class="absolute bottom-2 left-2 right-2 flex items-center justify-between gap-2 z-[3]">
+        <div class="flex items-center gap-1 min-w-0">
+          <div
+            v-if="selectionMode"
+            class="w-6 h-6 rounded-full border-2 flex items-center justify-center transition-colors shrink-0"
+            :class="selected ? 'bg-primary border-primary' : 'bg-black/40 border-white/80'"
+          >
+            <i-mdi:check v-if="selected" class="w-4 h-4 text-white" />
+          </div>
+          <div v-for="type in displayTypes" :key="type" class="flex items-center justify-center w-5 h-5 rounded-md bg-black/60 shrink-0">
+            <component :is="eventIcons[type] ?? eventIcons.motion" class="w-3 h-3 text-white/80" />
+          </div>
+          <span v-if="hiddenTypes.length > 0" :title="hiddenTypes.join(', ')" class="text-[10px] text-white/60 font-medium shrink-0"> +{{ hiddenTypes.length }} </span>
+          <span v-if="primaryLabel" class="text-[11px] text-white/80 font-medium truncate">
+            {{ primaryLabel }}
+          </span>
+        </div>
+
         <div
-          v-if="selectionMode"
-          class="w-6 h-6 rounded-full border-2 flex items-center justify-center transition-colors shrink-0"
-          :class="selected ? 'bg-primary border-primary' : 'bg-black/40 border-white/80'"
+          v-if="visibleThumbnails.length > 0 || hiddenThumbnailCount > 0"
+          class="flex items-center gap-0.5 shrink-0 opacity-85 group-hover:opacity-100 transition-opacity duration-200"
         >
-          <i-mdi:check v-if="selected" class="w-4 h-4 text-white" />
+          <div v-for="(thumb, i) in visibleThumbnails" :key="i" class="w-7 h-7 rounded overflow-hidden border border-white/20 bg-neutral-800">
+            <img :src="thumb.url" :alt="thumb.type" decoding="async" loading="lazy" class="w-full h-full object-cover" />
+          </div>
+          <span v-if="hiddenThumbnailCount > 0" class="text-[10px] text-white/60 font-medium">+{{ hiddenThumbnailCount }}</span>
         </div>
-        <div v-for="type in displayTypes" :key="type" class="flex items-center justify-center w-5 h-5 rounded-md bg-black/60">
-          <component :is="eventIcons[type] ?? eventIcons.motion" class="w-3 h-3 text-white/80" />
-        </div>
-        <span v-if="extraTypeCount > 0" class="text-[10px] text-white/60 font-medium">+{{ extraTypeCount }}</span>
-        <span v-if="primaryLabel" class="text-[11px] text-white/80 font-medium truncate max-w-[100px]">
-          {{ primaryLabel }}
-        </span>
       </div>
 
       <div v-if="preview && isPreviewActive && preview.isLoading.value" class="absolute inset-0 z-[4] flex items-center justify-center pointer-events-none">
         <ProgressSpinner class="w-[28px] h-[28px] m-0" stroke-width="6" />
-      </div>
-
-      <div
-        v-if="stripThumbnails.length > 0 && !thumbnailOverride"
-        class="absolute bottom-1 right-1 flex gap-0.5 opacity-85 group-hover:opacity-100 transition-opacity duration-200 z-[3]"
-      >
-        <div v-for="(thumb, i) in stripThumbnails.slice(0, 4)" :key="i" class="w-7 h-7 rounded overflow-hidden border border-white/20 bg-neutral-800">
-          <img :src="thumb.url" :alt="thumb.type" decoding="async" loading="lazy" class="w-full h-full object-cover" />
-        </div>
       </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { EventHoverPreviewKey, getPrimaryThumbnailFromCache, thumbnailToUrl, useEventStore } from '@camera.ui/nvr';
+import { attributeThumbnails, EventHoverPreviewKey, resolveThumbnail, segmentTypes, thumbnailToUrl, useEventStore } from '@camera.ui/nvr';
 
 import { extractErrorMessage } from '@/common/utils.js';
 import { eventAnchorTime, segmentLabel } from '@/utils/eventAnchor.js';
 import { resolveEventIcons } from '@/utils/eventIcons.js';
-import { isDuplicateThumbnail } from '@/utils/thumbnailDedupe.js';
 
 import type { EventThumbnails } from '@camera.ui/nvr';
 import type { RecordingCardEmits, RecordingCardProps } from './types.js';
@@ -102,27 +104,38 @@ const { plugin: nvrPluginRef } = usePlugin('@camera.ui/camera-ui-nvr');
 
 const CLIP_MIN = 0.15;
 const CLIP_MAX = 0.38;
-const DETECTION_PRIORITY = ['person', 'vehicle', 'animal', 'package'] as const;
+const MAX_FOOTER_TILES = 8;
+const ICON_PX = 24;
+const TILE_PX = 30;
+const MORE_PX = 22;
+const CHECKBOX_PX = 28;
+const LABEL_MIN_PX = 48;
+const GROUP_GAP_PX = 8;
 
 const { icons: eventIcons } = resolveEventIcons();
 
-const cachedInit = props.thumbnailOverride ? undefined : eventStore.getCachedThumbnails(props.event.id);
-const initialState: 'loading' | 'loaded' | 'empty' = props.thumbnailOverride
-  ? 'loaded'
-  : cachedInit
-    ? getPrimaryThumbnailFromCache(cachedInit, props.event).url
-      ? 'loaded'
-      : 'empty'
-    : 'loading';
+const cachedInit = eventStore.getCachedThumbnails(props.event.id);
+const initialState: 'loading' | 'loaded' | 'empty' = cachedInit
+  ? resolveThumbnail(cachedInit, props.event, 'card', props.segIndex).url
+    ? 'loaded'
+    : 'empty'
+  : 'loading';
 
 const preview = inject(EventHoverPreviewKey, undefined);
 const previewCanvasRef = useTemplateRef('previewCanvasRef');
+const footerRef = useTemplateRef<HTMLElement>('footerRef');
 const isPreviewActive = ref(false);
 const loadedThumbs = ref<EventThumbnails | null>(cachedInit ?? null);
 const thumbnailState = ref<'loading' | 'loaded' | 'empty'>(initialState);
 const isDownloading = ref(false);
 
-const descriptionTitle = computed(() => props.event.segments?.find((s) => s?.description)?.description?.title);
+const { width: footerWidth } = useElementSize(footerRef);
+
+const descriptionTitle = computed(() => {
+  // eslint-disable-next-line @typescript-eslint/no-unused-expressions
+  eventStore.storeVersion.value;
+  return props.event.segments?.find((s) => s?.description)?.description?.title;
+});
 
 const semanticDisplay = computed(() => {
   if (props.semanticScore == null) return undefined;
@@ -136,22 +149,23 @@ const semanticDisplay = computed(() => {
 
 const primary = computed(() => {
   if (!loadedThumbs.value) return null;
-  return getPrimaryThumbnailFromCache(loadedThumbs.value, props.event);
+  return resolveThumbnail(loadedThumbs.value, props.event, 'card', props.segIndex);
 });
 
-const thumbnailUrl = computed(() => props.thumbnailOverride?.url ?? primary.value?.url);
-// the label belongs to one specific thumbnail — on a grouped card it would
-// caption an image the card does not show
-const primaryLabel = computed(() => (props.thumbnailOverride ? props.thumbnailOverride.label : undefined));
-const primaryType = computed(() => props.thumbnailOverride?.type ?? primary.value?.type ?? props.event.types[0] ?? 'motion');
+const shownSegment = computed(() => {
+  const index = props.segIndex ?? primary.value?.segIndex;
+  return index === undefined ? undefined : props.event.segments?.[index];
+});
+
+const thumbnailUrl = computed(() => primary.value?.url);
+const primaryLabel = computed(() => primary.value?.label);
+const primaryType = computed(() => primary.value?.type ?? props.event.types[0] ?? 'motion');
 
 const uniqueTypes = computed(() => {
-  // When ungrouped (thumbnailOverride), show only this thumbnail's type
-  if (props.thumbnailOverride) return [props.thumbnailOverride.type].filter((t) => t !== 'motion' && t !== 'audio' && t !== 'scene');
-  return [...new Set(props.event.types.filter((t) => t !== 'motion' && t !== 'audio'))];
+  const segment = shownSegment.value;
+  const types = segment ? segmentTypes(props.event, segment) : [...new Set(props.event.types)];
+  return types.filter((t: string) => t !== 'motion' && t !== 'audio');
 });
-const displayTypes = computed(() => uniqueTypes.value.slice(0, 2));
-const extraTypeCount = computed(() => Math.max(0, uniqueTypes.value.length - 2));
 
 const displayCameraName = computed(() => props.cameraName ?? props.event.cameraId);
 
@@ -161,58 +175,47 @@ const stripThumbnails = computed<{ url: string; type: string }[]>(() => {
 
   const primaryUrl = primary.value?.url;
   const items: { url: string; type: string }[] = [];
-  const seen: Uint8Array[] = [];
 
-  const addItem = (data: Uint8Array | undefined, type: string): boolean => {
-    if (!data || items.length >= 5) return false;
-    const url = thumbnailToUrl(data);
-    if (!url) return false;
-    if (url === primaryUrl) {
-      seen.push(data);
-      return false;
-    }
-    if (isDuplicateThumbnail(data, seen)) return false;
-    seen.push(data);
-    items.push({ url, type });
-    return true;
-  };
-
-  // Attributes (faces, plates, classifications)
-  if (thumbs.attributes) {
-    for (const [key, data] of Object.entries(thumbs.attributes)) {
-      addItem(data, key.split(':')[0]);
-    }
+  for (const tile of attributeThumbnails(thumbs, props.segIndex)) {
+    if (items.length >= MAX_FOOTER_TILES) break;
+    if (tile.url === primaryUrl) continue;
+    items.push({ url: tile.url, type: tile.type });
   }
 
-  // Detections by priority (keys are "{segIdx}:{label}")
-  if (thumbs.detections) {
-    for (const type of DETECTION_PRIORITY) {
-      for (const [key, data] of Object.entries(thumbs.detections)) {
-        if (key.endsWith(`:${type}`)) {
-          addItem(data, type);
-          break;
-        }
-      }
-    }
-    for (const [key, data] of Object.entries(thumbs.detections)) {
-      const label = key.includes(':') ? key.split(':').slice(1).join(':') : key;
-      if (!(DETECTION_PRIORITY as readonly string[]).includes(label)) {
-        addItem(data, label);
-      }
-    }
-  }
-
-  // Scene (prefer segment 0)
-  if (thumbs.scenes) {
-    const sceneKeys = Object.keys(thumbs.scenes).sort((a, b) => Number(a) - Number(b));
-    for (const sk of sceneKeys) {
-      // type it by what the span showed, so the tile carries a real icon
-      addItem(thumbs.scenes[sk], segmentLabel(props.event, sk));
+  if (props.segIndex === undefined) {
+    for (const key of Object.keys(thumbs.cards ?? thumbs.strips ?? {}).sort((a, b) => Number(a) - Number(b))) {
+      if (items.length >= MAX_FOOTER_TILES) break;
+      const url = thumbnailToUrl(thumbs.cards?.[key] ?? thumbs.strips?.[key]);
+      if (!url || url === primaryUrl) continue;
+      items.push({ url, type: segmentLabel(props.event, key) });
     }
   }
 
   return items;
 });
+
+const displayTypes = computed(() => uniqueTypes.value.slice(0, footerLayout.value.icons));
+
+const footerLayout = computed(() => {
+  const width = footerWidth.value;
+  if (!width) return { icons: 2, tiles: 2 };
+
+  let free = width - GROUP_GAP_PX;
+  if (props.selectionMode) free -= CHECKBOX_PX;
+  if (primaryLabel.value) free -= LABEL_MIN_PX;
+
+  const tileFloor = stripThumbnails.value.length > 0 ? TILE_PX + MORE_PX : 0;
+  const fitted = fitCount(uniqueTypes.value.length, Math.max(0, free - tileFloor), ICON_PX);
+  const icons = uniqueTypes.value.length > 0 ? Math.max(1, fitted) : 0;
+  const iconsPx = icons * ICON_PX + (icons < uniqueTypes.value.length ? MORE_PX : 0);
+  const tiles = fitCount(stripThumbnails.value.length, Math.max(0, free - iconsPx), TILE_PX);
+
+  return { icons, tiles };
+});
+
+const hiddenTypes = computed(() => uniqueTypes.value.slice(footerLayout.value.icons));
+const visibleThumbnails = computed(() => stripThumbnails.value.slice(0, footerLayout.value.tiles));
+const hiddenThumbnailCount = computed(() => stripThumbnails.value.length - footerLayout.value.tiles);
 
 const formatDateTime = computed(() => {
   const date = new Date(props.event.startTime);
@@ -225,6 +228,12 @@ const formatDateTime = computed(() => {
 });
 
 const canDownload = computed(() => Boolean(nvrPluginRef.value && props.event.endTime && props.event.hasRecording !== false));
+
+function fitCount(total: number, space: number, itemPx: number): number {
+  if (total === 0 || space < itemPx) return 0;
+  if (total * itemPx <= space) return total;
+  return Math.max(0, Math.floor((space - MORE_PX) / itemPx));
+}
 
 function handleMouseEnter(): void {
   if (!preview || !props.event.endTime || props.event.hasRecording === false) return;
@@ -240,22 +249,11 @@ function handleMouseLeave(): void {
   preview.onHoverEnd();
 }
 
-watch(
-  () => eventStore.storeVersion.value,
-  () => {
-    if (props.thumbnailOverride) return;
-    const cached = eventStore.getCachedThumbnails(props.event.id);
-    if (!cached) return;
-    loadedThumbs.value = cached;
-    if (getPrimaryThumbnailFromCache(cached, props.event).url) thumbnailState.value = 'loaded';
-  },
-);
-
 async function triggerLoad(retries = 2): Promise<void> {
   const thumbs = await props.loadThumbnails(props.event.id, props.event.startTime);
   if (thumbs) {
     loadedThumbs.value = thumbs;
-    const p = getPrimaryThumbnailFromCache(thumbs, props.event);
+    const p = resolveThumbnail(thumbs, props.event, 'card');
     thumbnailState.value = p.url ? 'loaded' : 'empty';
   } else if (retries > 0) {
     await new Promise((r) => setTimeout(r, 500));
@@ -270,7 +268,7 @@ function handleClick(): void {
     emit('select');
     return;
   }
-  emit('scrollToEvent', props.thumbnailOverride?.anchorMs ?? eventAnchorTime(props.event));
+  emit('scrollToEvent', shownSegment.value?.firstSeen ?? eventAnchorTime(props.event));
 }
 
 async function handleDownload(): Promise<void> {
@@ -294,13 +292,16 @@ async function handleDownload(): Promise<void> {
   }
 }
 
-// Trigger thumbnail load as soon as the card mounts. The virtual scroller
-// already limits the mounted set to what's in (or near) the viewport, so the
-// IntersectionObserver-based lazy-load that used to live here is redundant
-// and, worse, unreliable: during fast scrolls its initial check often fires
-// with `isIntersecting: false` before layout settles, and it never fires
-// again because the intersection doesn't *change* — leaving the card stuck
-// in a skeleton state until the next scroll away-and-back.
+watch(
+  () => eventStore.storeVersion.value,
+  () => {
+    const cached = eventStore.getCachedThumbnails(props.event.id);
+    if (!cached) return;
+    loadedThumbs.value = cached;
+    if (resolveThumbnail(cached, props.event, 'card').url) thumbnailState.value = 'loaded';
+  },
+);
+
 onMounted(() => {
   if (initialState === 'loading') {
     triggerLoad();

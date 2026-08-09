@@ -59,7 +59,7 @@
 </template>
 
 <script setup lang="ts">
-import { EventHoverPreviewKey, getPrimaryThumbnailFromCache, getPrimaryType, getSegmentThumbnailFromCache, useEventStore } from '@camera.ui/nvr';
+import { EventHoverPreviewKey, getPrimaryType, resolveThumbnail, useEventStore } from '@camera.ui/nvr';
 import SparklesIcon from '~icons/tabler/sparkles';
 
 import CameraEventDialog from '@/components/CuiDialog/templates/CameraStreamEvent/CameraStreamEvent.vue';
@@ -125,9 +125,7 @@ function handleMouseLeave(): void {
 
 function applyThumbnails(thumbs: EventThumbnails): boolean {
   const primary =
-    props.segment && props.segIndex !== undefined
-      ? getSegmentThumbnailFromCache(thumbs, props.segIndex, props.segment)
-      : getPrimaryThumbnailFromCache(thumbs, props.event);
+    props.segment && props.segIndex !== undefined ? resolveThumbnail(thumbs, props.event, 'card', props.segIndex) : resolveThumbnail(thumbs, props.event, 'card');
   if (!primary.url) return false;
   thumbnailUrl.value = primary.url;
   thumbnailLabel.value = primary.label;
@@ -140,9 +138,7 @@ async function triggerLoad(retries = 2): Promise<void> {
   const thumbs = await props.loadThumbnails(props.event.id, props.event.startTime);
   if (thumbs) {
     const primary =
-      props.segment && props.segIndex !== undefined
-        ? getSegmentThumbnailFromCache(thumbs, props.segIndex, props.segment)
-        : getPrimaryThumbnailFromCache(thumbs, props.event);
+      props.segment && props.segIndex !== undefined ? resolveThumbnail(thumbs, props.event, 'card', props.segIndex) : resolveThumbnail(thumbs, props.event, 'card');
     if (primary.url) {
       thumbnailUrl.value = primary.url;
       thumbnailLabel.value = primary.label;

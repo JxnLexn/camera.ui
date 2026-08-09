@@ -1,6 +1,5 @@
 import type { GridRegion } from '@/components/CuiGridSearch/types.js';
-import type { EventThumbnails } from '@camera.ui/nvr';
-import type { DetectionEvent } from '@camera.ui/sdk';
+import type { EventThumbnails, RecordedEvent } from '@camera.ui/nvr';
 import type { DBCamera } from '@shared/types';
 
 export interface RecordingsFilterState {
@@ -21,20 +20,13 @@ export interface RecordingsFilterState {
   onlyWithRecordings: boolean;
 }
 
-export interface ThumbnailOverride {
-  url: string;
-  type: string;
-  label?: string;
-  anchorMs?: number;
-}
-
 export interface RecordingCardProps {
-  event: DetectionEvent;
+  event: RecordedEvent;
   cameraName?: string;
   camera?: DBCamera;
   loadThumbnails: (eventId: string, startMs: number) => Promise<EventThumbnails | null>;
   semanticScore?: number;
-  thumbnailOverride?: ThumbnailOverride;
+  segIndex?: number;
   selectionMode?: boolean;
   selected?: boolean;
 }

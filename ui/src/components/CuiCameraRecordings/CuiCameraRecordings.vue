@@ -225,7 +225,7 @@
         :gap="8"
         :has-more="hasMore"
         :load-more="loadMore"
-        :item-key="(e: DetectionEvent) => e.id"
+        :item-key="(e: RecordedEvent) => e.id"
         class="flex-1 min-h-0"
       >
         <template #item="{ item }">
@@ -259,9 +259,10 @@ import { GridSearchKey } from '@/components/CuiGridSearch/types.js';
 import CuiRecordingsGrid from '@/components/CuiRecordings/CuiRecordingsGrid.vue';
 import { resolveEventIcons } from '@/utils/eventIcons.js';
 
+import type { RecordedEvent } from '@camera.ui/nvr';
 import type { GridRegion } from '@/components/CuiGridSearch/types.js';
 import type { GetEventsOptions } from '@camera.ui/nvr';
-import type { BoundingBox, DetectionEvent } from '@camera.ui/sdk';
+import type { BoundingBox } from '@camera.ui/sdk';
 import type { CuiCameraRecordingsEmits, CuiCameraRecordingsProps } from './types.js';
 
 const props = withDefaults(defineProps<CuiCameraRecordingsProps>(), { compact: false });

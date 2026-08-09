@@ -1,6 +1,6 @@
-import type { DetectionEvent } from '@camera.ui/sdk';
+import type { RecordedEvent } from '@camera.ui/nvr';
 
-export function eventAnchorTime(event: DetectionEvent): number {
+export function eventAnchorTime(event: RecordedEvent): number {
   const at = event.thumbnailAt;
   if (at) {
     let anchor = 0;
@@ -12,7 +12,7 @@ export function eventAnchorTime(event: DetectionEvent): number {
   return event.startTime;
 }
 
-export function segmentLabel(event: DetectionEvent, segIndex: number | string): string {
+export function segmentLabel(event: RecordedEvent, segIndex: number | string): string {
   const seg = event.segments?.[Number(segIndex)];
   return seg?.detections?.[0]?.label ?? 'scene';
 }

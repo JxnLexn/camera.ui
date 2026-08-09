@@ -71,9 +71,10 @@ import SparklesIcon from '~icons/tabler/sparkles';
 import { extractErrorMessage } from '@/common/utils.js';
 
 import type CuiCameraCard from '@/components/CuiCameraCard/CuiCameraCard.vue';
+import type { EventDescription } from '@camera.ui/nvr';
 import type { DialogRefProps } from '@/composables/useCuiDialog.js';
 import type { CuiTimelineLocale } from '@camera.ui/nvr';
-import type { EventDescription, StreamingRole } from '@camera.ui/sdk';
+import type { StreamingRole } from '@camera.ui/sdk';
 import type { CameraStreamEventProps } from './types.js';
 
 const props = defineProps<CameraStreamEventProps>();

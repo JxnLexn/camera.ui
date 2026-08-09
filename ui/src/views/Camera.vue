@@ -247,9 +247,8 @@ import { extractErrorMessage } from '@/common/utils.js';
 import { GridSearchKey } from '@/components/CuiGridSearch/types.js';
 
 import type CuiCameraPipCard from '@/components/CuiCameraPipCard/CuiCameraPipCard.vue';
-import type { CuiTimelineLocale } from '@camera.ui/nvr';
-import type { EventDescription, StreamingRole } from '@camera.ui/sdk';
-
+import type { CuiTimelineLocale, EventDescription } from '@camera.ui/nvr';
+import type { StreamingRole } from '@camera.ui/sdk';
 const CuiCameraRecordings = asyncComponent(() => import('@/components/CuiCameraRecordings/CuiCameraRecordings.vue'));
 const CuiCameraTable = asyncComponent(() => import('@/components/CuiCameraTable/CuiCameraTable.vue'));
 const CuiCameraShares = asyncComponent(() => import('@/components/CuiCameraShares/CuiCameraShares.vue'));
