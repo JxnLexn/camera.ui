@@ -87,6 +87,13 @@ export class MqttBridge {
     this.onBus('camera:connected', (payload) => {
       const { cameraId } = payload as CameraEventPayload;
       this.publishRetained(cameraId, this.manager.topics.cameraStatus(cameraId), 'online');
+      const controller = this.api.getCamera(cameraId);
+      if (controller) this.publishSnapshot(controller);
+    });
+
+    this.onBus('camera:snapshot:updated', (payload) => {
+      const controller = this.api.getCamera((payload as CameraEventPayload).cameraId);
+      if (controller) this.publishSnapshot(controller);
     });
 
     this.onBus('camera:disconnected', (payload) => {
@@ -265,7 +272,7 @@ export class MqttBridge {
     if (this.cameraSubscriptions.has(controller.id)) return;
 
     const subscription = controller.onDetectionEvent.subscribe(({ type, event }) => {
-      this.handleDetectionEvent(controller.id, type, event);
+      this.handleDetectionEvent(controller, type, event);
     });
     this.cameraSubscriptions.set(controller.id, () => subscription.dispose());
   }
@@ -347,15 +354,11 @@ export class MqttBridge {
     }
   }
 
-  private handleDetectionEvent(cameraId: string, type: DetectionEventType, event: DetectionEvent): void {
+  private handleDetectionEvent(controller: CameraController, type: DetectionEventType, event: DetectionEvent): void {
+    const cameraId = controller.id;
     const topics = this.manager.topics;
 
     this.manager.publish(topics.cameraEvent(cameraId), JSON.stringify({ type, event: sanitizeDetectionEvent(event) }));
-
-    const thumbnail = toBuffer(event.thumbnail);
-    if (thumbnail) {
-      this.publishRetained(cameraId, topics.cameraSnapshot(cameraId), thumbnail);
-    }
 
     const state = this.activeDetections.get(cameraId) ?? { motion: false, labels: new Set<string>() };
 
@@ -382,6 +385,20 @@ export class MqttBridge {
     }
   }
 
+  private async publishSnapshot(controller: CameraController): Promise<void> {
+    const source = controller.preferredSnapshotSource;
+    if (!source) return;
+
+    try {
+      const snapshot = await controller.snapshot(source._id);
+      if (snapshot?.byteLength) {
+        this.publishRetained(controller.id, this.manager.topics.cameraSnapshot(controller.id), Buffer.from(snapshot));
+      }
+    } catch {
+      // ignore
+    }
+  }
+
   private publishRetained(cameraId: string, topic: string, payload: string | Buffer): void {
     let topics = this.retainedTopics.get(cameraId);
     if (!topics) {
@@ -393,7 +410,6 @@ export class MqttBridge {
     this.manager.publish(topic, payload, { retain: true });
   }
 
-  // Deleting a retained topic = publishing an empty retained payload.
   private clearRetained(cameraId: string, match?: (topic: string) => boolean): void {
     const topics = this.retainedTopics.get(cameraId);
     if (!topics) return;
@@ -411,18 +427,13 @@ export class MqttBridge {
 }
 
 function sanitizeDetectionEvent(event: DetectionEvent): Record<string, unknown> {
-  const { thumbnail: _thumbnail, segments, ...rest } = event;
-
   return {
-    ...rest,
-    segments: (segments ?? []).map((segment) => {
-      const { thumbnail: _segmentThumbnail, detections, attributes, ...segmentRest } = segment;
-      return {
-        ...segmentRest,
-        detections: (detections ?? []).map(({ thumbnail: _detectionThumbnail, ...detection }) => detection),
-        attributes: (attributes ?? []).map(({ thumbnail: _attributeThumbnail, embedding: _embedding, clipEmbedding: _clipEmbedding, ...attribute }) => attribute),
-      };
-    }),
+    ...event,
+    segments: (event.segments ?? []).map((segment) => ({
+      ...segment,
+      detections: segment.detections ?? [],
+      attributes: segment.attributes ?? [],
+    })),
   };
 }
 
@@ -434,12 +445,6 @@ function collectDetectionLabels(event: DetectionEvent): Set<string> {
     }
   }
   return labels;
-}
-
-function toBuffer(value: unknown): Buffer | undefined {
-  if (Buffer.isBuffer(value)) return value;
-  if (value instanceof Uint8Array) return Buffer.from(value);
-  return undefined;
 }
 
 function parseCommandPayload(raw: string): unknown {

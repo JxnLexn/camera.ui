@@ -37,7 +37,6 @@ import type {
 } from '@camera.ui/sdk';
 import type { DetectionEventMessage } from '@camera.ui/sdk/internal';
 import type { CameraUiAPI } from '../api.js';
-import type { SourceCodecInfo } from './codecCache.js';
 import type { Go2RtcApi } from '../go2rtc/api/index.js';
 import type { InternalEventBus } from '../internal-bus.js';
 import type { ProxyServer } from '../rpc/index.js';
@@ -46,6 +45,7 @@ import type { StoredSensorData } from '../rpc/interfaces/sensor.js';
 import type { CameraNamespaces, FrameWorkerDetectionNamespaces } from '../rpc/namespaces.js';
 import type { SensorRegistry } from '../sensors/registry.js';
 import type { LoggerService } from '../services/logger/index.js';
+import type { SourceCodecInfo } from './codecCache.js';
 
 @RPCClass
 export class CameraController extends CameraDevice implements CameraDeviceInterface {
@@ -104,6 +104,11 @@ export class CameraController extends CameraDevice implements CameraDeviceInterf
 
   get streamSource(): CameraDeviceSource {
     return (this.highResolutionSource ?? this.midResolutionSource ?? this.lowResolutionSource)!;
+  }
+
+  get preferredSnapshotSource(): CameraDeviceSource | undefined {
+    const dedicated = this.sources.find((s) => s.role === 'snapshot') ?? this.sources.find((s) => s.useForSnapshot);
+    return dedicated ?? this.lowResolutionSource ?? this.midResolutionSource ?? this.highResolutionSource ?? this.streamSource;
   }
 
   get camera(): Camera {
@@ -520,29 +525,24 @@ export class CameraController extends CameraDevice implements CameraDeviceInterf
     this.autoRefreshInterval = setInterval(async () => {
       if (this.disabled || !this.connected) return;
 
-      const source = this.getSnapshotSourceForAutoRefresh();
+      const source = this.preferredSnapshotSource;
       if (!source) return;
 
       try {
         const snapshot = await this.snapshot(source._id, true);
         if (snapshot && snapshot.byteLength > 0) {
           this.triggerProxyEvent('snapshot:updated', { sourceId: source._id, snapshot });
+          try {
+            const bus = container.resolve<InternalEventBus>('internalBus');
+            bus.emitEvent('camera:snapshot:updated', { cameraId: this.id, cameraName: this.name });
+          } catch {
+            // ignore
+          }
         }
       } catch (error: any) {
         this.logger.debug('Auto-refresh snapshot failed:', error.message);
       }
     }, interval);
-  }
-
-  private getSnapshotSourceForAutoRefresh(): CameraDeviceSource | undefined {
-    const snapshotSource = this.sources.find((s) => s.role === 'snapshot');
-    if (snapshotSource) return snapshotSource;
-
-    const useForSnapshot = this.sources.find((s) => s.useForSnapshot);
-    if (useForSnapshot) return useForSnapshot;
-
-    // Fallback priority: low → mid → high → stream.
-    return this.lowResolutionSource ?? this.midResolutionSource ?? this.highResolutionSource ?? this.streamSource;
   }
 
   private stopAutoRefresh(): void {
