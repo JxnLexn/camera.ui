@@ -25,7 +25,7 @@
             class="z-1"
             :class="{
               'cui-icon-lg': showOnlyRemoveIcon,
-              'cui-button-small': !showOnlyRemoveIcon,
+              'cui-button-small max-w-[85%]': !showOnlyRemoveIcon,
             }"
             :label="!showOnlyRemoveIcon ? camera.name : undefined"
             @click.prevent="emit('remove', camera!)"
@@ -148,5 +148,11 @@ defineExpose({
   background: #000;
   position: relative;
   overflow: hidden;
+}
+
+.view-dnd-card :deep(.p-button-label) {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 </style>

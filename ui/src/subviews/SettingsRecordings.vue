@@ -107,7 +107,7 @@
               </Column>
               <Column field="name" :header="$t('views.settings.recordings.col_camera')">
                 <template #body="{ data }">
-                  <span class="font-medium">{{ data.name }}</span>
+                  <span class="font-medium block max-w-[200px] truncate">{{ data.name }}</span>
                 </template>
               </Column>
               <Column field="size" :header="$t('views.settings.recordings.col_size')">

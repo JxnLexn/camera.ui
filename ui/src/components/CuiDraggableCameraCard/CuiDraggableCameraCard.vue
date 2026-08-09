@@ -27,10 +27,10 @@
       </div>
 
       <div class="w-full h-[60px] p-4 absolute bottom-0 z-3 flex items-center gap-1 justify-between pointer-events-none">
-        <span class="text-xs font-semibold p-2 bg-black/60 rounded-full text-white flex items-center gap-1">
-          {{ camera.name }}
-          <i-fluent:video-off-32-filled v-if="camera.disabled" class="w-3 h-3 text-red-400" />
-          <i-solar:moon-sleep-bold v-else-if="camera.detectionSettings?.snooze" class="w-3 h-3 text-amber-400" />
+        <span class="text-xs font-semibold p-2 bg-black/60 rounded-full text-white flex items-center gap-1 min-w-0">
+          <span class="truncate">{{ camera.name }}</span>
+          <i-fluent:video-off-32-filled v-if="camera.disabled" class="w-3 h-3 text-red-400 shrink-0" />
+          <i-solar:moon-sleep-bold v-else-if="camera.detectionSettings?.snooze" class="w-3 h-3 text-amber-400 shrink-0" />
         </span>
 
         <template v-if="!selectionMode">

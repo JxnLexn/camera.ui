@@ -1,13 +1,37 @@
 <template>
   <div class="flex flex-col">
-    <h1 v-if="!smBreakpoint" class="page-title">
-      {{ $t('views.faces.title') }}
-    </h1>
+    <div v-if="!smBreakpoint" class="flex items-center justify-between">
+      <h1 class="page-title">
+        {{ $t('views.faces.title') }}
+      </h1>
+      <Button
+        v-if="faceStore.knownFaces.value.length"
+        v-tooltip.bottom="{ value: $t('views.faces.rescan_events') }"
+        severity="secondary"
+        text
+        rounded
+        class="cui-icon-lg relative z-2"
+        :loading="rescanning"
+        @click="rescanFaces"
+      >
+        <template #icon>
+          <i-mdi:refresh width="100%" height="100%" />
+        </template>
+      </Button>
+    </div>
 
     <CuiTopbarSlot position="left">
       <Button severity="secondary" text class="cui-button p-2 text-color non-draggable-region" @click="$router.push('/menu')">
         <template #icon>
           <i-weui:back-filled class="w-6 h-6" />
+        </template>
+      </Button>
+    </CuiTopbarSlot>
+
+    <CuiTopbarSlot position="right">
+      <Button v-if="faceStore.knownFaces.value.length" severity="secondary" class="cui-button p-2 text-color" text rounded :loading="rescanning" @click="rescanFaces">
+        <template #icon>
+          <i-mdi:refresh width="100%" height="100%" />
         </template>
       </Button>
     </CuiTopbarSlot>
@@ -40,18 +64,6 @@
         <section class="mb-6 p-px">
           <div class="flex items-center justify-between mb-3">
             <span class="card-title m-0!">{{ $t('views.faces.known_faces') }} ({{ faceStore.knownFaces.value.length }})</span>
-            <Button
-              v-if="faceStore.knownFaces.value.length"
-              v-tooltip.top="$t('views.faces.rescan_events')"
-              severity="secondary"
-              text
-              rounded
-              class="cui-icon-lg"
-              :loading="rescanning"
-              @click="rescanFaces"
-            >
-              <template #icon><i-mdi:refresh class="w-4 h-4" /></template>
-            </Button>
           </div>
 
           <div

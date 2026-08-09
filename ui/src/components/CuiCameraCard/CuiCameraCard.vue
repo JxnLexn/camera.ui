@@ -228,8 +228,8 @@
               class="w-[10px] h-[10px] rounded-full shadow-md"
               :class="isDisabled ? 'bg-gray-500' : nvrPlaybackVisible ? 'bg-sky-500' : streamFinishedLoading ? 'bg-red-500' : 'bg-gray-500'"
             />
-            <div class="ml-auto flex items-center gap-2">
-              <span v-if="showCameraName" class="text-sm font-semibold p-2 bg-black/60 rounded-xl text-white">{{ cameraName }}</span>
+            <div class="ml-auto flex items-center gap-2 min-w-0">
+              <span v-if="showCameraName" class="text-sm font-semibold p-2 bg-black/60 rounded-xl text-white truncate">{{ cameraName }}</span>
               <i-material-symbols:info-outline
                 v-if="codecDegradedTooltip"
                 v-tooltip.bottom="{ value: codecDegradedTooltip }"
@@ -581,16 +581,16 @@
           >
             <div class="w-9 h-1 rounded-full bg-surface-400/50" />
           </div>
-          <div class="flex items-center gap-2">
-            <ProgressSpinner v-if="streamIsLoading" stroke-width="5" class="w-[10px] h-[10px]" :class="nvrPlaybackVisible ? 'nvr-spinner' : ''" />
+          <div class="flex items-center gap-2 min-w-0">
+            <ProgressSpinner v-if="streamIsLoading" stroke-width="5" class="w-[10px] h-[10px] shrink-0" :class="nvrPlaybackVisible ? 'nvr-spinner' : ''" />
             <div
               v-else
-              class="w-[10px] h-[10px] rounded-full"
+              class="w-[10px] h-[10px] rounded-full shrink-0"
               :class="isDisabled && !nvrPlaybackVisible ? 'bg-gray-500' : nvrPlaybackVisible ? 'bg-sky-500' : 'bg-primary-500'"
             ></div>
-            <span class="text-base font-semibold">{{ cameraName }}</span>
-            <i-fluent:video-off-32-filled v-if="isDisabled" v-tooltip.top="{ value: $t('views.camera.camera_disabled') }" class="w-4 h-4 text-red-400" />
-            <i-solar:moon-sleep-bold v-else-if="isSnoozed" v-tooltip.top="{ value: $t('views.camera.camera_snoozed') }" class="w-4 h-4 text-amber-400" />
+            <span class="text-base font-semibold truncate">{{ cameraName }}</span>
+            <i-fluent:video-off-32-filled v-if="isDisabled" v-tooltip.top="{ value: $t('views.camera.camera_disabled') }" class="w-4 h-4 text-red-400 shrink-0" />
+            <i-solar:moon-sleep-bold v-else-if="isSnoozed" v-tooltip.top="{ value: $t('views.camera.camera_snoozed') }" class="w-4 h-4 text-amber-400 shrink-0" />
           </div>
 
           <div class="ml-auto"></div>

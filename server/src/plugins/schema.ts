@@ -9,6 +9,7 @@ import type {
   JsonSchemaButton,
   JsonSchemaEnum,
   JsonSchemaNumber,
+  JsonSchemaObject,
   JsonSchemaString,
   JsonSchemaSubmit,
   JsonSchemaWithoutCallbacks,
@@ -35,6 +36,10 @@ export function isEnumType(schema: JsonSchemaWithoutKey): schema is JsonSchemaEn
 
 export function isArrayType(schema: JsonSchemaWithoutKey): schema is JsonSchemaArray {
   return schema.type === 'array';
+}
+
+export function isObjectType(schema: JsonSchemaWithoutKey): schema is JsonSchemaObject {
+  return schema.type === 'object';
 }
 
 export function isButtonType(schema: JsonSchemaWithoutKey): schema is JsonSchemaButton {
@@ -124,6 +129,14 @@ export function generateDefaultValue(schema: JsonSchema): any {
       return false;
     case 'array':
       return [];
+    case 'object': {
+      const value: Record<string, any> = {};
+      for (const property of (schema).properties ?? []) {
+        if (isButtonType(property) || isSubmitType(property)) continue;
+        value[property.key] = generateDefaultValue(property);
+      }
+      return value;
+    }
     default:
       return undefined;
   }
@@ -230,6 +243,9 @@ export function removeCallbacksFromSchema(schema: JsonSchemaWithoutKey): JsonSch
   if (isArrayType(rest) && rest.items) {
     rest.items = removeCallbacksFromSchema(rest.items);
   }
+  if (isObjectType(rest) && rest.properties) {
+    rest.properties = rest.properties.map((property: JsonSchemaWithoutCallbacks) => removeCallbacksFromSchema(property));
+  }
 
   return rest as JsonSchemaWithoutCallbacks;
 }
@@ -319,6 +335,16 @@ export function validateValue(value: any, schema: JsonSchemaWithoutKey): boolean
     case 'array':
       if (!Array.isArray(value)) return false;
       return value.every((item) => validateValue(item, (schema as JsonSchemaArray).items));
+
+    case 'object': {
+      if (typeof value !== 'object' || value === null || Array.isArray(value)) return false;
+      const record = value as Record<string, any>;
+      return ((schema as JsonSchemaObject).properties ?? []).every((property) => {
+        const propertyValue = record[property.key];
+        if (propertyValue === undefined) return !property.required;
+        return validateValue(propertyValue, property);
+      });
+    }
 
     default:
       return true;
@@ -413,6 +439,10 @@ export function validateConfig(config: Record<string, any>, schemas: JsonSchema[
             }
           });
         }
+      } else if (isObjectType(schema)) {
+        if (!validateValue(value, schema)) {
+          fieldErrors.push('Invalid object value');
+        }
       }
     }
 
@@ -497,6 +527,16 @@ export function generateZodSchemaField(schema: JsonSchema): zod.ZodTypeAny {
       const schemaItems = schema.items ? generateZodSchemaField(schema.items as any) : zod.any();
       const arraySchema = zod.array(schemaItems);
       return schema.required ? arraySchema : arraySchema.optional();
+
+    case 'object': {
+      const shape: Record<string, zod.ZodTypeAny> = {};
+      for (const property of (schema).properties ?? []) {
+        if (isButtonType(property) || isSubmitType(property)) continue;
+        shape[property.key] = generateZodSchemaField(property);
+      }
+      const objectSchema = zod.object(shape);
+      return (schema).required ? objectSchema : objectSchema.optional();
+    }
 
     default:
       return (schema as any).required ? zod.any() : zod.any().optional();

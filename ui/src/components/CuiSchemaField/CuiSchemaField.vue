@@ -143,7 +143,9 @@
             v-if="!schemaField.multiple"
             v-bind="field"
             :model-value="fieldValue"
-            :options="schemaField.enum"
+            :options="enumOptions"
+            option-label="label"
+            option-value="value"
             :invalid="errors.length > 0"
             :disabled="schemaField.readonly"
             :placeholder="schemaField.placeholder"
@@ -155,7 +157,9 @@
             v-else
             v-bind="field"
             :model-value="fieldValue"
-            :options="schemaField.enum"
+            :options="enumOptions"
+            option-label="label"
+            option-value="value"
             :invalid="errors.length > 0"
             :disabled="schemaField.readonly"
             :placeholder="schemaField.placeholder"
@@ -213,6 +217,29 @@
       <Message v-if="schemaField.description" severity="secondary" variant="simple" size="small" class="cui-input-hint">
         {{ schemaField.description }}
       </Message>
+    </template>
+
+    <template v-else-if="isObjectType(schemaField) && schemaField.properties">
+      <div class="flex flex-col gap-6 border border-color-inner rounded-lg p-4">
+        <div v-if="arrayItem" class="flex items-center">
+          <span class="text-color text-sm">{{ schemaField.title }}</span>
+          <Button text rounded severity="danger" class="cui-icon-md ml-auto" :loading @click="removeArrayItem(arrayItem.key, arrayItem.index)">
+            <template #icon>
+              <i-mdi:close />
+            </template>
+          </Button>
+        </div>
+        <CuiSchemaField
+          v-for="property in schemaField.properties"
+          :key="property.key"
+          v-model="modelValue"
+          :schema-field="property"
+          :config-key="`${configKey}.${property.key}`"
+          :loading
+          @on-action="(state: any) => emit('onAction', state)"
+          @on-submit="(state: any) => emit('onSubmit', state)"
+        />
+      </div>
     </template>
 
     <template v-else-if="isArrayType(schemaField) && schemaField.items">
@@ -280,6 +307,7 @@ import {
   isButtonType,
   isEnumType,
   isNumberType,
+  isObjectType,
   isStringType,
   isSubmitType,
   isValidableStringType,
@@ -336,6 +364,12 @@ const qrCode = computedAsync<string | undefined>(
   undefined,
   { lazy: true },
 );
+
+const enumOptions = computed(() => {
+  if (!isEnumType(schemaField.value)) return [];
+  const labels = schemaField.value.enumLabels;
+  return schemaField.value.enum.map((value) => ({ label: labels?.[value] ?? value, value }));
+});
 
 const imageSrc = computed(() => {
   if (isStringType(schemaField.value) && schemaField.value.format === 'image') {
