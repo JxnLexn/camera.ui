@@ -16,7 +16,8 @@ async function migratePtzLead(ctx: MigrationContext): Promise<void> {
       const autotrack = camera?.ptzAutotrack as unknown as Record<string, unknown> | undefined;
       if (!autotrack || typeof autotrack.leadFrames !== 'number') continue;
 
-      const fps = camera.frameWorkerSettings?.fps || 10;
+      // fps was a camera setting back then, v2-1-4 removed it
+      const fps = (camera.frameWorkerSettings as { fps?: number } | undefined)?.fps ?? 10;
       autotrack.leadMs = leadFramesToMs(autotrack.leadFrames, fps);
       delete autotrack.leadFrames;
 

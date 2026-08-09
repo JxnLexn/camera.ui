@@ -1264,29 +1264,6 @@
           <Message severity="secondary" variant="simple" size="small" class="cui-input-hint">
             {{ $t('components.camera_options.frame_worker_hint') }}
           </Message>
-          <Field v-slot="{ errors }" :model-value="cameraForm.frameWorkerSettings.fps" name="frameWorkerSettings.fps" as="div" class="flex flex-col field-gap">
-            <label for="frameWorkerSettings.fps" class="cui-label">{{ $t('components.form.label.fps') }}</label>
-            <InputGroup>
-              <InputNumber
-                :model-value="cameraForm.frameWorkerSettings.fps"
-                :invalid="errors.length > 0"
-                :loading="isLoading"
-                :min="0"
-                show-buttons
-                :use-grouping="false"
-                @value-change="(e) => (cameraForm.frameWorkerSettings.fps = (e as any) ?? undefined)"
-                @input="(e) => (cameraForm.frameWorkerSettings.fps = (e.value as any) ?? undefined)"
-              />
-            </InputGroup>
-            <Transition name="fade">
-              <ErrorMessage name="frameWorkerSettings.fps" class="cui-input-error" />
-            </Transition>
-
-            <Message v-if="!errors.length" severity="secondary" variant="simple" size="small" class="cui-input-hint">{{
-              $t('components.form.hint.frameworker_fps')
-            }}</Message>
-          </Field>
-
           <Field
             v-slot="{ errors }"
             :model-value="cameraForm.frameWorkerSettings.decoder?.hardware ?? 'auto'"
@@ -1377,32 +1354,34 @@
           <div class="w-full flex flex-col gap-2">
             <Field
               v-slot="{ field, errors }"
-              :model-value="cameraForm.frameWorkerSettings.hqSnapshots"
+              :model-value="cameraForm.frameWorkerSettings.mainStreamAnalysis"
               :value="true"
               :unchecked-value="false"
               type="checkbox"
-              name="frameWorkerSettings.hqSnapshots"
+              name="frameWorkerSettings.mainStreamAnalysis"
               as="div"
               class="flex flex-col field-gap cui-toggle-switch"
             >
               <div class="flex items-center gap-4">
                 <div class="flex flex-col field-switch-gap">
-                  <label for="frameWorkerSettings.hqSnapshots" class="cui-label-switch">{{ $t('components.form.label.hq_snapshots') }}</label>
+                  <label for="frameWorkerSettings.mainStreamAnalysis" class="cui-label-switch">{{ $t('components.form.label.main_stream_analysis') }}</label>
 
-                  <Message severity="secondary" variant="simple" size="small" class="cui-input-switch-hint">{{ $t('components.form.hint.hq_snapshots') }}</Message>
+                  <Message severity="secondary" variant="simple" size="small" class="cui-input-switch-hint">{{
+                    $t('components.form.hint.main_stream_analysis')
+                  }}</Message>
 
                   <Transition name="fade">
-                    <ErrorMessage name="frameWorkerSettings.hqSnapshots" class="cui-input-switch-error" />
+                    <ErrorMessage name="frameWorkerSettings.mainStreamAnalysis" class="cui-input-switch-error" />
                   </Transition>
                 </div>
 
                 <ToggleSwitch
-                  :model-value="cameraForm.frameWorkerSettings.hqSnapshots"
+                  :model-value="cameraForm.frameWorkerSettings.mainStreamAnalysis"
                   v-bind="field"
                   :invalid="errors.length > 0"
                   :loading="isLoading"
                   class="ml-auto shrink-0"
-                  @value-change="(e) => (cameraForm.frameWorkerSettings.hqSnapshots = e)"
+                  @value-change="(e) => (cameraForm.frameWorkerSettings.mainStreamAnalysis = e)"
                 />
               </div>
             </Field>

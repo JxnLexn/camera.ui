@@ -123,8 +123,7 @@ async function onSave() {
       sources: ['high', 'mid', 'low'],
     },
     frameWorkerSettings: {
-      fps: 10,
-      hqSnapshots: false,
+      mainStreamAnalysis: false,
     },
     snapshotSettings: {
       autoRefresh: false,

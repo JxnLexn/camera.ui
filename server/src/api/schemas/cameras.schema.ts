@@ -23,7 +23,7 @@ function createDefaultDetectionZone() {
       [100, 100],
       [0, 100],
     ] as [number, number][],
-    type: 'contain' as const,
+    type: 'intersect' as const,
     filter: 'include' as const,
     labels: ['motion', 'person', 'vehicle', 'animal'] as DetectionLabel[],
     isPrivacyMask: false,
@@ -330,8 +330,7 @@ export const frameWorkerDecoderSchema = zod
   .strict();
 
 export const frameWorkerSettingsSchema = zod.object({
-  fps: zod.number().min(0, 'Minimum 0 fps').max(30, 'Maximum 30 fps'),
-  hqSnapshots: zod.boolean().default(false),
+  mainStreamAnalysis: zod.boolean().default(false),
   decoder: frameWorkerDecoderSchema.optional(),
   workerDecoder: frameWorkerDecoderSchema
     .nullable()
@@ -464,8 +463,7 @@ export const createCameraBaseSchema = zod
     ptzAutotrack: ptzAutotrackSettingsSchema.default(DEFAULT_PTZ_AUTOTRACK_SETTINGS),
     recordingSettings: recordingSettingsSchema.default(DEFAULT_RECORDING_SETTINGS),
     frameWorkerSettings: frameWorkerSettingsSchema.default({
-      fps: 10,
-      hqSnapshots: false,
+      mainStreamAnalysis: false,
     }),
   })
   .strict();
