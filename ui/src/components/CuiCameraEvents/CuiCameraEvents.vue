@@ -19,7 +19,9 @@
 
           <template v-else>
             <div v-for="item in visibleEvents" :key="item.key" class="event-card flex-none w-[140px] mr-3">
+              <EpisodeCard v-if="item.episode" :episode="item.episode" :camera-by-id="cameraById" :click-disabled="isSwiping" />
               <CameraEvent
+                v-else
                 :event="item.event"
                 :seg-index="item.segIndex"
                 :segment="item.segment"
@@ -124,6 +126,7 @@ const { segmentItems, isLoading, hasMore, loadMore, loadThumbnails } = useDetect
   realtime: true,
   pageSize: pageSize.value,
   filter: { hasDetections: true },
+  withEpisodes: true,
 });
 
 const { start: startSwipeReset } = useTimeoutFn(
