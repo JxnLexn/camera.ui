@@ -1,3 +1,5 @@
+import { isPublicFqdnUrl } from '@camera.ui/transport/transports/nativeHttp';
+
 import { getConnection } from '@/connection/instance.js';
 import { isCapacitor } from '@/connection/runtime.js';
 
@@ -75,9 +77,9 @@ async function resolveBlobForWeb(options: DownloadOptions): Promise<Blob> {
     return response.blob();
   }
 
-  // Cross-origin server URL on PWA / browser. Use bare fetch with the same
-  // auth headers axios would attach — keeps streaming chunked responses
-  // working without going through axios's transformation pipeline.
+  // Cross-origin server URL fetched in the page context (browser, PWA, and
+  // the app's webview for LAN endpoints). Bare fetch with the auth headers
+  // axios would attach keeps streaming chunked responses working.
   const response = await fetch(buildAbsoluteUrl(options.url), {
     headers: buildAuthHeaders(),
     credentials: 'include',
@@ -133,7 +135,10 @@ async function downloadViaCapacitor(options: DownloadOptions): Promise<void> {
 
   let writtenUri: string;
 
-  if ('url' in options) {
+  // FileTransfer downloads in a native session that only knows the system
+  // trust store — it bypasses the CertTrust hook, so direct LAN/IP endpoints
+  // signed by the instance CA must be fetched in the webview instead.
+  if ('url' in options && isPublicFqdnUrl(buildAbsoluteUrl(options.url))) {
     const { FileTransfer } = await import('@capacitor/file-transfer');
     const fullPath = await Filesystem.getUri({ path: options.filename, directory: Directory.Cache });
     await FileTransfer.downloadFile({
@@ -144,7 +149,7 @@ async function downloadViaCapacitor(options: DownloadOptions): Promise<void> {
     });
     writtenUri = fullPath.uri;
   } else {
-    const blob = 'blob' in options ? options.blob : await (await fetch(options.dataUrl)).blob();
+    const blob = await resolveBlobForWeb(options);
     const base64 = await blobToBase64(blob);
     const written = await Filesystem.writeFile({
       path: options.filename,
