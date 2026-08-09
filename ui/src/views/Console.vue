@@ -161,9 +161,7 @@ const recording = ref(Logger.isRecording());
 
 const nativePlatform = ref('web');
 if (isCapacitor) {
-  import('@capacitor/core')
-    .then(({ Capacitor }) => (nativePlatform.value = Capacitor.getPlatform()))
-    .catch(() => {});
+  import('@capacitor/core').then(({ Capacitor }) => (nativePlatform.value = Capacitor.getPlatform())).catch(() => {});
 }
 
 let offEntries: (() => void) | undefined;

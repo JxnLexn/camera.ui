@@ -75,12 +75,25 @@ export function formatCompactNumber(value: number): string {
 }
 
 export function notificationImageUrl(imageUrl?: string): string | undefined {
-  if (!imageUrl?.startsWith('/api/')) return undefined;
+  if (!imageUrl) return undefined;
+
+  let path = imageUrl;
+  if (!path.startsWith('/')) {
+    try {
+      const parsed = new URL(path);
+      path = parsed.pathname + parsed.search;
+    } catch {
+      return undefined;
+    }
+  }
+  if (!path.startsWith('/api/')) return undefined;
+
   const connection = useConnection();
   const token = connection.accessToken.value;
   if (!token) return undefined;
   const origin = connection.endpoint.value ?? location.origin;
-  return `${origin}${imageUrl}?token=${token}${proxySessionQuery()}`;
+  const separator = path.includes('?') ? '&' : '?';
+  return `${origin}${path}${separator}token=${token}${proxySessionQuery()}`;
 }
 
 export function getImageUrl(img: string = 'logo-512.png'): string {
