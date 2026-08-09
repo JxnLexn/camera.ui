@@ -37,6 +37,7 @@ export const DEFAULT_CONFIG: IConfig = {
   host: DEFAULT_CONFIG_HOST,
   ssl: DEFAULT_CONFIG_SSL,
   logger: DEFAULT_CONFIG_LOGGER,
+  betaUpdates: false,
   plugins: DEFAULT_CONFIG_PLUGINS,
   cors: {
     origins: [],

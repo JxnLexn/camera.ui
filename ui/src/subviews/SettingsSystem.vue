@@ -167,7 +167,7 @@ const { t } = useI18n();
 const { isElectronApp, electron } = useElectron();
 const { isOnline } = useConnection();
 const { restarting, beginServerRestart } = useServerRestart();
-const { isBeta, setChannel } = useUpdateChannel();
+const { isBeta, setBeta } = useUpdateChannel();
 const { appVersion, nativeVersion, refreshAppVersion } = useAppVersion();
 
 const authStore = useAuthStore();
@@ -181,7 +181,6 @@ const { mutateAsync: resetServer, isPending: resetServerLoading } = serverQuery.
 
 const currentVersion = ref(t('views.settings.unknown'));
 const currentElectronVersion = ref(t('views.settings.unknown'));
-const latestAlphaVersion = ref<string>();
 const latestBetaVersion = ref<string>();
 const latestVersion = ref<string>();
 const latestElectronVersion = ref<string>();
@@ -219,14 +218,6 @@ const updateAvailable = computed(() => {
   return false;
 });
 
-const updateAvailableAlpha = computed(() => {
-  if (installedVersion.value && latestAlphaVersion.value) {
-    return compareVersions(latestAlphaVersion.value, installedVersion.value) === 1;
-  }
-
-  return false;
-});
-
 const updateAvailableBeta = computed(() => {
   if (isBeta.value && installedVersion.value && latestBetaVersion.value) {
     return compareVersions(latestBetaVersion.value, installedVersion.value) === 1;
@@ -236,11 +227,9 @@ const updateAvailableBeta = computed(() => {
 });
 
 const installVersion = computed(() => {
-  const candidates = [
-    updateAvailable.value ? latestVersion.value : undefined,
-    updateAvailableBeta.value ? latestBetaVersion.value : undefined,
-    updateAvailableAlpha.value ? latestAlphaVersion.value : undefined,
-  ].filter((v): v is string => Boolean(v));
+  const candidates = [updateAvailable.value ? latestVersion.value : undefined, updateAvailableBeta.value ? latestBetaVersion.value : undefined].filter((v): v is string =>
+    Boolean(v),
+  );
 
   if (!candidates.length) return undefined;
 
@@ -248,7 +237,7 @@ const installVersion = computed(() => {
 });
 
 function onBetaToggle(next: boolean | string | undefined): void {
-  setChannel(next === true ? 'beta' : 'production');
+  setBeta(next === true);
 }
 
 async function downloadCert(): Promise<void> {
@@ -401,7 +390,6 @@ watch(
   versionInfo,
   () => {
     latestVersion.value = versionInfo.value?.['dist-tags'].latest;
-    latestAlphaVersion.value = versionInfo.value?.['dist-tags'].alpha;
     latestBetaVersion.value = versionInfo.value?.['dist-tags'].beta;
   },
   { deep: true, immediate: true },

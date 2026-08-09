@@ -65,6 +65,7 @@ export const patchConfigSchema = zod
     ffmpegPath: zod.string().trim().optional(),
     ssl: iConfigSSLSchema,
     logger: loggerSchema,
+    betaUpdates: zod.boolean().default(false),
     plugins: pluginsSchema,
     cors: corsSchema,
     workers: workersSchema,

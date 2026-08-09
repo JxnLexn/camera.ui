@@ -193,7 +193,7 @@ export class ServerNamespace {
 
   private async checkServerUpdate(): Promise<void> {
     try {
-      this.serverUpdate = await checkForUpdate(APP_SERVER_NAME, ConfigService.VERSION);
+      this.serverUpdate = await checkForUpdate(APP_SERVER_NAME, ConfigService.VERSION, 'beta', this.configService.config.betaUpdates ?? false);
     } catch {
       // ignore — keep the last known state
     }

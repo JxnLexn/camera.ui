@@ -1,54 +1,48 @@
+import { ConfigQuery } from '@/api/routes/config.js';
 import { CLOUD_SERVICE_URL } from '@/common/constants.js';
 import { isCapacitor } from '@/connection/index.js';
 
-const PREF_KEY = 'updateChannel';
+import type { IConfig } from '@shared/types';
+
 const BASE_URL = `${CLOUD_SERVICE_URL}/api/updates/latest`;
 
-type Channel = 'production' | 'beta';
-
-const _channel = useLocalStorage<Channel>(PREF_KEY, 'production');
-let _nativeSynced = false;
-
-async function applyNativeUrl(): Promise<void> {
+async function applyNativeUrl(beta: boolean): Promise<void> {
   if (!isCapacitor) return;
+
   try {
     const { CapacitorUpdater } = await import('@capgo/capacitor-updater');
-    const url = _channel.value === 'beta' ? `${BASE_URL}?channel=beta` : BASE_URL;
-    await CapacitorUpdater.setUpdateUrl({ url });
+    await CapacitorUpdater.setUpdateUrl({ url: beta ? `${BASE_URL}?channel=beta` : BASE_URL });
   } catch {
-    // plugin not ready — retried on the next setChannel / ensureLoaded
+    // plugin not ready — retried on the next config change
   }
 }
 
 export function useUpdateChannel() {
-  const isBeta = computed(() => _channel.value === 'beta');
+  const configQuery = new ConfigQuery();
+  const { data: config } = configQuery.getConfigQuery(true);
+  const { mutateAsync: patchConfig } = configQuery.patchConfigQuery();
 
-  const ensureLoaded = async (): Promise<void> => {
-    if (_nativeSynced || !isCapacitor) {
-      _nativeSynced = true;
-      return;
-    }
-    _nativeSynced = true;
-    try {
-      const { Preferences } = await import('@capacitor/preferences');
-      const stored = await Preferences.get({ key: PREF_KEY });
-      if (stored.value === 'beta' && _channel.value !== 'beta') _channel.value = 'beta';
-    } catch {
-      // first-launch / plugin not ready — keep the localStorage value
-    }
-    await applyNativeUrl();
-  };
+  const current = computed<IConfig | undefined>(() => (config.value && typeof config.value !== 'string' ? (config.value as IConfig) : undefined));
+  const isBeta = computed(() => current.value?.betaUpdates ?? false);
 
-  const setChannel = async (next: Channel): Promise<void> => {
-    if (next === _channel.value) return;
-    _channel.value = next;
-    await applyNativeUrl();
+  watch(
+    () => current.value?.betaUpdates,
+    (beta) => {
+      if (beta === undefined) return;
+      applyNativeUrl(beta);
+    },
+    { immediate: true },
+  );
+
+  const setBeta = async (next: boolean): Promise<void> => {
+    const config = current.value;
+    if (!config || config.betaUpdates === next) return;
+
+    await patchConfig({ configData: JSON.stringify({ ...config, betaUpdates: next }) });
   };
 
   return {
-    channel: _channel,
     isBeta,
-    ensureLoaded,
-    setChannel,
+    setBeta,
   };
 }

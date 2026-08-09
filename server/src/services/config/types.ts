@@ -60,6 +60,7 @@ export interface IConfig {
   ffmpegPath?: string;
   ssl: IConfigSSL;
   logger: Logger;
+  betaUpdates?: boolean;
   plugins: PluginsSettings;
   cors?: CorsConfig;
   workers?: WorkersConfig;

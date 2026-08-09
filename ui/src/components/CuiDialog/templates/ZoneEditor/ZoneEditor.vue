@@ -793,7 +793,7 @@ function addHandle(e: MouseEvent): void {
       name: newZoneName,
       points: [],
       filter: 'include',
-      type: 'contain',
+      type: 'intersect',
       labels: ['motion', 'person', 'vehicle', 'animal'],
       isPrivacyMask: false,
       color: getRandomHexColor(),

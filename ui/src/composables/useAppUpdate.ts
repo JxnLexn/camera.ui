@@ -58,8 +58,6 @@ export function setupAppUpdate() {
 }
 
 function setupCapacitorUpdates(): void {
-  useUpdateChannel().ensureLoaded();
-
   import('@capgo/capacitor-updater').then(({ CapacitorUpdater }) => {
     CapacitorUpdater.addListener('updateAvailable', () => {
       applyImpl = async () => {
