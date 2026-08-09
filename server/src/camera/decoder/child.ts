@@ -26,6 +26,7 @@ const ignorableLogMessages = [
   'Skipping invalid undecodable NALU',
   'reference picture missing during reorder',
   'Missing reference picture',
+  'First slice in a frame missing',
 ];
 
 @RPCClass
