@@ -10,4 +10,5 @@ export interface FrameWorkerChildInterface {
   updateFrameWorkerSettings(settings: CameraFrameWorkerSettings): void;
   updateInterfaceSettings(settings: CameraUiSettings): void;
   updateCameraName(name: string): void;
+  updateNvrRpc(namespace?: string): void;
 }

@@ -5,21 +5,18 @@ import { createHardwareContext } from '../hardware.js';
 
 import type { Logger } from '@camera.ui/common/logger';
 import type { FrameWorkerDecoderSettings } from '@camera.ui/sdk';
-import type { Frame } from 'node-av/lib';
 import type { HardwareContext } from 'node-av/api';
+import type { Frame } from 'node-av/lib';
+import type { AnalysisSource, FrameSnap } from './analysis-source.js';
+
+export type { FrameSnap };
 
 export interface FrameSourceConfig {
   streamUrl: string;
   snapshotUrl: string;
-  fps: number;
   decoder?: FrameWorkerDecoderSettings;
   snapshotTimeoutMs?: number;
   snapshotProvider?: () => Promise<Buffer | null>;
-}
-
-export interface FrameSnap {
-  frame: Frame;
-  id: number;
 }
 
 type Waiter = (snap: FrameSnap | undefined) => void;
@@ -135,7 +132,7 @@ export class FrameHandle implements AsyncDisposable {
   }
 }
 
-export class FrameSource {
+export class FrameSource implements AnalysisSource {
   private input?: Demuxer;
   private decoder?: Decoder;
   private filter?: FilterAPI;
@@ -173,7 +170,7 @@ export class FrameSource {
   }
 
   public get fps(): number {
-    return this._resolvedFps ?? this.config.fps;
+    return this._resolvedFps ?? 20;
   }
 
   public get lastError(): Error | undefined {
@@ -199,7 +196,6 @@ export class FrameSource {
         rtsp_transport: 'tcp',
         user_agent: 'camera.ui FrameWorker',
         avioflags: 'direct',
-        // fflags: 'nobuffer',
       },
     });
 
@@ -222,18 +218,16 @@ export class FrameSource {
       exitOnError: false,
     });
 
-    // user-configured fps, native stream rate as fallback
+    // the loop paces itself by pulling, the producer just keeps the slot fresh
     let nativeFps = videoStream.avgFrameRate.num / videoStream.avgFrameRate.den;
     if (!isFinite(nativeFps) || nativeFps <= 0 || isNaN(nativeFps)) {
       nativeFps = 20;
     }
-    this._resolvedFps = this.config.fps > 0 ? this.config.fps : nativeFps;
+    this._resolvedFps = nativeFps;
 
     this.logger.debug(`Detection stream: ${videoStream.codecpar.width}x${videoStream.codecpar.height} @ ${this._resolvedFps}fps`);
 
-    let filterChain = FilterPreset.chain(this._hardwareContext)
-      .filter('fps', { fps: this._resolvedFps })
-      .filter('setpts', { expr: `N/(${this._resolvedFps}*TB)` });
+    let filterChain = FilterPreset.chain(this._hardwareContext).filter('setpts', { expr: `N/(${this._resolvedFps}*TB)` });
 
     if (this._hardwareContext?.deviceType === AV_HWDEVICE_TYPE_OPENCL) {
       filterChain = filterChain.hwupload();

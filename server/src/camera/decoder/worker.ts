@@ -3,6 +3,7 @@ import { IS_DEV, IS_ELECTRON, isEqual, sleep, Subscribed } from '@camera.ui/comm
 import { fork } from 'node:child_process';
 import { container } from 'tsyringe';
 
+import { isNvrPluginName, nvrRpcNamespace } from '../../plugins/nvr.js';
 import { PLUGIN_STATUS } from '../../plugins/types.js';
 import { NamespaceManager } from '../../rpc/namespaces.js';
 import { isShuttingDown } from '../../shutdown-state.js';
@@ -24,6 +25,7 @@ import type {
 import type { ChildProcess } from 'node:child_process';
 import type { SocketService } from '../../api/websocket/index.js';
 import type { WorkerRuntime } from '../../api/websocket/types.js';
+import type { InternalEventBus, PluginEventPayload } from '../../internal-bus.js';
 import type { ProxyServer } from '../../rpc/index.js';
 import type { FrameWorkerChildInterface } from '../../rpc/interfaces/frameworker.js';
 import type { FrameWorkerNamespaces } from '../../rpc/namespaces.js';
@@ -216,7 +218,7 @@ export class FrameWorker extends Subscribed {
           if (property === 'frameWorkerSettings') {
             const newSettings = newData as CameraFrameWorkerSettings;
             const oldSettings = oldData as CameraFrameWorkerSettings;
-            if (newSettings.fps !== oldSettings.fps || !isEqual(this.effectiveDecoder(newSettings), this.effectiveDecoder(oldSettings), true)) {
+            if (!isEqual(this.effectiveDecoder(newSettings), this.effectiveDecoder(oldSettings), true)) {
               this.restart();
               return;
             }
@@ -257,6 +259,15 @@ export class FrameWorker extends Subscribed {
         }
       }),
     );
+
+    const bus = container.resolve<InternalEventBus>('internalBus');
+    for (const event of ['plugin:started', 'plugin:stopped', 'plugin:crashed'] as const) {
+      bus.onEvent(event, (payload) => {
+        if (!isNvrPluginName((payload as PluginEventPayload).pluginName)) return;
+        if (this.status !== PLUGIN_STATUS.STARTED) return;
+        this.pushChildUpdate('NVR namespace', this.frameWorkerChildProxy.updateNvrRpc(nvrRpcNamespace()));
+      });
+    }
   }
 
   private startWorkerProcess(): Promise<void> {
@@ -291,7 +302,7 @@ export class FrameWorker extends Subscribed {
     this.logger.trace('Worker path:', nodeDecoderPath);
 
     const env = this.buildWorkerEnv();
-    const processName = 'camera.ui - Frame Worker';
+    const processName = `camera.ui - Frame Worker [${this.camera.name}]`;
 
     this.process = fork(nodeDecoderPath, [processName], {
       env: {
@@ -425,6 +436,7 @@ export class FrameWorker extends Subscribed {
         ptzAutotrack: this.camera.ptzAutotrack,
         frameWorkerSettings: this.resolveFrameWorkerSettings(this.camera.frameWorkerSettings),
         interfaceSettings: this.camera.interfaceSettings,
+        nvrRpc: nvrRpcNamespace(),
       });
 
       this.setStatus(PLUGIN_STATUS.STARTED);
@@ -442,7 +454,7 @@ export class FrameWorker extends Subscribed {
   }
 
   private resolveFrameWorkerSettings(settings: CameraFrameWorkerSettings): CameraFrameWorkerSettings {
-    const resolved: CameraFrameWorkerSettings = { fps: settings.fps, hqSnapshots: settings.hqSnapshots };
+    const resolved: CameraFrameWorkerSettings = { mainStreamAnalysis: settings.mainStreamAnalysis };
     const decoder = this.effectiveDecoder(settings);
     if (decoder) {
       resolved.decoder = decoder;

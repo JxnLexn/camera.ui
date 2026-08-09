@@ -155,7 +155,6 @@ export class FrameWorkerChild {
       isolatedConnection: true,
     });
 
-    // Signal ready to Main Process
     this.sendMessage({ message: 'started', data: {} });
   }
 

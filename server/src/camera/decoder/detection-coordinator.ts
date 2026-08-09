@@ -1,20 +1,19 @@
 import { PromiseTimeout, sleep } from '@camera.ui/common/utils';
 import { isNoRespondersError, RPCClass, RPCMethod } from '@camera.ui/rpc';
 import { SensorType } from '@camera.ui/sdk';
-import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
-
 import { NamespaceManager } from '../../rpc/namespaces.js';
 import { DETECTION_SENSOR_TYPES } from '../../sensors/types.js';
 import { normalizeZone } from '../utils/filter.js';
 import { AudioDetectionLoop } from './audio-loop.js';
-import { BestShotStore, compositionBox } from './best-shot-store.js';
 import { CascadeManager } from './cascade-manager.js';
 import { DetectionPipeline } from './detection-pipeline.js';
+import { detectionRecord } from './debug/detection-record.js';
 import { DwellManager } from './dwell-manager.js';
-import { DetectionEventManager } from './event-manager.js';
+import { DetectionEventManager, MOMENT_RANK_ATTRIBUTE, MOMENT_RANK_OBJECT } from './event-manager.js';
 import { EventThumbnailer } from './event-thumbnailer.js';
 import { FrameScaler } from './frame-scaler.js';
+import { directionBetween, directionOf, MOMENT_FORMATS, MOMENT_QUALITY, momentWindow, unionBox } from './moment-crop.js';
+import { normalizePlateText } from './plate-vote.js';
 import { isVideoInputSpec, PluginRegistry } from './plugin-registry.js';
 import { PtzAutotracker } from './ptz/autotracker.js';
 import { ReconnectBackoff } from './reconnect-backoff.js';
@@ -24,6 +23,7 @@ import { DETECT_TIMEOUT_MS, ensureDetectionBoxes, MOTION_WIDTH_MAP } from './typ
 
 import type { Logger } from '@camera.ui/common/logger';
 import type { RPCClient } from '@camera.ui/rpc';
+import type { WorldObject } from '@camera.ui/rust-postprocessor';
 import type {
   AudioResult,
   BoundingBox,
@@ -35,7 +35,6 @@ import type {
   ClipEmbedding,
   ClipResult,
   Detection,
-  DetectionLabel,
   DetectionLine,
   DetectionZone,
   FaceDetection,
@@ -53,8 +52,9 @@ import type { CoordinatorSensorInfo, DetectionPluginInterface, DetectionResults 
 import type { CameraDeviceInterface } from '../../rpc/interfaces/device.js';
 import type { SensorWriteMessage } from '../../rpc/interfaces/sensor.js';
 import type { LineCrossingEvent, PipelineResult } from './detection-pipeline.js';
-import type { NormalizedDetectionZone, ProcessedDetectionData } from './event-manager.js';
+import type { NormalizedDetectionZone, ProcessedDetectionData, TrackedFaceDetection, TrackedLicensePlateDetection } from './event-manager.js';
 import type { LetterboxGeometry } from './frame-scaler.js';
+import type { CropWindow, MomentFormatName, MomentTarget } from './moment-crop.js';
 import type { RegisteredPlugin } from './plugin-registry.js';
 import type { FrameSourceConfig } from './sources/frame-source.js';
 import type { CoordinatorSourceUrl } from './types.js';
@@ -72,6 +72,7 @@ export interface DetectionCoordinatorConfig {
   ptzAutotrack: PtzAutotrackSettings;
   frameWorkerSettings: CameraFrameWorkerSettings;
   interfaceSettings: CameraUiSettings;
+  nvrRpc?: string;
 }
 
 interface PluginFrame {
@@ -80,19 +81,47 @@ interface PluginFrame {
   geometry: LetterboxGeometry;
 }
 
+interface AnalysisFrame {
+  frame: Frame;
+  scaler: FrameScaler;
+  isMainStream: boolean;
+}
+
+interface AttributeMomentCandidate {
+  label: string;
+  box: BoundingBox;
+  parentBox?: BoundingBox;
+  confidence: number;
+}
+
+interface RenderedMoment {
+  strip: Buffer;
+  card?: Buffer;
+  windows: Partial<Record<MomentFormatName, CropWindow>>;
+}
+
+const MOMENT_EVENTS = new Set(['objectEntered', 'objectWoke', 'objectRecovered', 'bestShotUpdated']);
+const MOMENT_MOVING_SPEED = 0.05;
+const MOMENT_ATTRIBUTE_MIN_AREA = 600;
+
 const DEFAULT_CASCADE_TIMEOUT = 10;
 const OBJECT_DWELL_SECONDS = 2;
 const SECONDARY_BBOX_TTL_MS = 2000;
 const CADENCE_MIN_SAMPLES = 5;
 const CADENCE_OUTLIER_BAND = 2.5;
 const CADENCE_OUTLIER_RESEED = 5;
+const IDLE_TICK_MS = 200;
+const ACTIVE_TICK_MS = 100;
+const MOTION_INTERVAL_MS = 200;
+const TICK_SLACK_MS = 20;
+const MAIN_STREAM_HOLD_MS = 5000;
+const PERF_REPORT_MS = 60_000;
 
 @RPCClass
 export class DetectionCoordinator {
   private frameSource: FrameSource;
   private frameScaler: FrameScaler;
 
-  private readonly bestShots = new BestShotStore();
   private readonly plugins = new PluginRegistry();
   private readonly pipeline: DetectionPipeline;
   private readonly secondaries: SecondaryStage;
@@ -102,6 +131,29 @@ export class DetectionCoordinator {
   private readonly eventManager: DetectionEventManager;
   private readonly cascade = new CascadeManager();
   private readonly worldSpans = new Set<number>();
+
+  private hqUpgrade?: AnalysisFrame;
+  private mainStreamActive = false;
+  private idleSince = 0;
+  private lastMotionAt = 0;
+  private readonly perf = {
+    since: 0,
+    loopMs: 0,
+    idleTicks: 0,
+    activeTicks: 0,
+    mainFrames: 0,
+    switches: 0,
+    decodeMs: 0,
+    scaleMs: 0,
+    jpegMs: 0,
+    inferMs: 0,
+    secondaryMs: 0,
+    objects: 0,
+    faces: 0,
+    plates: 0,
+  };
+
+  private perfCpu = process.cpuUsage();
   private readonly dwell = new DwellManager();
   private readonly videoBackoff = new ReconnectBackoff();
 
@@ -145,7 +197,6 @@ export class DetectionCoordinator {
     const frameSourceConfig: FrameSourceConfig = {
       streamUrl: config.streamUrl,
       snapshotUrl: config.snapshotUrl,
-      fps: this.config.frameWorkerSettings.fps,
       decoder: this.config.frameWorkerSettings.decoder,
     };
 
@@ -169,7 +220,7 @@ export class DetectionCoordinator {
     }
 
     this.eventManager = new DetectionEventManager(config.cameraId, this.proxy, this.logger);
-    this.eventManager.setBestShotResolver((trackIds, label) => this.bestShots.bestOf(trackIds, label));
+    this.eventManager.updateNvrRpc(config.nvrRpc);
     this.eventManager.onEventEnd(() => this.handleEventEnded());
     this.eventManager.onSegmentClosed(() => {
       if (!this.dwell.hasActive() && this.worldSpans.size === 0) {
@@ -187,7 +238,20 @@ export class DetectionCoordinator {
       },
       config.availableSources,
     );
-    this.thumbnailer.sync(this.config.frameWorkerSettings.hqSnapshots === true);
+    this.thumbnailer.sync(this.config.frameWorkerSettings.mainStreamAnalysis === true);
+
+    // debugging
+    detectionRecord.sources({
+      roles: config.availableSources?.map((s) => s.role),
+      mainStreamAnalysis: this.config.frameWorkerSettings.mainStreamAnalysis === true,
+      hasMainStream: this.thumbnailer.hasMainStream,
+      cascade: this.cascadeEnabled,
+      cascadeTimeout: this.cascadeTimeoutSeconds,
+      motionTimeout: this.config.detectionSettings.motion.timeout,
+      audioTimeout: this.config.detectionSettings.audio.timeout,
+      suppressStatic: this.config.detectionSettings.object.suppressStatic ?? true,
+      motionResolution: this.motionResolution,
+    });
 
     this.audioLoop = new AudioDetectionLoop(
       {
@@ -274,7 +338,12 @@ export class DetectionCoordinator {
 
   public updateFrameWorkerSettings(settings: CameraFrameWorkerSettings): void {
     this.config.frameWorkerSettings = settings;
-    this.thumbnailer.sync(settings.hqSnapshots === true);
+    this.thumbnailer.sync(settings.mainStreamAnalysis === true);
+  }
+
+  public updateNvrRpc(namespace?: string): void {
+    this.config.nvrRpc = namespace;
+    this.eventManager.updateNvrRpc(namespace);
   }
 
   public updateInterfaceSettings(settings: CameraUiSettings): void {
@@ -379,7 +448,7 @@ export class DetectionCoordinator {
             this.ingestAssistedObjects(sensorId, objects);
             // processExternal only adapts the shape, external boxes get no real tracking
             const objectDetections = this.pipeline.processExternal(objects.detections);
-            await this.runSecondariesAndThumbnails(peeked.frame, objectDetections, results);
+            await this.runSecondariesAndThumbnails({ frame: peeked.frame, scaler: this.frameScaler, isMainStream: false }, objectDetections, results);
             this.ingestResultsForAllSecondaries(results);
             const snapshot = this.buildSnapshot();
             if (results.thumbnails && results.thumbnails.length > 0) {
@@ -403,7 +472,7 @@ export class DetectionCoordinator {
             // real boxes: crop the object like the frame pipeline, so face and
             // plate secondaries run on the subject instead of the whole scene
             const objectDetections = this.pipeline.processExternal(objects.detections);
-            await this.runSecondariesAndThumbnails(fetched.frame, objectDetections, results);
+            await this.runSecondariesAndThumbnails({ frame: fetched.frame, scaler: this.frameScaler, isMainStream: false }, objectDetections, results);
             this.ingestResultsForAllSecondaries(results);
             const snapshot = this.buildSnapshot();
             if (results.thumbnails && results.thumbnails.length > 0) {
@@ -413,8 +482,7 @@ export class DetectionCoordinator {
           } else {
             const sceneJpeg = await this.secondaries.detectFullFrame(fetched.frame, results);
             try {
-              // face/plate crops feed the segment attributes
-              results.thumbnails = await this.secondaries.generateThumbnails(fetched.frame, this.frameScaler, false, results);
+              results.thumbnails = await this.secondaries.generateThumbnails(fetched.frame, this.frameScaler, results);
             } catch (error) {
               this.logger.error('Thumbnail generation error:', error);
             }
@@ -585,7 +653,7 @@ export class DetectionCoordinator {
     this.proxy.publish(NamespaceManager.sensorCameraViewNamespaces(this.config.cameraId).sensorWriteSubject, msg);
   }
 
-  private buildSnapshot(): ProcessedDetectionData {
+  private buildSnapshot(at = Date.now()): ProcessedDetectionData {
     const cs = this.currentDetectionState;
     return {
       hasCascadeTrigger: this.cascade.isActive,
@@ -607,7 +675,7 @@ export class DetectionCoordinator {
       clipEmbeddingModel: cs.clipEmbeddingModel,
       thumbnails: undefined,
       lineCrossings: cs.lineCrossings,
-      timestamp: Date.now(),
+      timestamp: at,
       segmentTimeout: 10,
       expectedEndTime: this.dwell.maxExpiry(),
       detectionZones: this.getNormalizedDetectionZones(),
@@ -897,6 +965,8 @@ export class DetectionCoordinator {
     this.logger.debug('Stopping video detection loop');
     this.loopRunning = false;
     this.worldSpans.clear();
+    this.mainStreamActive = false;
+    this.idleSince = 0;
 
     const doStop = async () => {
       await this.frameSource.stop();
@@ -941,21 +1011,41 @@ export class DetectionCoordinator {
         let lastFrameId = -1;
 
         while (this.loopRunning) {
+          const tickStart = Date.now();
           const snap = await this.frameSource.nextFrame(lastFrameId);
           if (!snap) break; // source ended (stop or EOF)
 
           lastFrameId = snap.id;
           frameCount++;
 
+          // motion always reads the low stream: switching its input resolution
+          // would reset the background model on every transition
+          const analysis = await this.acquireAnalysisFrame(snap.frame);
+          // debugging
+          detectionRecord.setFrame(analysis.isMainStream ? 'main' : 'low', analysis.frame.width, analysis.frame.height);
           try {
-            await this.processRawFrame(snap.frame);
+            await this.processRawFrame(analysis, snap.frame);
           } finally {
             try {
+              if (this.hqUpgrade) {
+                this.hqUpgrade.frame[Symbol.dispose]?.();
+                this.hqUpgrade = undefined;
+              }
+              if (analysis.frame !== snap.frame) analysis.frame[Symbol.dispose]?.();
               snap.frame[Symbol.dispose]?.();
             } catch {
               // best-effort
             }
           }
+
+          this.updateStreamState();
+          if (this.mainStreamActive) this.perf.activeTicks++;
+          else this.perf.idleTicks++;
+          this.reportPerf();
+
+          const remaining = (this.mainStreamActive ? ACTIVE_TICK_MS : IDLE_TICK_MS) - (Date.now() - tickStart);
+          if (remaining > 0) await sleep(remaining);
+          this.perf.loopMs += Date.now() - tickStart;
         }
 
         const streamError = this.frameSource.lastError;
@@ -987,17 +1077,141 @@ export class DetectionCoordinator {
     this.logger.debug('Detection loop ended');
   }
 
-  private async processRawFrame(rawFrame: Frame): Promise<void> {
+  private get mainStreamAvailable(): boolean {
+    return this.config.frameWorkerSettings.mainStreamAnalysis === true && this.thumbnailer.hasMainStream;
+  }
+
+  private async acquireAnalysisFrame(lowFrame: Frame): Promise<AnalysisFrame> {
+    if (this.mainStreamActive) {
+      const t0 = Date.now();
+      try {
+        const main = await this.thumbnailer.acquireHqFrame(0);
+        if (main) {
+          this.perf.mainFrames++;
+          this.perf.decodeMs += Date.now() - t0;
+          return { frame: main.frame, scaler: main.scaler, isMainStream: true };
+        }
+      } catch (error) {
+        this.logger.debug('Main stream frame unavailable:', error);
+      }
+    }
+
+    return { frame: lowFrame, scaler: this.frameScaler, isMainStream: false };
+  }
+
+  private async acquireOpeningHqFrame(): Promise<AnalysisFrame | undefined> {
+    if (!this.mainStreamAvailable) return undefined;
+    const t0 = Date.now();
+    try {
+      const main = await this.thumbnailer.acquireHqFrame(0);
+      if (main) {
+        this.perf.mainFrames++;
+        this.perf.decodeMs += Date.now() - t0;
+        return { frame: main.frame, scaler: main.scaler, isMainStream: true };
+      }
+    } catch (error) {
+      this.logger.debug('HQ frame unavailable for the opening tick:', error);
+    }
+    return undefined;
+  }
+
+  private reportPerf(): void {
+    const now = Date.now();
+    if (this.perf.since === 0) {
+      this.perf.since = now;
+      return;
+    }
+
+    const elapsed = now - this.perf.since;
+    if (elapsed < PERF_REPORT_MS) return;
+
+    const ticks = this.perf.idleTicks + this.perf.activeTicks;
+    if (ticks > 0) {
+      const cpu = process.cpuUsage(this.perfCpu);
+      const cpuMs = Math.round((cpu.user + cpu.system) / 1000);
+      const mem = process.memoryUsage();
+      const rssMb = Math.round(mem.rss / 1024 / 1024);
+      const externalMb = Math.round(mem.external / 1024 / 1024);
+      const { loopMs, idleTicks, activeTicks, mainFrames, switches, decodeMs, scaleMs, jpegMs, inferMs, secondaryMs, objects, faces, plates } = this.perf;
+      const rate = loopMs > 0 ? (ticks / (loopMs / 1000)).toFixed(1) : '0';
+      const activePct = Math.round((activeTicks / ticks) * 100);
+      const shape = `${Math.round(elapsed / 1000)}s loop=${Math.round(loopMs / 1000)}s ticks=${ticks} (${rate}/s) active=${activePct}% switches=${switches}`;
+      const cost = `cpu=${cpuMs}ms decode=${decodeMs}ms scale=${scaleMs}ms jpeg=${jpegMs}ms infer=${inferMs}ms secondary=${secondaryMs}ms`;
+      const found = `rss=${rssMb}MB ext=${externalMb}MB obj=${objects} face=${faces} plate=${plates}`;
+      this.logger.debug(`[perf] ${shape} ${cost} ${found}`);
+      // debugging
+      detectionRecord.perf({
+        elapsedMs: elapsed,
+        loopMs,
+        idleTicks,
+        activeTicks,
+        mainFrames,
+        switches,
+        cpuMs,
+        rssMb,
+        externalMb,
+        decodeMs,
+        scaleMs,
+        jpegMs,
+        inferMs,
+        secondaryMs,
+        objects,
+        faces,
+        plates,
+      });
+    }
+
+    this.perfCpu = process.cpuUsage();
+    this.perf.since = now;
+    this.perf.loopMs = 0;
+    this.perf.idleTicks = 0;
+    this.perf.activeTicks = 0;
+    this.perf.mainFrames = 0;
+    this.perf.switches = 0;
+    this.perf.decodeMs = 0;
+    this.perf.scaleMs = 0;
+    this.perf.jpegMs = 0;
+    this.perf.inferMs = 0;
+    this.perf.secondaryMs = 0;
+    this.perf.objects = 0;
+    this.perf.faces = 0;
+    this.perf.plates = 0;
+  }
+
+  private updateStreamState(): void {
+    if (this.worldSpans.size > 0 || this.eventManager.hasActiveSegment()) {
+      this.idleSince = 0;
+      if (!this.mainStreamActive && this.mainStreamAvailable) {
+        this.mainStreamActive = true;
+        this.perf.switches++;
+        this.logger.debug('Analysis switched to the main stream');
+      }
+      return;
+    }
+
+    if (!this.mainStreamActive) return;
+
+    if (this.idleSince === 0) {
+      this.idleSince = Date.now();
+    } else if (Date.now() - this.idleSince >= MAIN_STREAM_HOLD_MS) {
+      this.mainStreamActive = false;
+      this.idleSince = 0;
+      this.perf.switches++;
+      this.logger.debug('Analysis back on the low-resolution stream');
+    }
+  }
+
+  private async processRawFrame(analysis: AnalysisFrame, motionRawFrame: Frame): Promise<void> {
     if (!this.loopRunning || !this.plugins.hasAny()) return;
 
     try {
-      await this.processDetection(rawFrame);
+      await this.processDetection(analysis, motionRawFrame);
     } catch (error) {
       this.logger.error('Detection processing error:', error);
     }
   }
 
-  private async processDetection(rawFrame: Frame): Promise<void> {
+  private async processDetection(analysis: AnalysisFrame, motionRawFrame: Frame): Promise<void> {
     const t0 = Date.now();
     let motionDetected = false;
     let objectDetections: Detection[] = [];
@@ -1013,11 +1227,18 @@ export class DetectionCoordinator {
     const motionPlugin = this.plugins.get(SensorType.Motion);
 
     if (motionPlugin?.requiresFrames) {
-      const motionFrame = await this.scaleForMotion(rawFrame);
+      // motion keeps its own rate, a background diff gains nothing from the active tick speed
+      const motionDue = t0 - this.lastMotionAt >= MOTION_INTERVAL_MS - TICK_SLACK_MS;
+      const motionScaleStart = Date.now();
+      const motionFrame = motionDue ? await this.scaleForMotion(motionRawFrame) : undefined;
+      if (motionDue) this.perf.scaleMs += Date.now() - motionScaleStart;
       if (!this.loopRunning) return;
       if (motionFrame) {
+        this.lastMotionAt = t0;
         try {
+          const motionInferStart = Date.now();
           const result = await motionPlugin.proxy.detectMotion(motionFrame);
+          this.perf.inferMs += Date.now() - motionInferStart;
           if (!this.loopRunning) return;
           if (ptzSuppressed) {
             // fed for the background model only, results discarded: frame-diff
@@ -1056,16 +1277,20 @@ export class DetectionCoordinator {
     const shouldDetectObjects = objectPlugin?.requiresFrames === true && (ptzSuppressed || !this.cascadeEnabled || this.cascade.isActive);
 
     if (shouldDetectObjects) {
-      const objectFrame = await this.scaleForObject(rawFrame);
+      const scaleStart = Date.now();
+      const objectFrame = await this.scaleForObject(analysis.frame, analysis.scaler);
+      this.perf.scaleMs += Date.now() - scaleStart;
       if (!this.loopRunning) return;
       if (objectFrame) {
         try {
+          const inferStart = Date.now();
           const result = await PromiseTimeout(
             objectPlugin.proxy.detectObjects(objectFrame.model),
             DETECT_TIMEOUT_MS,
             undefined,
             `Object detection timed out after ${DETECT_TIMEOUT_MS}ms`,
           );
+          this.perf.inferMs += Date.now() - inferStart;
           if (!this.loopRunning) return;
 
           this.trackDetectionCadence();
@@ -1075,7 +1300,12 @@ export class DetectionCoordinator {
           const poseDelta = this.ptzAutotracker.consumePoseDelta();
           const detected = FrameScaler.undoLetterbox(ensureDetectionBoxes(result.detections), objectFrame.geometry);
           const pipelineResult = this.pipeline.process(detected, poseDelta);
-          await this.captureBestShots(pipelineResult.events, rawFrame);
+          // the tick that opens a span analysed the low stream (the switch lands
+          // next tick), its picture work is worth a one-off HQ decode
+          if (this.updateWorldSpans(pipelineResult) && !analysis.isMainStream) {
+            this.hqUpgrade = await this.acquireOpeningHqFrame();
+          }
+          await this.captureMoments(pipelineResult, this.hqUpgrade ?? analysis, t0);
 
           // open spans and a lingering segment keep the cascade armed: the
           // world can only observe absence or a reappearance while it still
@@ -1149,7 +1379,10 @@ export class DetectionCoordinator {
     if (!this.loopRunning) return;
 
     if (objectDetections.length > 0) {
-      await this.runSecondariesAndThumbnails(rawFrame, objectDetections, results);
+      const images = this.hqUpgrade ?? analysis;
+      await this.runSecondariesAndThumbnails(images, objectDetections, results);
+      if (!this.loopRunning) return;
+      await this.captureAttributeMoment(results, images, t0);
     }
 
     if (!this.loopRunning) return;
@@ -1160,7 +1393,7 @@ export class DetectionCoordinator {
     // one flush per frame, after detectors and thumbnails, so segment-start
     // messages already carry them
     if (!this.loopRunning) return;
-    const snapshot = this.buildSnapshot();
+    const snapshot = this.buildSnapshot(t0);
     if (results.thumbnails && results.thumbnails.length > 0) {
       snapshot.thumbnails = results.thumbnails;
     }
@@ -1171,7 +1404,9 @@ export class DetectionCoordinator {
     let hqThumbAttached = false;
     if (wantsEventThumb) {
       try {
-        const thumb = await this.thumbnailer.captureEventThumbnail(rawFrame);
+        const thumbStart = Date.now();
+        const thumb = await this.thumbnailer.captureEventThumbnail((this.hqUpgrade ?? analysis).frame);
+        this.perf.jpegMs += Date.now() - thumbStart;
         if (thumb.jpeg) snapshot.eventThumbnail = thumb.jpeg;
         hqThumbAttached = thumb.fromHq;
       } catch (error) {
@@ -1193,21 +1428,21 @@ export class DetectionCoordinator {
     }
   }
 
-  private async runSecondariesAndThumbnails(rawFrame: Frame, objectDetections: Detection[], results: DetectionResults): Promise<void> {
+  private async runSecondariesAndThumbnails(analysis: AnalysisFrame, objectDetections: Detection[], results: DetectionResults): Promise<void> {
     if (objectDetections.length === 0) return;
 
-    const frameAt = Date.now();
-    await this.secondaries.detect(rawFrame, objectDetections, results);
+    this.perf.objects += objectDetections.length;
+
+    const secondaryStart = Date.now();
+    await this.secondaries.detect(analysis.frame, analysis.scaler, objectDetections, results);
+    this.perf.secondaryMs += Date.now() - secondaryStart;
 
     try {
-      // detectors ran on the substream frame, thumbnails prefer the HQ frame
-      // when one exists from the same moment
-      const hq = await this.thumbnailer.acquireHqFrame({ width: rawFrame.width, height: rawFrame.height }, frameAt);
-      try {
-        results.thumbnails = await this.secondaries.generateThumbnails(hq?.frame ?? rawFrame, hq?.scaler ?? this.frameScaler, hq !== null, results);
-      } finally {
-        hq?.frame[Symbol.dispose]?.();
-      }
+      const jpegStart = Date.now();
+      results.thumbnails = await this.secondaries.generateThumbnails(analysis.frame, analysis.scaler, results);
+      this.perf.jpegMs += Date.now() - jpegStart;
+      this.perf.faces += results.face?.detections?.length ?? 0;
+      this.perf.plates += results.licensePlate?.detections?.length ?? 0;
     } catch (error) {
       this.logger.error('Thumbnail generation error:', error);
     }
@@ -1268,58 +1503,179 @@ export class DetectionCoordinator {
     return false;
   }
 
-  private bestShotDebugDir(): string | undefined {
-    const home = process.env.CAMERA_UI_HOME_PATH;
-    const dir = process.env.CAMERA_UI_DETECTION_RECORD_DIR ?? (home ? join(home, 'detection-record') : undefined);
-    if (!dir || !existsSync(dir)) return undefined;
-    return join(dir, 'bestshots');
-  }
+  private updateWorldSpans(result: PipelineResult): boolean {
+    let opened = false;
+    const suppressStatic = this.config.detectionSettings.object.suppressStatic ?? true;
 
-  private async captureBestShots(events: PipelineResult['events'], frame: Frame): Promise<void> {
-    for (const event of events) {
+    for (const event of result.events) {
       const obj = event.object;
-      // activity spans: entered/woke/recovered open, departed/settled/lost
-      // close — they hold the event and drive the segment lifecycle; with
-      // suppressStatic off, settling is not the end of relevance
-      const suppressStatic = this.config.detectionSettings.object.suppressStatic ?? true;
       const recoveredRelevant = event.eventType === 'objectRecovered' && (obj.state !== 'stationary' || !suppressStatic);
       if (event.eventType === 'objectEntered' || event.eventType === 'objectWoke' || recoveredRelevant) {
+        if (!this.worldSpans.has(obj.trackId)) opened = true;
         this.worldSpans.add(obj.trackId);
       } else if (event.eventType === 'objectDeparted' || event.eventType === 'objectLost' || (event.eventType === 'objectSettled' && suppressStatic)) {
         this.worldSpans.delete(obj.trackId);
       }
-      if (event.eventType === 'objectEntered') {
-        this.bestShots.confirm(obj.trackId);
-      } else if (event.eventType === 'objectDeparted') {
-        this.bestShots.release(obj.trackId);
-      } else if (event.eventType === 'bestShotUpdated') {
-        const box = compositionBox(obj.label, { x: obj.x, y: obj.y, width: obj.width, height: obj.height });
-        try {
-          const crops = await this.frameScaler.cropToJPEG(frame, [{ label: obj.label as DetectionLabel, confidence: obj.confidence, box }], {
-            padding: 0,
-            maxWidth: 640,
-            quality: 85,
-          });
-          if (crops[0]) {
-            this.bestShots.put(obj.trackId, {
-              jpeg: crops[0].jpeg,
-              score: obj.confidence * Math.sqrt(obj.width * obj.height),
-              capturedAt: Date.now(),
-              label: obj.label,
-              box,
-            });
-            const debugDir = this.bestShotDebugDir();
-            if (debugDir) {
-              mkdirSync(debugDir, { recursive: true });
-              writeFileSync(join(debugDir, `${obj.label}-${obj.trackId}-${Date.now()}.jpg`), crops[0].jpeg);
-            }
-          }
-        } catch (error) {
-          this.logger.debug('Best-shot crop failed:', error);
-        }
+    }
+
+    return opened;
+  }
+
+  private async captureMoments(result: PipelineResult, analysis: AnalysisFrame, at: number): Promise<void> {
+    let subject: WorldObject | undefined;
+    let bestScore = -1;
+    let trigger = '';
+
+    for (const event of result.events) {
+      const obj = event.object;
+      // a moment is worth a picture when a span opens or the view got better;
+      // closing events report absence, there is nothing to show
+      if (!MOMENT_EVENTS.has(event.eventType)) continue;
+      // and only for a track that holds a span: a tentative first sighting or a
+      // stationary recovery opens nothing, so its picture is never handed over
+      if (!this.worldSpans.has(obj.trackId)) continue;
+      const score = obj.confidence * Math.sqrt(obj.width * obj.height);
+      if (score > bestScore) {
+        bestScore = score;
+        subject = obj;
+        trigger = event.eventType;
       }
     }
-    this.bestShots.prune(Date.now());
+
+    // one frame per tick, not one per object: they share the picture
+    if (!subject) return;
+    if (!this.eventManager.wantsMoment(MOMENT_RANK_OBJECT, bestScore, analysis.isMainStream ? 'main' : 'low', at)) return;
+    await this.captureMoment(subject, bestScore, trigger, result.tracked, analysis, at);
+  }
+
+  private async captureMoment(subject: WorldObject, score: number, trigger: string, tracked: TrackedDetection[], analysis: AnalysisFrame, at: number): Promise<void> {
+    const box: BoundingBox = { x: subject.x, y: subject.y, width: subject.width, height: subject.height };
+    const moving = tracked.filter((d) => (d.trackSpeed ?? 0) >= MOMENT_MOVING_SPEED).map((d) => d.box);
+    const target: MomentTarget = { subject: box, base: unionBox([box, ...moving]), hint: directionOf(subject.velocityX, subject.velocityY) };
+    const rendered = await this.renderMoment(target, analysis);
+    if (!rendered) return;
+
+    const stream = analysis.isMainStream ? 'main' : 'low';
+    this.eventManager.offerMoment({ strip: rendered.strip, card: rendered.card, capturedAt: at, score, rank: MOMENT_RANK_OBJECT, stream });
+    // debugging
+    await this.recordMoment(target, rendered, analysis, `${subject.label}-${subject.trackId}`, score, trigger, at);
+  }
+
+  private async captureAttributeMoment(results: DetectionResults, analysis: AnalysisFrame, at: number): Promise<void> {
+    const candidates: AttributeMomentCandidate[] = [];
+
+    // same rule as the object rank: only a span-holding subject hands over a
+    // picture. A face or plate riding on a settled bystander (the parked car
+    // at the kerb) must not anchor the segment of an unrelated event
+    const spanHolder = (parentTrackId?: number) => parentTrackId !== undefined && this.worldSpans.has(parentTrackId);
+
+    for (const face of results.face?.detections ?? []) {
+      const f = face as TrackedFaceDetection;
+      if (!spanHolder(f.parentTrackId)) continue;
+      candidates.push({ label: `face:${f.identity ?? 'unknown'}`, box: f.box, parentBox: f.parentBox, confidence: f.confidence });
+    }
+    for (const plate of results.licensePlate?.detections ?? []) {
+      const p = plate as TrackedLicensePlateDetection;
+      if (!p.plateText || !spanHolder(p.parentTrackId)) continue;
+      candidates.push({ label: `plate:${normalizePlateText(p.plateText)}`, box: p.box, parentBox: p.parentBox, confidence: p.confidence });
+    }
+
+    // one picture per tick, never one per subject: with several faces the most
+    // legible one frames the shot, the rest stay their own attribute tiles
+    let best: AttributeMomentCandidate | undefined;
+    let bestScore = -1;
+    let bestCard: Buffer | undefined;
+    for (const candidate of candidates) {
+      const cut = results.thumbnails?.find((t) => t.label === candidate.label);
+      // a subject cut off by the frame edge makes a poor card
+      if (cut?.onEdge) continue;
+      // a few-pixel face or plate carries no information even at the crop's max
+      // upscale: it stays an attribute tile, the anchor keeps the object shot
+      const areaPx = candidate.box.width * analysis.frame.width * candidate.box.height * analysis.frame.height;
+      if (areaPx < MOMENT_ATTRIBUTE_MIN_AREA) continue;
+      const score = candidate.confidence * Math.sqrt(candidate.box.width * candidate.box.height);
+      if (score > bestScore) {
+        bestScore = score;
+        best = candidate;
+        bestCard = cut?.jpeg;
+      }
+    }
+
+    // ask before cutting: the same face rides along on every tick of a segment
+    // and re-encoding for a picture that loses anyway is pure cost
+    if (!best || !this.eventManager.wantsMoment(MOMENT_RANK_ATTRIBUTE, bestScore, analysis.isMainStream ? 'main' : 'low', at)) return;
+
+    const target: MomentTarget = {
+      subject: best.box,
+      hint: best.parentBox ? directionBetween(best.box, best.parentBox) : undefined,
+    };
+    // the attribute tile was cut from this frame with this very target, so the
+    // card is already encoded; only the 16:9 companion is still missing
+    const rendered = await this.renderMoment(target, analysis, bestCard);
+    if (!rendered) return;
+
+    const stream = analysis.isMainStream ? 'main' : 'low';
+    this.eventManager.offerMoment({ strip: rendered.strip, card: rendered.card, capturedAt: at, score: bestScore, rank: MOMENT_RANK_ATTRIBUTE, stream });
+    // debugging
+    await this.recordMoment(target, rendered, analysis, best.label.replace(':', '-'), bestScore, 'attributeFound', at);
+  }
+
+  private async renderMoment(target: MomentTarget, analysis: AnalysisFrame, card?: Buffer): Promise<RenderedMoment | null> {
+    const start = Date.now();
+    const rendered = new Map<MomentFormatName, Buffer>();
+    const windows: Partial<Record<MomentFormatName, CropWindow>> = {};
+    if (card) rendered.set('card', card);
+
+    try {
+      for (const format of MOMENT_FORMATS) {
+        const window = momentWindow(target, analysis.frame.width, analysis.frame.height, format);
+        if (!window) continue;
+        windows[format.name] = window;
+        if (rendered.has(format.name)) continue;
+        const jpeg = await analysis.scaler.cropWindowToJPEG(analysis.frame, window, format.width, format.height, MOMENT_QUALITY);
+        if (jpeg) rendered.set(format.name, jpeg);
+      }
+    } catch (error) {
+      this.logger.debug('Moment crop failed:', error);
+    }
+    this.perf.jpegMs += Date.now() - start;
+
+    const strip = rendered.get('strip');
+    return strip ? { strip, card: rendered.get('card'), windows } : null;
+  }
+
+  // debugging
+  private async recordMoment(
+    target: MomentTarget,
+    rendered: RenderedMoment,
+    analysis: AnalysisFrame,
+    subjectName: string,
+    score: number,
+    trigger: string,
+    at: number,
+  ): Promise<void> {
+    if (!detectionRecord.active) return;
+
+    const stream = analysis.isMainStream ? 'main' : 'low';
+    const detail = `${subjectName}_${stream}_s${score.toFixed(3)}`;
+    try {
+      const frameJpeg = await analysis.scaler.frameToJPEG(analysis.frame, analysis.frame.width, 85);
+      detectionRecord.moment({
+        at,
+        trigger,
+        score,
+        subject: target.subject,
+        base: target.base,
+        windows: rendered.windows,
+        pictures: {
+          strip: detectionRecord.picture(at, 'moment', `strip_${detail}`, rendered.strip),
+          card: rendered.card ? detectionRecord.picture(at, 'moment', `card_${detail}`, rendered.card) : undefined,
+        },
+        frame: frameJpeg ? detectionRecord.picture(at, 'frame', detail, frameJpeg) : undefined,
+      });
+    } catch (error) {
+      this.logger.debug('Moment record failed:', error);
+    }
   }
 
   private async scaleForMotion(rawFrame: Frame): Promise<VideoFrameData | undefined> {
@@ -1361,22 +1717,22 @@ export class DetectionCoordinator {
     if (this.objectIntervalSamples < CADENCE_MIN_SAMPLES) return;
   }
 
-  private async scaleForObject(rawFrame: Frame): Promise<PluginFrame | undefined> {
+  private async scaleForObject(rawFrame: Frame, scaler: FrameScaler): Promise<PluginFrame | undefined> {
     const objectPlugin = this.plugins.get(SensorType.Object);
     if (!objectPlugin?.requiresFrames) return undefined;
-    return this.scaleFrameForPlugin(rawFrame, objectPlugin);
+    return this.scaleFrameForPlugin(rawFrame, objectPlugin, scaler);
   }
 
-  private async scaleFrameForPlugin(rawFrame: Frame, plugin: RegisteredPlugin): Promise<PluginFrame | undefined> {
+  private async scaleFrameForPlugin(rawFrame: Frame, plugin: RegisteredPlugin, scaler: FrameScaler = this.frameScaler): Promise<PluginFrame | undefined> {
     const inputSpec = plugin.modelSpec?.input;
     if (!isVideoInputSpec(inputSpec)) return undefined;
 
-    const letterboxed = await this.frameScaler.letterboxToSpec(rawFrame, inputSpec);
+    const letterboxed = await scaler.letterboxToSpec(rawFrame, inputSpec);
     if (!letterboxed) return undefined;
 
     return {
-      model: this.frameScaler.toVideoFrameData(letterboxed.padded, 'model'),
-      tracking: this.frameScaler.toVideoFrameData(letterboxed.inner, 'tracking'),
+      model: scaler.toVideoFrameData(letterboxed.padded, 'model'),
+      tracking: scaler.toVideoFrameData(letterboxed.inner, 'tracking'),
       geometry: letterboxed.geometry,
     };
   }

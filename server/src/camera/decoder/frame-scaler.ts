@@ -169,6 +169,15 @@ export class FrameScaler {
     return results;
   }
 
+  public async cropWindowToJPEG(frame: Frame, crop: ScalerCrop, width: number, height: number, quality: number): Promise<Buffer | null> {
+    try {
+      return await this.getScaler().toJpeg(frame, { crop, resize: { width, height }, quality });
+    } catch (error) {
+      this.logger?.debug(`Moment crop failed: ${error}`);
+      return null;
+    }
+  }
+
   public async frameToJPEG(frame: Frame, maxWidth = 320, quality = 90): Promise<Buffer | null> {
     if (frame.width < 2 || frame.height < 2) return null;
     const resize = this.scaledSize(frame.width, frame.height, maxWidth);

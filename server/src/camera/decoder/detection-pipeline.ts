@@ -1,6 +1,6 @@
 import { CameraWorld, merge as rustMerge, nms as rustNms, nmsIndices as rustNmsIndices } from '@camera.ui/rust-postprocessor';
-import { createWriteStream, existsSync, mkdirSync } from 'node:fs';
-import { join } from 'node:path';
+
+import { detectionRecord } from './debug/detection-record.js';
 
 import type {
   Detection as RustDetection,
@@ -31,6 +31,10 @@ export interface LineCrossingEvent {
   currPos: [number, number];
   prevBox: [number, number, number, number];
   box: [number, number, number, number];
+}
+
+function round(value: number): number {
+  return Math.round(value * 1000) / 1000;
 }
 
 export interface PipelineResult {
@@ -123,22 +127,6 @@ function fromRustCrossing(event: RustLineCrossingEvent, lookup: Map<number, Boun
   };
 }
 
-function createTickRecorder(): ((line: string) => void) | undefined {
-  const home = process.env.CAMERA_UI_HOME_PATH;
-  const toggleDir = home ? join(home, 'detection-record') : undefined;
-  const dir = process.env.CAMERA_UI_DETECTION_RECORD_DIR ?? (toggleDir && existsSync(toggleDir) ? toggleDir : undefined);
-  if (!dir) return undefined;
-  mkdirSync(dir, { recursive: true });
-  const stream = createWriteStream(join(dir, `${process.env.CAMERA_ID ?? 'camera'}-${Date.now()}.jsonl`), { flags: 'a' });
-  return (line) => stream.write(`${line}\n`);
-}
-
-const recordTick = createTickRecorder();
-
-function recordConfig(config: Record<string, unknown>): void {
-  recordTick?.(JSON.stringify({ config }));
-}
-
 export class DetectionPipeline {
   private aspectRatio = 16 / 9;
   private world: CameraWorld;
@@ -151,13 +139,15 @@ export class DetectionPipeline {
     this.world.setZones(rustZones);
     this.world.setMinConfidence(settings.object.confidence);
     this.suppressStatic = settings.object.suppressStatic ?? true;
-    recordConfig({ zones: rustZones, minConfidence: settings.object.confidence });
+    // debugging
+    detectionRecord.config({ zones: rustZones, minConfidence: settings.object.confidence });
   }
 
   public updateZones(zones: DetectionZone[]): void {
     const rustZones = toRustZones(zones);
     this.world.setZones(rustZones);
-    recordConfig({ zones: rustZones });
+    // debugging
+    detectionRecord.config({ zones: rustZones });
   }
 
   public updateLines(lines: DetectionLine[], aspectRatio?: number): void {
@@ -165,13 +155,15 @@ export class DetectionPipeline {
     this.lines = lines;
     const rustLines = toRustLines(lines);
     this.world.setLines(rustLines, this.aspectRatio);
-    recordConfig({ lines: rustLines, aspectRatio: this.aspectRatio });
+    // debugging
+    detectionRecord.config({ lines: rustLines, aspectRatio: this.aspectRatio });
   }
 
   public updateSettings(settings: CameraDetectionSettings): void {
     this.world.setMinConfidence(settings.object.confidence);
     this.suppressStatic = settings.object.suppressStatic ?? true;
-    recordConfig({ minConfidence: settings.object.confidence });
+    // debugging
+    detectionRecord.config({ minConfidence: settings.object.confidence });
   }
 
   public notifyCameraMove(): void {
@@ -182,8 +174,24 @@ export class DetectionPipeline {
     const flat = rawDetections.length === 0 ? [] : this.runNmsAndMergeFlat(rawDetections);
     const cameraMotion = poseDelta ? { x: -poseDelta.panDelta * PAN_TO_IMAGE_RATIO, y: poseDelta.tiltDelta * PAN_TO_IMAGE_RATIO } : undefined;
     const tMs = Date.now();
-    recordTick?.(JSON.stringify({ tMs, detections: flat, cameraMotion }));
     const result = this.world.ingest(tMs, flat, cameraMotion);
+    // debugging
+    if (detectionRecord.active) {
+      detectionRecord.tick({
+        tMs,
+        detections: flat,
+        cameraMotion,
+        world: result.tracked.map((t) => ({
+          id: t.trackId,
+          label: t.label,
+          conf: round(t.confidence),
+          state: t.state,
+          speed: round(t.speed),
+          box: [round(t.x), round(t.y), round(t.width), round(t.height)],
+        })),
+        events: result.events.map((e) => ({ kind: e.eventType, id: e.object.trackId, label: e.object.label, state: e.object.state })),
+      });
+    }
     const tracked = (this.suppressStatic ? result.tracked.filter((t) => t.state !== 'stationary') : result.tracked).map(fromWorldObject);
     const boxLookup = new Map<number, BoundingBox>();
     for (const t of tracked) {

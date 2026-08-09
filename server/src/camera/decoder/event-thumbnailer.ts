@@ -1,4 +1,5 @@
-import { SnapshotSource } from './sources/snapshot-source.js';
+import { MOMENT_FORMATS, MOMENT_QUALITY } from './moment-crop.js';
+import { BufferedSource } from './sources/buffered-source.js';
 
 import type { Logger } from '@camera.ui/common/logger';
 import type { FrameWorkerDecoderSettings } from '@camera.ui/sdk';
@@ -8,12 +9,11 @@ import type { FrameScaler } from './frame-scaler.js';
 import type { FrameSource } from './sources/frame-source.js';
 import type { CoordinatorSourceUrl } from './types.js';
 
-export const EVENT_THUMB_MAX_WIDTH = 640;
-export const EVENT_THUMB_HQ_MAX_WIDTH = 960;
-export const EVENT_THUMB_HQ_QUALITY = 75;
+export const EVENT_THUMB_MAX_WIDTH = MOMENT_FORMATS[1].width;
+export const EVENT_THUMB_HQ_MAX_WIDTH = MOMENT_FORMATS[1].width;
+export const EVENT_THUMB_HQ_QUALITY = MOMENT_QUALITY;
 
 const HQ_FRAME_MAX_AGE_MS = 500;
-const HQ_PAIR_TOLERANCE_MS = 300;
 
 interface EventThumbnailerDeps {
   frameSource: FrameSource;
@@ -39,9 +39,8 @@ function resolveHqSourceUrl(sources?: CoordinatorSourceUrl[]): string | undefine
 }
 
 export class EventThumbnailer {
-  private hqSource?: SnapshotSource;
+  private hqSource?: BufferedSource;
   private upgradeInflight = false;
-  private aspectWarned = false;
 
   constructor(
     private readonly deps: EventThumbnailerDeps,
@@ -49,8 +48,12 @@ export class EventThumbnailer {
   ) {
     const hqUrl = resolveHqSourceUrl(availableSources);
     if (hqUrl) {
-      this.hqSource = new SnapshotSource({ url: hqUrl, decoder: deps.decoder }, deps.logger);
+      this.hqSource = new BufferedSource({ url: hqUrl, decoder: deps.decoder }, deps.logger);
     }
+  }
+
+  public get hasMainStream(): boolean {
+    return this.hqSource !== undefined;
   }
 
   public sync(wanted: boolean): void {
@@ -67,33 +70,14 @@ export class EventThumbnailer {
     await this.hqSource?.stop();
   }
 
-  public async acquireHqFrame(reference?: { width: number; height: number }, pairedToMs?: number): Promise<{ frame: Frame; scaler: FrameScaler } | null> {
+  public async acquireHqFrame(maxAgeMs = HQ_FRAME_MAX_AGE_MS): Promise<{ frame: Frame; scaler: FrameScaler } | null> {
     const source = this.hqSource;
     if (!source?.isRunning || !source.hasBuffer) return null;
     const scaler = source.scaler;
     if (!scaler) return null;
 
-    const frame = await source.getFrame(HQ_FRAME_MAX_AGE_MS);
+    const frame = await source.getFrame(maxAgeMs);
     if (!frame) return null;
-
-    if (pairedToMs !== undefined && Math.abs(source.lastFrameAt - pairedToMs) > HQ_PAIR_TOLERANCE_MS) {
-      frame[Symbol.dispose]?.();
-      return null;
-    }
-
-    if (reference) {
-      const refAspect = reference.width / reference.height;
-      const hqAspect = frame.width / frame.height;
-      if (Math.abs(refAspect - hqAspect) / refAspect > 0.02) {
-        if (!this.aspectWarned) {
-          this.aspectWarned = true;
-          const detected = `${reference.width}x${reference.height}`;
-          this.deps.logger.warn(`[hq-thumb] aspect mismatch (detection ${detected} vs snapshot ${frame.width}x${frame.height}) — detection crops stay on the substream`);
-        }
-        frame[Symbol.dispose]?.();
-        return null;
-      }
-    }
 
     return { frame, scaler };
   }

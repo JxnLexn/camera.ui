@@ -2,6 +2,8 @@ import type { BoundingBox, MotionResolution, StreamingRole } from '@camera.ui/sd
 
 export type PixelFormat = 'yuv420p' | 'rgb24' | 'nv12';
 
+export type AnalysisStream = 'low' | 'main';
+
 export const FULL_FRAME_BOX: BoundingBox = { x: 0, y: 0, width: 1, height: 1 };
 
 export function ensureDetectionBoxes<T extends { box?: BoundingBox }>(detections: readonly T[]): (T & { box: BoundingBox })[] {

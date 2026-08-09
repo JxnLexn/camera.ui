@@ -3,15 +3,27 @@ import { isNoRespondersError } from '@camera.ui/rpc';
 import { SensorType } from '@camera.ui/sdk';
 
 import { NamespaceManager } from '../../rpc/namespaces.js';
-import { faceCompositionBox } from './best-shot-store.js';
+import { detectionRecord } from './debug/detection-record.js';
 import { EVENT_THUMB_MAX_WIDTH } from './event-thumbnailer.js';
+import { directionBetween, MOMENT_QUALITY, momentFormat, momentWindow } from './moment-crop.js';
 import { MIN_PLATE_LENGTH, normalizePlateText } from './plate-vote.js';
 import { hasSecondaryModelSpec, isVideoInputSpec } from './plugin-registry.js';
 import { DETECT_TIMEOUT_MS, ensureDetectionBoxes, FULL_FRAME_BOX } from './types.js';
 
 import type { Logger } from '@camera.ui/common/logger';
 import type { Promisify, RPCClient } from '@camera.ui/rpc';
-import type { ClassifierResult, ClipResult, Detection, FaceDetection, FaceResult, LicensePlateResult, ModelSpec, TrackedDetection, VideoFrameData } from '@camera.ui/sdk';
+import type {
+  BoundingBox,
+  ClassifierResult,
+  ClipResult,
+  Detection,
+  FaceDetection,
+  FaceResult,
+  LicensePlateResult,
+  ModelSpec,
+  TrackedDetection,
+  VideoFrameData,
+} from '@camera.ui/sdk';
 import type { Frame } from 'node-av/lib';
 import type { CoreManagerInterface } from '../../rpc/interfaces/core.js';
 import type { CroppedRegion, DetectionResults, DetectionThumbnail } from '../../rpc/interfaces/detection.js';
@@ -20,14 +32,6 @@ import type { DetectionPipeline } from './detection-pipeline.js';
 import type { TrackedClassifierDetection, TrackedClipEmbedding, TrackedFaceDetection, TrackedLicensePlateDetection } from './event-manager.js';
 import type { ConsumerSpec, CropFit, FrameScaler, ScaleTarget } from './frame-scaler.js';
 import type { PluginRegistry } from './plugin-registry.js';
-
-const DETECTION_THUMB_MAX_WIDTH = 640;
-const DETECTION_THUMB_MIN_CROP = 160;
-const DETECTION_THUMB_HQ_MAX_WIDTH = 640;
-const DETECTION_THUMB_HQ_MIN_CROP = 320;
-const DETECTION_THUMB_HQ_QUALITY = 80;
-const ATTRIBUTE_THUMB_MAX_WIDTH = 640;
-const ATTRIBUTE_THUMB_MIN_CROP = 128;
 
 const SECONDARY_CONSUMERS: { type: SensorType; key: string; fit: CropFit }[] = [
   { type: SensorType.Face, key: 'face', fit: 'expand' },
@@ -52,13 +56,11 @@ export class SecondaryStage {
     private readonly logger: Logger,
   ) {}
 
-  public async detect(rawFrame: Frame, objectDetections: Detection[], results: DetectionResults): Promise<void> {
-    const regionMap = await this.prepareSecondaryRegions(rawFrame, objectDetections);
+  public async detect(sourceFrame: Frame, scaler: FrameScaler, objectDetections: Detection[], results: DetectionResults): Promise<void> {
+    const regionMap = await this.prepareSecondaryRegions(sourceFrame, scaler, objectDetections);
     await this.runAllSecondaries(regionMap, results);
   }
 
-  // no loop frame available: secondaries see the whole frame instead of
-  // per-detection crops, returns the scene JPEG for the event thumbnail
   public async detectFullFrame(rawFrame: Frame, results: DetectionResults): Promise<Buffer | null> {
     const regionMap = await this.prepareFullFrameRegions(rawFrame);
 
@@ -74,38 +76,17 @@ export class SecondaryStage {
     }
   }
 
-  public async generateThumbnails(sourceFrame: Frame, scaler: FrameScaler, usingHq: boolean, results: DetectionResults): Promise<DetectionThumbnail[]> {
+  public async generateThumbnails(sourceFrame: Frame, scaler: FrameScaler, results: DetectionResults): Promise<DetectionThumbnail[]> {
     const thumbnails: DetectionThumbnail[] = [];
-    const attributePadding = usingHq ? 0.4 : 0.75;
-    const detectionMaxWidth = usingHq ? DETECTION_THUMB_HQ_MAX_WIDTH : DETECTION_THUMB_MAX_WIDTH;
-    const detectionMinCrop = usingHq ? DETECTION_THUMB_HQ_MIN_CROP : DETECTION_THUMB_MIN_CROP;
-    const detectionQuality = usingHq ? DETECTION_THUMB_HQ_QUALITY : undefined;
-
     const settings = this.coordinator.detectionSettings;
 
     if (results.face?.detections) {
       const faceMinConfidence = settings.face?.confidence ?? 0;
       const faces = results.face.detections.filter((d) => d.confidence >= faceMinConfidence);
-      const minW = ATTRIBUTE_THUMB_MIN_CROP / sourceFrame.width;
-      const minH = ATTRIBUTE_THUMB_MIN_CROP / sourceFrame.height;
-      const faceCrops = await scaler.cropToJPEG(
-        sourceFrame,
-        faces.map((d) => ({ ...d, box: faceCompositionBox(d.box, minW, minH) })),
-        { maxWidth: ATTRIBUTE_THUMB_MAX_WIDTH, padding: 0, minCrop: 0 },
-      );
-      for (const crop of faceCrops) {
-        const detection = faces[crop.index];
-        if (detection) {
-          // enrichSegment persists unknown faces to the face store from this
-          detection.thumbnail ??= crop.jpeg;
-          thumbnails.push({
-            label: `face:${detection.identity ?? 'unknown'}`,
-            score: detection.confidence,
-            jpeg: crop.jpeg,
-            area: detection.box.width * detection.box.height,
-            onEdge: this.isOnEdge(detection.box),
-          });
-        }
+      for (const [detection, jpeg] of await this.attributeCrops(sourceFrame, scaler, faces)) {
+        // enrichSegment persists unknown faces to the face store from this
+        detection.thumbnail ??= jpeg;
+        thumbnails.push(this.attributeThumbnail(`face:${detection.identity ?? 'unknown'}`, detection, jpeg));
       }
     }
 
@@ -116,51 +97,60 @@ export class SecondaryStage {
         if (!d.plateText || normalizePlateText(d.plateText).length < plateMinLength) return false;
         return d.ocrConfidence === undefined || d.ocrConfidence >= plateMinConfidence;
       });
-      const plateCrops = await scaler.cropToJPEG(sourceFrame, plates, {
-        maxWidth: ATTRIBUTE_THUMB_MAX_WIDTH,
-        padding: attributePadding,
-        minCrop: ATTRIBUTE_THUMB_MIN_CROP,
-      });
-      for (const crop of plateCrops) {
-        const detection = plates[crop.index];
-        if (detection) {
-          thumbnails.push({
-            label: `plate:${normalizePlateText(detection.plateText)}`,
-            score: detection.confidence,
-            jpeg: crop.jpeg,
-            area: detection.box.width * detection.box.height,
-            onEdge: this.isOnEdge(detection.box),
-          });
-        }
+      for (const [detection, jpeg] of await this.attributeCrops(sourceFrame, scaler, plates)) {
+        thumbnails.push(this.attributeThumbnail(`plate:${normalizePlateText(detection.plateText)}`, detection, jpeg));
       }
     }
 
     if (results.classifiers) {
       for (const classifierResult of Object.values(results.classifiers)) {
         const classifications = classifierResult.detections.filter((d) => d.subAttribute);
-        const clsCrops = await scaler.cropToJPEG(sourceFrame, classifications, {
-          maxWidth: detectionMaxWidth,
-          padding: 0.3,
-          minCrop: detectionMinCrop,
-          quality: detectionQuality,
-        });
-        for (const crop of clsCrops) {
-          const detection = classifications[crop.index];
-          if (detection) {
-            // keyed by subAttribute, the attribute label injectSegmentThumbnails looks up
-            thumbnails.push({
-              label: `class:${detection.subAttribute}`,
-              score: detection.confidence,
-              jpeg: crop.jpeg,
-              area: detection.box.width * detection.box.height,
-              onEdge: this.isOnEdge(detection.box),
-            });
-          }
+        for (const [detection, jpeg] of await this.attributeCrops(sourceFrame, scaler, classifications)) {
+          // keyed by subAttribute, the attribute label injectSegmentThumbnails looks up
+          thumbnails.push(this.attributeThumbnail(`class:${detection.subAttribute}`, detection, jpeg));
         }
       }
     }
 
     return thumbnails;
+  }
+
+  private async attributeCrops<T extends { box: BoundingBox; parentBox?: BoundingBox }>(
+    sourceFrame: Frame,
+    scaler: FrameScaler,
+    detections: T[],
+  ): Promise<[T, Buffer][]> {
+    const format = momentFormat('card');
+    const crops: [T, Buffer][] = [];
+
+    for (const detection of detections) {
+      const hint = detection.parentBox ? directionBetween(detection.box, detection.parentBox) : undefined;
+      const window = momentWindow({ subject: detection.box, hint }, sourceFrame.width, sourceFrame.height, format);
+      if (!window) continue;
+      try {
+        const jpeg = await scaler.cropWindowToJPEG(sourceFrame, window, format.width, format.height, MOMENT_QUALITY);
+        if (jpeg) crops.push([detection, jpeg]);
+      } catch (error) {
+        this.logger.debug('Attribute crop failed:', error);
+      }
+    }
+
+    return crops;
+  }
+
+  private attributeThumbnail(label: string, detection: { box: BoundingBox; confidence: number }, jpeg: Buffer): DetectionThumbnail {
+    const thumbnail: DetectionThumbnail = {
+      label,
+      score: detection.confidence,
+      jpeg,
+      area: detection.box.width * detection.box.height,
+      onEdge: this.isOnEdge(detection.box),
+    };
+    // every candidate, not just the winner: a crop that loses the ranking is
+    // the only way to see why the shipped one is worse than what was available
+    // debugging
+    detectionRecord.attributeCandidate(label, { score: thumbnail.score, area: thumbnail.area, onEdge: thumbnail.onEdge, box: detection.box }, jpeg);
+    return thumbnail;
   }
 
   private async runAllSecondaries(regionMap: Map<string, CroppedRegion[]>, results: DetectionResults): Promise<void> {
@@ -198,7 +188,7 @@ export class SecondaryStage {
     return consumers;
   }
 
-  private async prepareSecondaryRegions(rawFrame: Frame, objectDetections: Detection[]): Promise<Map<string, CroppedRegion[]>> {
+  private async prepareSecondaryRegions(rawFrame: Frame, scaler: FrameScaler, objectDetections: Detection[]): Promise<Map<string, CroppedRegion[]>> {
     const result = new Map<string, CroppedRegion[]>();
     const consumers = this.collectConsumers(false);
     if (consumers.length === 0) return result;
@@ -229,7 +219,7 @@ export class SecondaryStage {
         }
       }
 
-      const regions = await this.frameScaler.cropAndScaleMulti(rawFrame, detection, uniqueTargets);
+      const regions = await scaler.cropAndScaleMulti(rawFrame, detection, uniqueTargets);
 
       for (const [_sizeKey, consumerKeys] of dupeMap) {
         const primaryKey = consumerKeys[0];
@@ -329,11 +319,12 @@ export class SecondaryStage {
     const allFaces: TrackedFaceDetection[] = [];
 
     for (let i = 0; i < batchResults.length; i++) {
-      const parentTrackId = 'trackId' in croppedRegions[i].detection ? (croppedRegions[i].detection as TrackedDetection).trackId : undefined;
+      const parent = croppedRegions[i].detection;
+      const parentTrackId = 'trackId' in parent ? (parent as TrackedDetection).trackId : undefined;
 
       for (const face of ensureDetectionBoxes(batchResults[i].detections)) {
         const transformed = this.transformBoxToOriginal(face.box, croppedRegions[i]);
-        allFaces.push({ ...face, box: transformed, parentTrackId });
+        allFaces.push({ ...face, box: transformed, parentTrackId, parentBox: parent.box });
       }
     }
 
@@ -356,9 +347,10 @@ export class SecondaryStage {
     const allPlates: TrackedLicensePlateDetection[] = [];
 
     for (let i = 0; i < batchResults.length; i++) {
-      const parentTrackId = 'trackId' in croppedRegions[i].detection ? (croppedRegions[i].detection as TrackedDetection).trackId : undefined;
+      const parent = croppedRegions[i].detection;
+      const parentTrackId = 'trackId' in parent ? (parent as TrackedDetection).trackId : undefined;
       for (const plate of ensureDetectionBoxes(batchResults[i].detections)) {
-        allPlates.push({ ...plate, box: this.transformBoxToOriginal(plate.box, croppedRegions[i]), parentTrackId });
+        allPlates.push({ ...plate, box: this.transformBoxToOriginal(plate.box, croppedRegions[i]), parentTrackId, parentBox: parent.box });
       }
     }
 
@@ -388,9 +380,10 @@ export class SecondaryStage {
         const allDetections: TrackedClassifierDetection[] = [];
 
         for (let i = 0; i < batchResults.length; i++) {
-          const parentTrackId = 'trackId' in croppedRegions[i].detection ? (croppedRegions[i].detection as TrackedDetection).trackId : undefined;
+          const parent = croppedRegions[i].detection;
+          const parentTrackId = 'trackId' in parent ? (parent as TrackedDetection).trackId : undefined;
           for (const detection of ensureDetectionBoxes(batchResults[i].detections)) {
-            allDetections.push({ ...detection, box: this.transformBoxToOriginal(detection.box, croppedRegions[i]), parentTrackId });
+            allDetections.push({ ...detection, box: this.transformBoxToOriginal(detection.box, croppedRegions[i]), parentTrackId, parentBox: parent.box });
           }
         }
 

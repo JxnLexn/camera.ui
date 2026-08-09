@@ -280,7 +280,7 @@ export class SensorManagerProxy implements SensorManager {
         proxySensor._setConnected(event.connected);
         if (event.connected) {
           // the owner was away, whatever it published in the meantime never reached us
-          void this.#resyncConsumed(event.sensorId);
+          this.#resyncConsumed(event.sensorId);
         }
         break;
       }

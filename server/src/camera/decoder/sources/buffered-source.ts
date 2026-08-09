@@ -6,10 +6,11 @@ import { ReconnectBackoff } from '../reconnect-backoff.js';
 
 import type { Logger } from '@camera.ui/common/logger';
 import type { FrameWorkerDecoderSettings } from '@camera.ui/sdk';
-import type { Frame, Packet, Stream } from 'node-av/lib';
 import type { HardwareContext } from 'node-av/api';
+import type { Frame, Packet, Stream } from 'node-av/lib';
+import type { AnalysisSource, FrameSnap } from './analysis-source.js';
 
-export interface SnapshotSourceConfig {
+export interface BufferedSourceConfig {
   url: string;
   decoder?: FrameWorkerDecoderSettings;
 }
@@ -19,11 +20,15 @@ interface BufferedPacket {
   packet: Packet;
 }
 
-export class SnapshotSource {
+export class BufferedSource implements AnalysisSource {
+  private static readonly MAX_BUFFER_PACKETS = 600;
+  private static readonly DECODER_IDLE_MS = 60_000;
+
   private input?: Demuxer;
   private videoStream?: Stream;
-  private hardwareContext?: HardwareContext | null;
+  private hwContext?: HardwareContext | null;
   private frameScaler?: FrameScaler;
+  private packetWaiters: (() => void)[] = [];
 
   private buffer: BufferedPacket[] = [];
   private nextSerial = 0;
@@ -34,6 +39,8 @@ export class SnapshotSource {
 
   private cachedFrame?: Frame;
   private cachedFrameAt = 0;
+  private lastPacketAt = 0;
+  private lastDecodeAt = 0;
 
   private shouldRun = false;
   private connected = false;
@@ -44,10 +51,8 @@ export class SnapshotSource {
   private sleepTimer?: NodeJS.Timeout;
   private sleepResolve?: () => void;
 
-  private static readonly MAX_BUFFER_PACKETS = 600;
-
   constructor(
-    private readonly config: SnapshotSourceConfig,
+    private readonly config: BufferedSourceConfig,
     private readonly logger: Logger,
   ) {}
 
@@ -67,6 +72,10 @@ export class SnapshotSource {
     return this.cachedFrameAt;
   }
 
+  public get hardwareContext(): HardwareContext | null | undefined {
+    return this.hwContext;
+  }
+
   public start(): void {
     if (this.shouldRun) return;
     this.shouldRun = true;
@@ -78,6 +87,7 @@ export class SnapshotSource {
     if (!this.shouldRun && !this.producerPromise) return;
     this.shouldRun = false;
     this.wakeSleep();
+    this.wakePacketWaiters();
 
     if (this.inflightDecode) {
       await this.inflightDecode;
@@ -87,7 +97,7 @@ export class SnapshotSource {
       try {
         await this.producerPromise;
       } catch (error) {
-        this.logger.debug('Snapshot producer exited with error:', error);
+        this.logger.debug('Buffered source producer exited with error:', error);
       }
       this.producerPromise = undefined;
     }
@@ -95,9 +105,9 @@ export class SnapshotSource {
     this.frameScaler?.dispose();
     this.frameScaler = undefined;
 
-    if (this.hardwareContext) {
-      this.hardwareContext[Symbol.dispose]();
-      this.hardwareContext = undefined;
+    if (this.hwContext) {
+      this.hwContext[Symbol.dispose]();
+      this.hwContext = undefined;
     }
   }
 
@@ -110,7 +120,7 @@ export class SnapshotSource {
 
     this.inflightDecode ??= this.catchUpDecode()
       .catch((error) => {
-        this.logger.debug('Snapshot decode failed:', error);
+        this.logger.debug('Buffered source decode failed:', error);
         return null;
       })
       .finally(() => {
@@ -119,6 +129,23 @@ export class SnapshotSource {
 
     const frame = await this.inflightDecode;
     return frame?.clone() ?? null;
+  }
+
+  public async nextFrame(lastId: number): Promise<FrameSnap | undefined> {
+    while (this.shouldRun) {
+      if (this.hasBuffer && this.nextSerial - 1 > lastId) {
+        const frame = await this.getFrame(0);
+        // decoder delay can leave the cursor behind the newest packet, waiting
+        // for the next one beats handing back a frame the caller already had
+        if (frame && this.decodedThrough > lastId) {
+          return { frame, id: this.decodedThrough };
+        }
+        frame?.[Symbol.dispose]?.();
+      }
+      await this.waitForPacket();
+    }
+
+    return undefined;
   }
 
   public async snapshotJpeg(maxWidth: number, quality?: number, maxAgeMs = 500): Promise<Buffer | null> {
@@ -148,7 +175,7 @@ export class SnapshotSource {
         }
       } catch (error: any) {
         if (this.shouldRun) {
-          this.logger.debug(`Snapshot source error: ${error.message}`);
+          this.logger.debug(`Buffered source error: ${error.message}`);
         }
       }
 
@@ -156,7 +183,7 @@ export class SnapshotSource {
       if (!this.shouldRun) break;
 
       const delay = this.backoff.nextDelayMs();
-      this.logger.debug(`Snapshot source disconnected, reconnecting in ${delay / 1000}s...`);
+      this.logger.debug(`Buffered source disconnected, reconnecting in ${delay / 1000}s...`);
       await this.sleep(delay);
     }
 
@@ -164,7 +191,7 @@ export class SnapshotSource {
   }
 
   private async connect(): Promise<void> {
-    this.logger.debug('Connecting to snapshot source:', this.config.url);
+    this.logger.debug('Connecting to buffered source:', this.config.url);
 
     this.input = await Demuxer.open(this.config.url, {
       options: {
@@ -177,28 +204,30 @@ export class SnapshotSource {
 
     const videoStream = this.input.video();
     if (!videoStream) {
-      throw new Error('No video stream found in snapshot source');
+      throw new Error('No video stream found in buffered source');
     }
     this.videoStream = videoStream;
 
-    this.hardwareContext ??= createHardwareContext(this.config.decoder, this.logger);
-    this.frameScaler ??= new FrameScaler(this.hardwareContext, this.logger);
+    this.hwContext ??= createHardwareContext(this.config.decoder, this.logger);
+    this.frameScaler ??= new FrameScaler(this.hwContext, this.logger);
 
     this.waitingForKeyframe = true;
     this.connected = true;
-    this.logger.debug(`Snapshot source connected: ${videoStream.codecpar.width}x${videoStream.codecpar.height}`);
+    this.logger.debug(`Buffered source connected: ${videoStream.codecpar.width}x${videoStream.codecpar.height}`);
   }
 
   private ingest(packet: Packet): void {
+    this.lastPacketAt = Date.now();
     if (packet.isKeyframe) {
       this.clearBuffer();
       this.waitingForKeyframe = false;
       this.buffer.push({ serial: this.nextSerial++, packet });
+      this.wakePacketWaiters();
       return;
     }
 
-    if (this.waitingForKeyframe || this.buffer.length >= SnapshotSource.MAX_BUFFER_PACKETS) {
-      if (this.buffer.length >= SnapshotSource.MAX_BUFFER_PACKETS) {
+    if (this.waitingForKeyframe || this.buffer.length >= BufferedSource.MAX_BUFFER_PACKETS) {
+      if (this.buffer.length >= BufferedSource.MAX_BUFFER_PACKETS) {
         this.clearBuffer();
         this.waitingForKeyframe = true;
       }
@@ -207,6 +236,33 @@ export class SnapshotSource {
     }
 
     this.buffer.push({ serial: this.nextSerial++, packet });
+    this.wakePacketWaiters();
+    this.releaseIdleDecoder();
+  }
+
+  private releaseIdleDecoder(): void {
+    if (!this.decoder || this.inflightDecode) return;
+    if (Date.now() - this.lastDecodeAt < BufferedSource.DECODER_IDLE_MS) return;
+
+    // the cached frame stays: it is one frame against the decoder's whole pool,
+    // and it keeps the first tick after waking on the main stream instead of
+    // falling back to the substream while the decoder is still warming up
+    this.logger.debug('Releasing idle decoder, packet buffer and last frame stay');
+    this.disposeDecoder();
+    this.frameScaler?.clearCache();
+  }
+
+  private waitForPacket(): Promise<void> {
+    return new Promise<void>((resolve) => {
+      this.packetWaiters.push(resolve);
+    });
+  }
+
+  private wakePacketWaiters(): void {
+    if (this.packetWaiters.length === 0) return;
+    const waiters = this.packetWaiters;
+    this.packetWaiters = [];
+    for (const resolve of waiters) resolve();
   }
 
   private async catchUpDecode(): Promise<Frame | null> {
@@ -225,7 +281,7 @@ export class SnapshotSource {
     let last: Frame | undefined;
     try {
       this.decoder ??= await Decoder.create(this.videoStream, {
-        hardware: this.hardwareContext ?? undefined,
+        hardware: this.hwContext ?? undefined,
         exitOnError: false,
       });
 
@@ -247,14 +303,15 @@ export class SnapshotSource {
       // ownership moves into the cache, consumers receive clones via getFrame
       this.cachedFrame?.[Symbol.dispose]?.();
       this.cachedFrame = last;
-      this.cachedFrameAt = Date.now();
+      this.cachedFrameAt = this.lastPacketAt || Date.now();
+      this.lastDecodeAt = Date.now();
       const result = last;
       last = undefined;
       return result;
     } catch (error) {
       // drop the warm decoder and reset the cursor, the next call re-feeds
       // from the buffered keyframe
-      this.logger.debug('Snapshot warm decoder reset:', error);
+      this.logger.debug('Buffered source warm decoder reset:', error);
       this.disposeDecoder();
       return this.cachedFrame ?? null;
     } finally {
@@ -267,7 +324,7 @@ export class SnapshotSource {
     try {
       this.decoder?.[Symbol.dispose]();
     } catch {
-      // best-effort
+      // ignore
     }
     this.decoder = undefined;
     this.decodedThrough = -1;
@@ -283,12 +340,13 @@ export class SnapshotSource {
     this.cachedFrame?.[Symbol.dispose]?.();
     this.cachedFrame = undefined;
     this.cachedFrameAt = 0;
+    this.lastPacketAt = 0;
 
     if (this.input) {
       try {
         await this.input[Symbol.asyncDispose]();
       } catch {
-        // best-effort
+        // ignore
       }
       this.input = undefined;
     }
@@ -299,7 +357,7 @@ export class SnapshotSource {
       try {
         b.packet.free();
       } catch {
-        // best-effort
+        // ignore
       }
     }
     this.buffer = [];

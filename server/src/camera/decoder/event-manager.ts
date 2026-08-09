@@ -2,6 +2,8 @@ import { randomUUID } from 'node:crypto';
 
 import { NamespaceManager } from '../../rpc/namespaces.js';
 import { boxIntersectsPolygon } from '../utils/filter.js';
+import { detectionRecord } from './debug/detection-record.js';
+import { leanEvent, NvrSink } from './nvr-sink.js';
 import { MAX_UNTRACKED_PLATES, normalizePlateText, PlateVoteTracker } from './plate-vote.js';
 
 import type { RPCClient } from '@camera.ui/rpc';
@@ -10,9 +12,7 @@ import type {
   ClassifierDetection,
   ClipEmbedding,
   Detection,
-  DetectionEvent,
   DetectionEventType,
-  EventSegment,
   EventTrigger,
   EventTriggerType,
   FaceDetection,
@@ -20,12 +20,15 @@ import type {
   LoggerService,
   Point,
 } from '@camera.ui/sdk';
+import type { DetectionEventMessage } from '@camera.ui/sdk/internal';
 import type { DetectionThumbnail } from '../../rpc/interfaces/detection.js';
-import type { BestShot } from './best-shot-store.js';
 import type { LineCrossingEvent } from './detection-pipeline.js';
+import type { AnalysisStream } from './types.js';
+import type { EventAttachments, RecordedAttribute, RecordedEvent, RecordedSegment } from './nvr-sink.js';
 
 export interface TrackedSecondary {
   parentTrackId?: number;
+  parentBox?: BoundingBox;
 }
 
 export interface TrackedFaceDetection extends FaceDetection, TrackedSecondary {}
@@ -38,9 +41,20 @@ export interface NormalizedDetectionZone {
   points: Point[];
 }
 
+export const MOMENT_RANK_OBJECT = 0;
+export const MOMENT_RANK_ATTRIBUTE = 1;
+
+export interface SegmentMoment {
+  strip: Buffer;
+  card?: Buffer;
+  capturedAt: number;
+  score: number;
+  rank: number;
+  stream: AnalysisStream;
+}
+
 export interface ProcessedDetectionData {
   hasCascadeTrigger: boolean;
-  /** Any activity span open (world track lifecycles or external report window). */
   hasOpenSpans?: boolean;
   motion?: {
     detected: boolean;
@@ -72,6 +86,8 @@ export interface ProcessedDetectionData {
 }
 
 const UPDATE_THROTTLE_MS = 1000;
+const MOMENT_IMPROVEMENT = 1.25;
+const CLIP_ATTRIBUTE = 'clip';
 const MIN_MOVING_SPEED = 0.05;
 const STATIONARY_SPEED_THRESHOLD = 0.002;
 
@@ -98,6 +114,14 @@ function jpegInfo(jpeg: Buffer): string {
   return `?x?/${Math.round(jpeg.length / 1024)}kb`;
 }
 
+interface HeldAttribute {
+  thumbnail?: Uint8Array;
+  embedding?: number[];
+  embeddingModel?: string;
+  clipEmbedding?: number[];
+  clipEmbeddingModel?: string;
+}
+
 interface ThumbnailCandidate {
   jpeg: Buffer;
   score: number;
@@ -112,17 +136,17 @@ export class DetectionEventManager {
   private static readonly MAX_PLATE_THUMBNAILS = 16;
   private static readonly SEGMENT_LINGER_MS = 10_000;
 
-  private activeEvent: DetectionEvent | null = null;
-  private activeSegment: EventSegment | null = null;
+  private activeEvent: RecordedEvent | null = null;
+  private activeSegment: RecordedSegment | null = null;
   private segmentIndex = 0;
   private lastPublishTime = 0;
 
-  private sceneThumbnailShipped = false;
+  private shippedSceneAt = 0;
   private attributeThumbnails = new Map<string, ThumbnailCandidate>();
-  private bestShotResolver?: (trackIds: Iterable<number>, label?: string) => BestShot | undefined;
-  private segmentTrackIds = new Set<number>();
-  private eventTrackIds = new Set<number>();
-  private lastPushedShotTs = 0;
+  private heldAttributes: HeldAttribute[] = [];
+  private shippedAttributes = new Map<number, Uint8Array>();
+  private segmentMoment?: SegmentMoment;
+  private pendingMoment?: SegmentMoment;
   private eventThumbnailAt = 0;
   private segmentClosePendingSince: number | null = null;
   private lingerTimer: NodeJS.Timeout | null = null;
@@ -131,18 +155,16 @@ export class DetectionEventManager {
   private eventThumbnail: Buffer | null = null;
   private needsEventThumbnail = false;
 
-  private eventBestShotPushed = false;
-  private eventBestShotDirty = false;
-
-  private segmentFaceTrackIds = new Map<number, number>();
+  private segmentFaceTrackIds = new Map<string, number>();
   private segmentPlateAttrIndex = new Map<string, number>();
   private segmentPlateReads = new Set<string>();
   private eventPlateVotes = new Map<string, PlateVoteTracker>();
   private plateVotingActive = true;
   private segmentClassifierTrackIds = new Map<string, number>();
-  private segmentClipTrackIds = new Set<string>();
+  private segmentClipLabels = new Map<string, number>();
 
   private readonly eventSubject: string;
+  private readonly nvr: NvrSink;
   private onEventEndCallback?: () => void;
 
   constructor(
@@ -152,6 +174,11 @@ export class DetectionEventManager {
   ) {
     const ns = NamespaceManager.detectionEventNamespaces(cameraId);
     this.eventSubject = ns.detectionEventSubject;
+    this.nvr = new NvrSink(proxy, logger);
+  }
+
+  public updateNvrRpc(namespace?: string): void {
+    this.nvr.setNamespace(namespace);
   }
 
   public onEventEnd(callback: () => void): void {
@@ -162,16 +189,24 @@ export class DetectionEventManager {
     this.onSegmentClosedCallback = callback;
   }
 
-  public setBestShotResolver(resolver: (trackIds: Iterable<number>, label?: string) => BestShot | undefined): void {
-    this.bestShotResolver = resolver;
+  public offerMoment(moment: SegmentMoment): void {
+    // the tick cuts the moment before it opens the segment, so the very picture
+    // that opens a span would be the one dropped; hold it for that opening
+    if (!this.activeSegment) {
+      // a tick can offer the object shot and then the face shot; within the tick
+      // they compete by rank, a newer tick always displaces the older pending one
+      if (this.beatsMoment(moment.rank, moment.score, moment.stream, this.incumbentMoment(moment.capturedAt))) {
+        this.pendingMoment = moment;
+      }
+      // debugging
+      this.recordMomentVerdict(moment, 'pending');
+      return;
+    }
+    this.takeMoment(moment);
   }
 
-  private segmentShot(label?: string): BestShot | undefined {
-    return this.bestShotResolver?.(this.segmentTrackIds, label);
-  }
-
-  private eventShot(): BestShot | undefined {
-    return this.bestShotResolver?.(this.eventTrackIds);
+  public wantsMoment(rank: number, score: number, stream: AnalysisStream, at: number): boolean {
+    return this.beatsMoment(rank, score, stream, this.incumbentMoment(at));
   }
 
   public processResults(data: ProcessedDetectionData): void {
@@ -226,11 +261,9 @@ export class DetectionEventManager {
         this.publishSegmentThrottled('segment-update');
       }
     } else if (this.activeSegment && this.segmentClosePendingSince === null) {
-      // all spans closed: linger before deciding — a span reopening in the
-      // window continues this segment (detector flicker or a camera
-      // re-reporting is not a new visit). The boundary stays back-stamped:
-      // lastSeen keeps the last real detection, the linger only delays the
-      // decision. Timer-driven so tickless (class-b) cameras close too
+      // all spans closed: linger before deciding, a reopening span continues
+      // this segment (detector flicker is not a new visit); lastSeen stays on
+      // the last real detection, timer-driven so tickless cameras close too
       this.segmentClosePendingSince = now;
       this.lingerTimer = setTimeout(() => {
         this.lingerTimer = null;
@@ -254,10 +287,8 @@ export class DetectionEventManager {
     if (this.activeEvent) this.endEvent();
   }
 
-  public publishEventThumbnail(jpeg?: Buffer, source: 'scene' | 'best-shot' = 'scene', capturedAt?: number): void {
+  public publishEventThumbnail(jpeg?: Buffer, capturedAt?: number): void {
     if (!this.activeEvent) return;
-    // a late scene re-shoot (HQ warm-up) must not undo an object crop
-    if (source === 'scene' && this.eventBestShotPushed) return;
     if (jpeg) {
       this.eventThumbnail = jpeg;
       this.eventThumbnailAt = capturedAt ?? Date.now();
@@ -266,12 +297,10 @@ export class DetectionEventManager {
     if (!this.eventThumbnail) return;
     this.logger.trace(`[event] thumbnail id=${this.activeEvent.id.slice(0, 8)} ${jpegInfo(this.eventThumbnail)}`);
     this.activeEvent.segments = [];
-    this.activeEvent.thumbnail = this.eventThumbnail;
     this.activeEvent.thumbnailAt = this.eventThumbnailAt || undefined;
-    this.publish('update');
-    this.activeEvent.thumbnail = undefined;
+    this.publish('update', { scene: this.eventThumbnail });
 
-    if (this.activeSegment && !this.segmentShot()) {
+    if (this.activeSegment && !this.segmentMoment) {
       this.publishSegment('segment-update');
     }
   }
@@ -299,10 +328,6 @@ export class DetectionEventManager {
     this.segmentIndex = 0;
     this.needsEventThumbnail = true;
     this.eventThumbnail = null;
-    this.eventBestShotPushed = false;
-    this.eventBestShotDirty = false;
-    this.eventTrackIds.clear();
-    this.lastPushedShotTs = 0;
     this.eventThumbnailAt = 0;
     if (data.eventThumbnail) {
       this.eventThumbnail = data.eventThumbnail;
@@ -311,14 +336,13 @@ export class DetectionEventManager {
     }
 
     this.updateTypes();
-    // pre-captured thumbnail rides inline in the start message, otherwise the
-    // next coordinator tick delivers it via update
+
+    // a pre-captured scene ships with the start message, otherwise the next
+    // coordinator tick delivers it via update
     if (this.eventThumbnail) {
-      this.activeEvent.thumbnail = this.eventThumbnail;
       this.activeEvent.thumbnailAt = this.eventThumbnailAt || undefined;
     }
-    this.publish('start');
-    if (this.activeEvent) this.activeEvent.thumbnail = undefined;
+    this.publish('start', this.eventThumbnail ? { scene: this.eventThumbnail } : undefined);
 
     const triggerTypes = [...new Set(triggers.map((t) => t.type))].join(',');
     const thumbInfo = this.eventThumbnail ? jpegInfo(this.eventThumbnail) : 'pending';
@@ -331,15 +355,6 @@ export class DetectionEventManager {
 
   private endEvent(): void {
     if (!this.activeEvent) return;
-
-    if (this.eventBestShotDirty) {
-      const shot = this.eventShot();
-      if (shot) this.publishEventThumbnail(shot.jpeg, 'best-shot', shot.capturedAt);
-    }
-    this.eventBestShotPushed = false;
-    this.eventBestShotDirty = false;
-    this.eventTrackIds.clear();
-    this.lastPushedShotTs = 0;
 
     this.closeSegment();
 
@@ -379,6 +394,14 @@ export class DetectionEventManager {
     };
     this.enrichSegment(data, now);
 
+    // the tick cuts its moment before it opens the segment, and both carry the
+    // tick's stamp, so an older one belongs to a tick that opened nothing
+    const pending = this.pendingMoment;
+    this.pendingMoment = undefined;
+    if (pending?.capturedAt === now) {
+      this.takeMoment(pending);
+    }
+
     if (data.thumbnails && data.thumbnails.length > 0) {
       this.updateThumbnails(data.thumbnails);
     }
@@ -402,7 +425,7 @@ export class DetectionEventManager {
     }
 
     this.segmentPlateAttrIndex.set(attrKey, this.activeSegment.attributes.length);
-    this.activeSegment.attributes.push({ type: 'license_plate', label, confidence, parentTrackId });
+    this.pushAttribute({ type: 'license_plate', label, confidence, parentTrackId });
   }
 
   private flushPlateFallbacks(): void {
@@ -426,8 +449,8 @@ export class DetectionEventManager {
   private closeSegment(): void {
     if (!this.activeSegment || !this.activeEvent) return;
 
-    this.activeSegment.lastSeen = Date.now();
-
+    // lastSeen stays on the last real detection: the linger only delays the
+    // decision to close, it is not part of what was seen
     this.flushPlateFallbacks();
     this.publishSegment('segment-end');
     this.clearSegmentThumbnails();
@@ -454,20 +477,11 @@ export class DetectionEventManager {
   }
 
   private enrichSegment(data: ProcessedDetectionData, now: number): void {
-    for (const object of data.objects) {
-      const trackId = 'trackId' in object ? (object as Detection & { trackId?: number }).trackId : undefined;
-      if (trackId !== undefined) {
-        this.segmentTrackIds.add(trackId);
-        this.eventTrackIds.add(trackId);
-      }
-    }
-    this.maybePushBestShot();
     if (!this.activeSegment) return;
 
     this.activeSegment.lastSeen = now;
 
     if (data.objects.length > 0) {
-      // upsert per label, keep best score/box/trackId and maxCount
       const labelCounts = new Map<string, { count: number; bestScore: number; bestBox?: BoundingBox; bestTrackId?: number; moving?: boolean }>();
       for (const obj of data.objects) {
         const t = obj as { trackId?: number; trackSpeed?: number; label: string; confidence: number; box: BoundingBox };
@@ -527,32 +541,28 @@ export class DetectionEventManager {
       if (face.confidence < (data.faceMinConfidence ?? 0)) continue;
       if (face.identity) {
         if (!this.activeSegment.attributes.some((a) => a.type === 'face' && a.label === face.identity)) {
-          this.activeSegment.attributes.push({ type: 'face', label: face.identity, parentTrackId: face.parentTrackId });
+          this.pushAttribute({ type: 'face', label: face.identity, parentTrackId: face.parentTrackId });
         }
       } else if (face.embedding?.length) {
-        if (face.parentTrackId !== undefined) {
-          const existingIdx = this.segmentFaceTrackIds.get(face.parentTrackId);
-          if (existingIdx !== undefined) {
-            const existing = this.activeSegment.attributes[existingIdx];
-            if (existing && face.confidence > (existing.confidence ?? 0)) {
-              existing.confidence = face.confidence;
-              existing.embedding = face.embedding;
-              existing.embeddingModel = data.faceEmbeddingModel;
-              existing.thumbnail = face.thumbnail;
-            }
-            continue;
+        // one slot per person, and one shared slot for faces the tracker could
+        // not attach to anyone: without a track there is nothing to tell two
+        // strangers apart by, and a slot per sighting would file the same face
+        // into the index on every tick
+        const bucket = face.parentTrackId !== undefined ? `t${face.parentTrackId}` : 'untracked';
+        const existingIdx = this.segmentFaceTrackIds.get(bucket);
+        if (existingIdx !== undefined) {
+          const existing = this.activeSegment.attributes[existingIdx];
+          if (existing && face.confidence > (existing.confidence ?? 0)) {
+            existing.confidence = face.confidence;
+            this.heldAttributes[existingIdx] = { thumbnail: face.thumbnail, embedding: face.embedding, embeddingModel: data.faceEmbeddingModel };
           }
-          this.segmentFaceTrackIds.set(face.parentTrackId, this.activeSegment.attributes.length);
+          continue;
         }
-        this.activeSegment.attributes.push({
-          type: 'face',
-          label: 'unknown',
-          confidence: face.confidence,
-          embedding: face.embedding,
-          embeddingModel: data.faceEmbeddingModel,
-          thumbnail: face.thumbnail,
-          parentTrackId: face.parentTrackId,
-        });
+        this.segmentFaceTrackIds.set(bucket, this.activeSegment.attributes.length);
+        this.pushAttribute(
+          { type: 'face', label: 'unknown', confidence: face.confidence, parentTrackId: face.parentTrackId },
+          { thumbnail: face.thumbnail, embedding: face.embedding, embeddingModel: data.faceEmbeddingModel },
+        );
       }
     }
 
@@ -568,7 +578,7 @@ export class DetectionEventManager {
         if (existing) {
           if (plate.confidence > (existing.confidence ?? 0)) existing.confidence = plate.confidence;
         } else {
-          this.activeSegment.attributes.push({ type: 'license_plate', label, confidence: plate.confidence, parentTrackId: plate.parentTrackId });
+          this.pushAttribute({ type: 'license_plate', label, confidence: plate.confidence, parentTrackId: plate.parentTrackId });
         }
         continue;
       }
@@ -617,23 +627,30 @@ export class DetectionEventManager {
         continue;
       }
 
-      this.activeSegment.attributes.push({ type: cls.attribute, label: cls.subAttribute, confidence: cls.confidence, parentTrackId: cls.parentTrackId });
+      this.pushAttribute({ type: cls.attribute, label: cls.subAttribute, confidence: cls.confidence, parentTrackId: cls.parentTrackId });
     }
 
     for (const clip of data.clips) {
       if (clip.embedding?.length) {
-        const clipKey = clip.parentTrackId !== undefined ? `${clip.parentTrackId}:${clip.label}` : clip.label;
-        if (this.segmentClipTrackIds.has(clipKey)) continue;
-        this.segmentClipTrackIds.add(clipKey);
-        this.activeSegment.attributes.push({
-          type: 'clip',
-          label: clip.label,
-          clipEmbedding: clip.embedding,
-          clipEmbeddingModel: data.clipEmbeddingModel,
-          parentTrackId: clip.parentTrackId,
-        });
+        // one embedding per subject actually present, not per track: a
+        // re-numbered track is the same person and would otherwise land in the
+        // search index again, while two real people must keep both appearances
+        const stored = this.segmentClipLabels.get(clip.label) ?? 0;
+        const present = this.activeSegment.detections.find((d) => d.label === clip.label)?.maxCount ?? 1;
+        if (stored >= Math.max(1, present)) continue;
+        this.segmentClipLabels.set(clip.label, stored + 1);
+        this.pushAttribute(
+          { type: 'clip', label: clip.label, parentTrackId: clip.parentTrackId },
+          { clipEmbedding: clip.embedding, clipEmbeddingModel: data.clipEmbeddingModel },
+        );
       }
     }
+  }
+
+  private pushAttribute(attribute: RecordedAttribute, held?: HeldAttribute): void {
+    if (!this.activeSegment) return;
+    this.activeSegment.attributes.push(attribute);
+    this.heldAttributes[this.activeSegment.attributes.length - 1] = held ?? {};
   }
 
   private extractTriggers(data: ProcessedDetectionData, now: number): EventTrigger[] {
@@ -691,7 +708,10 @@ export class DetectionEventManager {
     const segs = this.activeSegment ? [this.activeSegment] : this.activeEvent.segments;
     for (const seg of segs) {
       for (const d of seg.detections) types.add(d.label);
-      for (const attr of seg.attributes) types.add(attr.type);
+      for (const attr of seg.attributes) {
+        if (attr.type === CLIP_ATTRIBUTE) continue;
+        types.add(attr.type);
+      }
     }
 
     this.activeEvent.types = [...types];
@@ -708,18 +728,6 @@ export class DetectionEventManager {
       this.updateBestCandidate(this.attributeThumbnails, label, thumb);
       // a moving vehicle produces a distinct plate crop almost every frame, cap retention
       if (label.startsWith('plate:')) this.prunePlateThumbnails();
-    }
-  }
-
-  private maybePushBestShot(): void {
-    const shot = this.eventShot();
-    if (!shot || shot.capturedAt === this.lastPushedShotTs) return;
-    this.lastPushedShotTs = shot.capturedAt;
-    if (this.eventBestShotPushed) {
-      this.eventBestShotDirty = true;
-    } else {
-      this.eventBestShotPushed = true;
-      this.publishEventThumbnail(shot.jpeg, 'best-shot', shot.capturedAt);
     }
   }
 
@@ -752,7 +760,6 @@ export class DetectionEventManager {
     const cm = DetectionEventManager.isMoving(candidate);
     const currM = DetectionEventManager.isMoving(current);
 
-    // prefer moving objects over stationary
     if (cm && !currM) {
       this.logger.trace(`Thumbnail ${key}: prefer moving track#${candidate.trackId} (speed=${candidate.speed?.toFixed(4)}) over static track#${current.trackId}`);
       map.set(key, candidate);
@@ -769,59 +776,159 @@ export class DetectionEventManager {
     return (c.speed ?? 0) >= MIN_MOVING_SPEED;
   }
 
-  private injectSegmentThumbnails(): void {
-    if (!this.activeSegment) return;
+  private segmentAttachments(withEmbeddings: boolean): EventAttachments {
+    const attachments: EventAttachments = {};
 
-    const scene = this.segmentShot();
-    if (scene) {
-      this.activeSegment.thumbnail = scene.jpeg;
-      this.activeSegment.thumbnailAt = scene.capturedAt;
+    const moment = this.segmentMoment;
+    if (moment && moment.capturedAt !== this.shippedSceneAt) {
+      attachments.strip = moment.strip;
+      attachments.card = moment.card;
+      this.shippedSceneAt = moment.capturedAt;
     }
 
-    for (const detection of this.activeSegment.detections) {
-      const shot = this.segmentShot(detection.label);
-      if (!shot || shot.jpeg === scene?.jpeg) continue;
-      detection.thumbnail = shot.jpeg;
-    }
+    const attributes = this.activeSegment?.attributes ?? [];
+    const crops: (Uint8Array | undefined)[] = [];
+    let anyCrop = false;
 
-    for (const attr of this.activeSegment.attributes) {
-      if (attr.thumbnail) continue;
+    for (const [index, attribute] of attributes.entries()) {
+      const held = this.heldAttributes[index];
+      const crop = held?.thumbnail ?? this.attributeThumbnailFor(attribute);
 
-      const keys = [`face:${attr.label}`, `plate:${attr.label}`, `class:${attr.label}`];
-      const directKey = `${attr.type}:${attr.label}`;
-      if (!keys.includes(directKey)) keys.unshift(directKey);
-      for (const key of keys) {
-        const cand = this.attributeThumbnails.get(key);
-        if (cand) {
-          attr.thumbnail = cand.jpeg;
-          break;
+      if (crop?.length && this.shippedAttributes.get(index) !== crop) {
+        this.shippedAttributes.set(index, crop);
+        crops.push(crop);
+        anyCrop = true;
+      } else {
+        crops.push(undefined);
+      }
+
+      // embeddings are write-only into the face and clip indexes, and the
+      // recorder reads them once when the segment closes
+      if (withEmbeddings && held) {
+        if (held.embedding) {
+          attribute.embedding = held.embedding;
+          attribute.embeddingModel = held.embeddingModel;
+        }
+        if (held.clipEmbedding) {
+          attribute.clipEmbedding = held.clipEmbedding;
+          attribute.clipEmbeddingModel = held.clipEmbeddingModel;
         }
       }
     }
+
+    if (anyCrop) attachments.attributes = crops;
+    return attachments;
   }
 
-  private stripSegmentThumbnails(): void {
-    if (!this.activeSegment) return;
-    this.activeSegment.thumbnail = undefined;
-    for (const det of this.activeSegment.detections) det.thumbnail = undefined;
-    for (const attr of this.activeSegment.attributes) attr.thumbnail = undefined;
+  private attributeThumbnailFor(attribute: RecordedAttribute): Buffer | undefined {
+    const keys = [`face:${attribute.label}`, `plate:${attribute.label}`, `class:${attribute.label}`];
+    const directKey = `${attribute.type}:${attribute.label}`;
+    if (!keys.includes(directKey)) keys.unshift(directKey);
+
+    for (const key of keys) {
+      const candidate = this.attributeThumbnails.get(key);
+      if (candidate) return candidate.jpeg;
+    }
+    return undefined;
+  }
+
+  private takeMoment(moment: SegmentMoment): void {
+    if (!this.beatsMoment(moment.rank, moment.score, moment.stream, this.segmentMoment)) {
+      // debugging
+      this.recordMomentVerdict(moment, 'rejected');
+      return;
+    }
+    // debugging
+    this.recordMomentVerdict(moment, 'kept');
+    this.segmentMoment = moment;
+  }
+
+  private heldMomentInfo(): Record<string, unknown> | undefined {
+    const held = this.segmentMoment;
+    if (!held) return undefined;
+    return { capturedAt: held.capturedAt, score: held.score, rank: held.rank, stream: held.stream };
+  }
+
+  private incumbentMoment(at: number): SegmentMoment | undefined {
+    if (this.activeSegment) return this.segmentMoment;
+    return this.pendingMoment?.capturedAt === at ? this.pendingMoment : undefined;
+  }
+
+  private beatsMoment(rank: number, score: number, stream: AnalysisStream, held?: SegmentMoment): boolean {
+    if (!held) return true;
+    if (rank !== held.rank) return rank > held.rank;
+    // the score is normalized, so it cannot see that a main-stream crop is the
+    // same framing with several times the pixels: that one only has to tie
+    if (stream === 'main' && held.stream === 'low') return score > held.score;
+    return score > held.score * MOMENT_IMPROVEMENT;
+  }
+
+  // debugging
+  private recordMomentVerdict(moment: SegmentMoment, verdict: 'kept' | 'rejected' | 'pending'): void {
+    if (!detectionRecord.active) return;
+    detectionRecord.momentVerdict({
+      verdict,
+      capturedAt: moment.capturedAt,
+      score: moment.score,
+      rank: moment.rank,
+      stream: moment.stream,
+      held: this.heldMomentInfo(),
+      eventId: this.activeEvent?.id.slice(0, 8),
+      segment: this.activeSegment ? this.segmentIndex : undefined,
+    });
   }
 
   private clearSegmentThumbnails(): void {
-    this.sceneThumbnailShipped = false;
-    this.segmentTrackIds.clear();
+    this.shippedSceneAt = 0;
+    this.segmentMoment = undefined;
+    this.pendingMoment = undefined;
     this.attributeThumbnails.clear();
+    this.heldAttributes = [];
+    this.shippedAttributes.clear();
     this.segmentFaceTrackIds.clear();
     this.segmentPlateAttrIndex.clear();
     this.segmentPlateReads.clear();
     this.segmentClassifierTrackIds.clear();
-    this.segmentClipTrackIds.clear();
+    this.segmentClipLabels.clear();
   }
 
-  private publish(type: DetectionEventType): void {
+  private publish(type: DetectionEventType, attachments?: EventAttachments): void {
     if (!this.activeEvent) return;
-    this.proxy.publish(this.eventSubject, { type, data: this.activeEvent });
+    const message: DetectionEventMessage = { type, data: leanEvent(this.activeEvent) };
+    this.proxy.publish(this.eventSubject, message);
+    this.nvr.send(type, this.activeEvent, attachments);
+    // debugging
+    this.recordMessage(type, attachments);
     this.lastPublishTime = Date.now();
+  }
+
+  // debugging
+  private recordMessage(type: DetectionEventType, attachments?: EventAttachments): void {
+    if (!detectionRecord.active || !this.activeEvent) return;
+
+    const at = this.segmentMoment?.capturedAt ?? this.activeEvent.lastUpdate;
+    const segment = this.activeSegment;
+    const attributes = segment?.attributes ?? [];
+
+    detectionRecord.message({
+      type,
+      eventId: this.activeEvent.id.slice(0, 8),
+      segment: segment ? this.segmentIndex : undefined,
+      types: this.activeEvent.types,
+      recorderReachable: this.nvr.connected,
+      detections: segment?.detections.map((d) => ({ label: d.label, score: d.score, count: d.maxCount, track: d.trackId, moving: d.moving })),
+      attributes: attributes.map((a) => ({ type: a.type, label: a.label, confidence: a.confidence, parent: a.parentTrackId })),
+      sent: {
+        scene: attachments?.scene ? detectionRecord.picture(this.eventThumbnailAt || at, 'scene', 'event', attachments.scene) : undefined,
+        strip: attachments?.strip ? detectionRecord.picture(at, 'moment', 'strip', attachments.strip) : undefined,
+        card: attachments?.card ? detectionRecord.picture(at, 'moment', 'card', attachments.card) : undefined,
+        attributes: attachments?.attributes?.map((crop, index) =>
+          crop ? detectionRecord.picture(at, 'attr', `${attributes[index]?.type}-${attributes[index]?.label}`, crop) : undefined,
+        ),
+      },
+      momentStream: this.segmentMoment?.stream,
+      momentAt: this.segmentMoment?.capturedAt,
+    });
   }
 
   private publishSegment(type: 'segment-start' | 'segment-update' | 'segment-end'): void {
@@ -832,27 +939,10 @@ export class DetectionEventManager {
 
     this.logSegment(type);
 
-    if (type === 'segment-end') {
-      this.injectSegmentThumbnails();
-      this.publish(type);
-    } else if (type === 'segment-start') {
-      this.injectSegmentThumbnails();
-      this.publish(type);
-      this.sceneThumbnailShipped = this.segmentShot() !== undefined;
-      this.stripSegmentThumbnails();
-    } else if (!this.sceneThumbnailShipped) {
-      const scene = this.segmentShot();
-      if (scene) {
-        this.activeSegment.thumbnail = scene.jpeg;
-        this.publish(type);
-        this.activeSegment.thumbnail = undefined;
-        this.sceneThumbnailShipped = true;
-      } else {
-        this.publish(type);
-      }
-    } else {
-      this.publish(type);
-    }
+    const moment = this.segmentMoment;
+    if (moment) this.activeSegment.thumbnailAt = moment.capturedAt;
+
+    this.publish(type, this.segmentAttachments(type === 'segment-end'));
   }
 
   private publishSegmentThrottled(type: 'segment-update'): void {
@@ -888,13 +978,13 @@ export class DetectionEventManager {
 
     if (seg.attributes.length > 0) {
       const groups = new Map<string, string[]>();
-      for (const a of seg.attributes) {
+      for (const [index, a] of seg.attributes.entries()) {
+        const held = this.heldAttributes[index];
         const list = groups.get(a.type) ?? [];
         let info = a.label;
         if (a.confidence) info += `(${a.confidence.toFixed(2)})`;
-        if (a.type === 'face' && a.embedding?.length) info += '+emb';
-        if (a.type === 'face' && a.thumbnail) info += '+thumb';
-        if (a.type === 'clip' && a.clipEmbedding?.length) info += '+emb';
+        if (held?.embedding?.length || held?.clipEmbedding?.length) info += '+emb';
+        if (held?.thumbnail ?? this.attributeThumbnailFor(a)) info += '+thumb';
         list.push(info);
         groups.set(a.type, list);
       }
@@ -919,8 +1009,11 @@ export class DetectionEventManager {
     }
 
     const thumbParts: string[] = [];
-    const scene = this.segmentShot();
-    if (scene) thumbParts.push(`scene:${jpegInfo(scene.jpeg)}`);
+    const moment = this.segmentMoment;
+    if (moment) {
+      const shows = moment.rank >= MOMENT_RANK_ATTRIBUTE ? 'attr' : 'obj';
+      thumbParts.push(`moment(${shows},${moment.stream}):${jpegInfo(moment.strip)}${moment.card ? `+card:${jpegInfo(moment.card)}` : ''}`);
+    }
     for (const [label, cand] of this.attributeThumbnails) thumbParts.push(`${label}:${jpegInfo(cand.jpeg)}`);
     parts.push(`thumbs=${thumbParts.length}${thumbParts.length > 0 ? ` [${thumbParts.join(' ')}]` : ''}`);
 

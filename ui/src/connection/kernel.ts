@@ -271,7 +271,7 @@ export function createConnection(options: ConnectionOptions): Connection {
         diag('presence', 'network online');
         wakeTokens();
         if (shouldRetryOnWake()) k.dispatch({ type: 'USER_RETRY' });
-        else if (k.phase.kind === 'online') void backgroundProbe.run();
+        else if (k.phase.kind === 'online') backgroundProbe.run();
       },
       onOffline: () => diag('presence', 'network offline'),
       onVisibilityVisible: (k) => {
@@ -295,7 +295,7 @@ export function createConnection(options: ConnectionOptions): Connection {
           // healthy connections stay online: probe silently and swap the
           // endpoint in place if the new network opened a better path
           if (k.phase.kind === 'online') {
-            void backgroundProbe.run();
+            backgroundProbe.run();
           } else if (k.phase.kind === 'offline') {
             diag('network-change', 're-discovering');
             k.dispatch({ type: 'USER_RETRY' });

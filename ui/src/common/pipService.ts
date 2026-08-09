@@ -80,12 +80,12 @@ function nextPaint(): Promise<void> {
 
 export function registerAutoPipCandidate(id: string, candidate: AutoPipCandidate): void {
   autoCandidates.set(id, candidate);
-  void syncAutoPip();
+  syncAutoPip();
 }
 
 export function unregisterAutoPipCandidate(id: string): void {
   if (!autoCandidates.delete(id)) return;
-  void syncAutoPip();
+  syncAutoPip();
 }
 
 async function syncAutoPip(): Promise<void> {
