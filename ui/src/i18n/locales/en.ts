@@ -946,7 +946,7 @@ export default {
         decoder_device:
           'Which device the backend opens, for example 0 for the first GPU or /dev/dri/renderD128. Empty uses the backend default. Falls back to Auto if not usable.',
         worker_decoder_hardware: 'Hardware used while this camera is decoded on its assigned worker. Same as server uses the selection above.',
-        main_stream_analysis: 'Once something is detected, the high-resolution stream is analysed. Finds faces and plates further away, needs more processing power.',
+        main_stream_analysis: 'With hardware acceleration the high-resolution stream is always analysed once something is detected. This switch forces it on CPU-only systems, which costs real processing power.',
         motion_resolution: 'Resolution preset for motion detection (low: fast, medium: balanced, high: accurate)',
         hot_mode: 'Keeps the connection to the camera active to minimize delay',
         motion_timeout: 'Time in seconds after the last motion trigger before the motion event ends (min. 10s)',
@@ -1041,7 +1041,7 @@ export default {
         decoder_same_as_server: 'Same as server',
         hardware_version: 'Hardware version',
         hot_mode: 'Hot mode',
-        main_stream_analysis: 'Main stream when active',
+        main_stream_analysis: 'Main stream without GPU',
         language: 'Language',
         language_system: 'System default',
         layout_name: 'Layout name',

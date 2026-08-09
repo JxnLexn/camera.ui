@@ -6,8 +6,8 @@ import { DETECTION_SENSOR_TYPES } from '../../sensors/types.js';
 import { normalizeZone } from '../utils/filter.js';
 import { AudioDetectionLoop } from './audio-loop.js';
 import { CascadeManager } from './cascade-manager.js';
-import { DetectionPipeline } from './detection-pipeline.js';
 import { detectionRecord } from './debug/detection-record.js';
+import { DetectionPipeline } from './detection-pipeline.js';
 import { DwellManager } from './dwell-manager.js';
 import { DetectionEventManager, MOMENT_RANK_ATTRIBUTE, MOMENT_RANK_OBJECT } from './event-manager.js';
 import { EventThumbnailer } from './event-thumbnailer.js';
@@ -238,7 +238,7 @@ export class DetectionCoordinator {
       },
       config.availableSources,
     );
-    this.thumbnailer.sync(this.config.frameWorkerSettings.mainStreamAnalysis === true);
+    this.thumbnailer.sync(this.mainStreamAnalysisWanted);
 
     // debugging
     detectionRecord.sources({
@@ -338,7 +338,7 @@ export class DetectionCoordinator {
 
   public updateFrameWorkerSettings(settings: CameraFrameWorkerSettings): void {
     this.config.frameWorkerSettings = settings;
-    this.thumbnailer.sync(settings.mainStreamAnalysis === true);
+    this.thumbnailer.sync(this.mainStreamAnalysisWanted);
   }
 
   public updateNvrRpc(namespace?: string): void {
@@ -541,7 +541,8 @@ export class DetectionCoordinator {
     this.dwell.refresh(dwellKey, timeoutSeconds);
 
     if (action === 'activate' && this.cascadeEnabled) {
-      this.cascade.triggerMomentary(this.cascadeTimeoutSeconds);
+      // trigger edges never repeat, the cascade covers the trigger's dwell
+      this.cascade.triggerMomentary(Math.max(timeoutSeconds, this.cascadeTimeoutSeconds));
     }
 
     this.eventManager.processResults(this.buildSnapshot());
@@ -738,7 +739,6 @@ export class DetectionCoordinator {
     return { ...properties, detections: filtered, detected: filtered.length > 0 };
   }
 
-  // PTZ-suppression gating happens upstream, callers decide what gets in here
   private ingestDetectionResult(sensorType: SensorType, sensorId: string, properties: Record<string, unknown>, pluginId?: string): void {
     if (sensorType === SensorType.Audio) {
       properties = this.applyAudioConfidence(properties);
@@ -752,7 +752,12 @@ export class DetectionCoordinator {
       const motionTimeout = this.config.detectionSettings.motion.timeout;
       this.dwell.refresh(sensorId, motionTimeout);
       if (this.cascadeEnabled) {
-        this.cascade.triggerMomentary(this.cascadeTimeoutSeconds);
+        // a frame-based motion sensor re-arms on every motion frame, so its
+        // short tail is fine; an external sensor fires one edge and goes
+        // quiet, that edge must arm the cascade for the whole belief window
+        const framePlugin = this.plugins.get(SensorType.Motion);
+        const frameBased = framePlugin?.requiresFrames === true && framePlugin.sensorId === sensorId;
+        this.cascade.triggerMomentary(frameBased ? this.cascadeTimeoutSeconds : Math.max(motionTimeout, this.cascadeTimeoutSeconds));
       }
     } else if (sensorType === SensorType.Audio && detected) {
       const audioTimeout = this.config.detectionSettings.audio.timeout;
@@ -1003,6 +1008,8 @@ export class DetectionCoordinator {
       try {
         await this.frameSource.start();
         this.frameScaler.updateHardwareContext(this.frameSource.hardwareContext);
+        // the hardware context exists only after start, re-evaluate the HQ session
+        this.thumbnailer.sync(this.mainStreamAnalysisWanted);
 
         this.logger.debug('Stream connected, processing frames...');
         this.videoBackoff.reset();
@@ -1078,7 +1085,12 @@ export class DetectionCoordinator {
   }
 
   private get mainStreamAvailable(): boolean {
-    return this.config.frameWorkerSettings.mainStreamAnalysis === true && this.thumbnailer.hasMainStream;
+    if (!this.thumbnailer.hasMainStream) return false;
+    return this.mainStreamAnalysisWanted;
+  }
+
+  private get mainStreamAnalysisWanted(): boolean {
+    return this.config.frameWorkerSettings.mainStreamAnalysis === true || this.frameSource.hardwareContext !== null;
   }
 
   private async acquireAnalysisFrame(lowFrame: Frame): Promise<AnalysisFrame> {

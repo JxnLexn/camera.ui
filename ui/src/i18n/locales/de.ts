@@ -960,7 +960,7 @@ export default {
           'Welches Gerät das Backend öffnet, zum Beispiel 0 für die erste GPU oder /dev/dri/renderD128. Leer verwendet den Backend-Standard. Fällt auf Auto zurück, wenn nicht nutzbar.',
         worker_decoder_hardware: 'Hardware, wenn diese Kamera auf ihrem zugewiesenen Worker decodiert wird. Wie Server verwendet die Auswahl oben.',
         main_stream_analysis:
-          'Sobald etwas erkannt wurde, wird der hochauflösende Stream ausgewertet. Findet Gesichter und Kennzeichen auf größere Entfernung, braucht mehr Rechenleistung.',
+          'Mit Hardware-Beschleunigung wird der hochauflösende Stream bei Aktivität immer ausgewertet. Dieser Schalter erzwingt das auch auf reinen CPU-Systemen, was spürbar Rechenleistung kostet.',
         motion_resolution: 'Auflösungsvoreinstellung für Bewegungserkennung (low: schnell, medium: ausgewogen, high: genau)',
         hot_mode: 'Lässt die Verbindung zur Kamera aktiv, um die Verzögerung zu minimieren',
         motion_timeout: 'Zeit in Sekunden nach dem letzten Bewegungs-Trigger, bis das Bewegungsereignis endet (min. 10s)',
@@ -1056,7 +1056,7 @@ export default {
         decoder_same_as_server: 'Wie Server',
         hardware_version: 'Hardware Version',
         hot_mode: 'Hot Modus',
-        main_stream_analysis: 'Hauptstream bei Aktivität',
+        main_stream_analysis: 'Hauptstream ohne GPU',
         language: 'Sprache',
         language_system: 'Systemstandard',
         layout_name: 'Layoutname',
