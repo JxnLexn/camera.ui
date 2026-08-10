@@ -131,7 +131,7 @@ export function generateDefaultValue(schema: JsonSchema): any {
       return [];
     case 'object': {
       const value: Record<string, any> = {};
-      for (const property of (schema).properties ?? []) {
+      for (const property of schema.properties ?? []) {
         if (isButtonType(property) || isSubmitType(property)) continue;
         value[property.key] = generateDefaultValue(property);
       }
@@ -545,12 +545,12 @@ export function generateZodSchemaField(schema: JsonSchema): zod.ZodTypeAny {
 
     case 'object': {
       const shape: Record<string, zod.ZodTypeAny> = {};
-      for (const property of (schema).properties ?? []) {
+      for (const property of schema.properties ?? []) {
         if (isButtonType(property) || isSubmitType(property)) continue;
         shape[property.key] = generateZodSchemaField(property);
       }
       const objectSchema = zod.object(shape);
-      return (schema).required ? objectSchema : objectSchema.optional();
+      return schema.required ? objectSchema : objectSchema.optional();
     }
 
     default:

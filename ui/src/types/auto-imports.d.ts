@@ -286,6 +286,7 @@ declare global {
   const useLocaleStore: typeof import('../stores/locale').useLocaleStore
   const useLogger: typeof import('../composables/useLogger').useLogger
   const useLogsSocket: typeof import('../composables/sockets/useLogsSocket').useLogsSocket
+  const useLongPressPreview: typeof import('../composables/useLongPressPreview').useLongPressPreview
   const useMagicKeys: typeof import('@vueuse/core').useMagicKeys
   const useManualRefHistory: typeof import('@vueuse/core').useManualRefHistory
   const useMediaControls: typeof import('@vueuse/core').useMediaControls
@@ -789,6 +790,7 @@ declare module 'vue' {
     readonly useLocaleStore: UnwrapRef<typeof import('../stores/locale')['useLocaleStore']>
     readonly useLogger: UnwrapRef<typeof import('../composables/useLogger')['useLogger']>
     readonly useLogsSocket: UnwrapRef<typeof import('../composables/sockets/useLogsSocket')['useLogsSocket']>
+    readonly useLongPressPreview: UnwrapRef<typeof import('../composables/useLongPressPreview')['useLongPressPreview']>
     readonly useMagicKeys: UnwrapRef<typeof import('@vueuse/core')['useMagicKeys']>
     readonly useManualRefHistory: UnwrapRef<typeof import('@vueuse/core')['useManualRefHistory']>
     readonly useMediaControls: UnwrapRef<typeof import('@vueuse/core')['useMediaControls']>

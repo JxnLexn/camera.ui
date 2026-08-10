@@ -70,8 +70,8 @@ const props = defineProps<CuiCameraEventsProps>();
 
 const { isTouch } = useSharedCuiUserAgent();
 
-// Provide shared hover preview instance (desktop only)
-if (!isTouch.value && typeof VideoDecoder !== 'undefined') {
+// Provide shared hover preview instance (hover on desktop, long-press on touch)
+if (typeof VideoDecoder !== 'undefined') {
   const hoverPreview = useEventHoverPreview({ cacheSize: 20 });
   provide(EventHoverPreviewKey, hoverPreview);
   tryOnScopeDispose(() => hoverPreview.dispose());

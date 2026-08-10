@@ -270,11 +270,10 @@ const props = withDefaults(defineProps<CuiCameraRecordingsProps>(), { compact: f
 const emit = defineEmits<CuiCameraRecordingsEmits>();
 
 const { t } = useI18n();
-const { isTouch } = useSharedCuiUserAgent();
 
 const gridSearch = inject(GridSearchKey, undefined);
 
-if (!isTouch.value && typeof VideoDecoder !== 'undefined') {
+if (typeof VideoDecoder !== 'undefined') {
   const hoverPreview = useEventHoverPreview({ cacheSize: 10 });
   provide(EventHoverPreviewKey, hoverPreview);
   tryOnScopeDispose(() => hoverPreview.dispose());

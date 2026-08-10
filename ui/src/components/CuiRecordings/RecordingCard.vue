@@ -1,5 +1,5 @@
 <template>
-  <div class="recording-card relative group cursor-pointer" @click="handleClick" @mouseenter="handleMouseEnter" @mouseleave="handleMouseLeave">
+  <div ref="rootRef" class="recording-card relative group cursor-pointer" @click="handleClick" @mouseenter="handleMouseEnter" @mouseleave="handleMouseLeave">
     <div
       class="bg-neutral-900 w-full rounded-xl overflow-hidden relative transition-shadow duration-200"
       :class="{ 'ring-2 ring-inset ring-primary/70': siblingActive }"
@@ -67,22 +67,32 @@
       </div>
 
       <template v-if="carouselImages.length > 1">
-        <button
-          class="carousel-nav absolute left-1 top-1/2 -translate-y-1/2 z-[3] w-7 h-7 rounded-full bg-black/40 hover:bg-black/60 flex items-center justify-center transition-opacity duration-200"
+        <Button
+          rounded
+          text
+          severity="secondary"
+          class="carousel-nav !absolute left-1 top-1/2 -translate-y-1/2 z-[3] !w-7 !h-7 !p-0 bg-black/40 hover:!bg-black/60 transition-opacity duration-200"
           :aria-label="$t('views.recordings.prev_image')"
           @click.stop="stepImage(-1)"
           @mouseenter="stopPreview"
         >
-          <i-mdi:chevron-left class="w-5 h-5 text-white" />
-        </button>
-        <button
-          class="carousel-nav absolute right-1 top-1/2 -translate-y-1/2 z-[3] w-7 h-7 rounded-full bg-black/40 hover:bg-black/60 flex items-center justify-center transition-opacity duration-200"
+          <template #icon>
+            <i-mdi:chevron-left class="w-5 h-5 text-white" />
+          </template>
+        </Button>
+        <Button
+          rounded
+          text
+          severity="secondary"
+          class="carousel-nav !absolute right-1 top-1/2 -translate-y-1/2 z-[3] !w-7 !h-7 !p-0 bg-black/40 hover:!bg-black/60 transition-opacity duration-200"
           :aria-label="$t('views.recordings.next_image')"
           @click.stop="stepImage(1)"
           @mouseenter="stopPreview"
         >
-          <i-mdi:chevron-right class="w-5 h-5 text-white" />
-        </button>
+          <template #icon>
+            <i-mdi:chevron-right class="w-5 h-5 text-white" />
+          </template>
+        </Button>
       </template>
 
       <div v-if="footerLabel" class="absolute bottom-10 left-1/2 -translate-x-1/2 z-[3] max-w-[85%] pointer-events-none">
@@ -166,8 +176,15 @@ const initialState: 'loading' | 'loaded' | 'empty' = cachedInit
   : 'loading';
 
 const preview = inject(EventHoverPreviewKey, undefined);
+const rootRef = useTemplateRef<HTMLElement>('rootRef');
 const previewCanvasRef = useTemplateRef('previewCanvasRef');
 const footerRef = useTemplateRef<HTMLElement>('footerRef');
+
+const longPress = useLongPressPreview(
+  rootRef,
+  () => startPreview(),
+  () => stopPreview(),
+);
 const isPreviewActive = ref(false);
 const loadedThumbs = ref<EventThumbnails | null>(cachedInit ?? null);
 const thumbnailState = ref<'loading' | 'loaded' | 'empty'>(initialState);
@@ -315,13 +332,18 @@ function stopPreview(): void {
   preview.onHoverEnd();
 }
 
-function handleMouseEnter(): void {
+function startPreview(): void {
   if (!preview || !props.event.endTime || props.event.hasRecording === false) return;
   if (activeImageIndex.value > 0) return;
   const canvas = previewCanvasRef.value;
   if (!canvas) return;
   isPreviewActive.value = true;
   preview.onHoverStart(canvas, props.event.cameraId, props.event.id, props.event.startTime, props.event.endTime);
+}
+
+function handleMouseEnter(): void {
+  if (longPress.blocksMouseEnter()) return;
+  startPreview();
 }
 
 function handleMouseLeave(): void {
@@ -349,6 +371,7 @@ function handleOpenEpisode(): void {
 }
 
 function handleClick(): void {
+  if (longPress.consumesClick()) return;
   if (props.selectionMode) {
     emit('select');
     return;
@@ -397,6 +420,9 @@ onMounted(() => {
 <style scoped>
 .recording-card {
   contain: layout;
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
 }
 
 @media (hover: hover) and (pointer: fine) {

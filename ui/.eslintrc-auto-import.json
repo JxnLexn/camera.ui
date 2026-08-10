@@ -345,6 +345,7 @@
     "useLocaleStore": true,
     "useLogger": true,
     "useLogsSocket": true,
+    "useLongPressPreview": true,
     "useMagicKeys": true,
     "useManualRefHistory": true,
     "useMediaControls": true,

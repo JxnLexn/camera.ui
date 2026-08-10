@@ -238,10 +238,9 @@ const eventStore = useEventStore('@camera.ui/camera-ui-nvr');
 const toast = useCuiToast();
 const { t } = useI18n();
 const { smBreakpoint, xlBreakpoint, mdBreakpoint } = useSharedCuiBreakpoint();
-const { isTouch } = useSharedCuiUserAgent();
 const { registerScrollToTop } = useCuiTopbarSlots();
 
-if (!isTouch.value && typeof VideoDecoder !== 'undefined') {
+if (typeof VideoDecoder !== 'undefined') {
   const hoverPreview = useEventHoverPreview({ cacheSize: 20 });
   provide(EventHoverPreviewKey, hoverPreview);
   tryOnScopeDispose(() => hoverPreview.dispose());

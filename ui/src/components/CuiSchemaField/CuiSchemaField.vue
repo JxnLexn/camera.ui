@@ -21,6 +21,7 @@
           <Textarea
             v-if="schemaField.format === 'textarea'"
             v-bind="field"
+            class="w-full"
             :invalid="errors.length > 0"
             :readonly="schemaField.readonly"
             :placeholder="schemaField.placeholder"
