@@ -219,6 +219,7 @@ export class NotificationManager {
     const resolved: ResolvedNotification = {
       ...opts.notification,
       severity: opts.notification.severity ?? Severity.Info,
+      silent: opts.notification.severity === Severity.Critical ? false : opts.notification.silent,
       id: uuidv4(),
       createdAt: Date.now(),
       source,
@@ -461,6 +462,7 @@ export class NotificationManager {
       deepLink: n.deepLink,
       source: n.source,
       data: n.data,
+      silent: n.silent,
     };
 
     const dropped: string[] = [];

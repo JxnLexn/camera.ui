@@ -83,6 +83,7 @@ function forwardToDesktop(n: StoredNotification): void {
     deepLink: n.deepLink,
     tag: n.tag,
     severity: n.severity,
+    silent: n.silent,
   });
 }
 

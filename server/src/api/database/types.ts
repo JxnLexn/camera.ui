@@ -420,6 +420,7 @@ export interface StoredNotification {
   deepLink?: string;
   source: NotificationSource;
   data?: Record<string, unknown>;
+  silent?: boolean;
 }
 
 export interface DBNotificationHistory {
