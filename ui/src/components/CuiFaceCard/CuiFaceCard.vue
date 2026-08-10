@@ -39,31 +39,42 @@
         v-if="!selectionMode"
         class="absolute bottom-0 left-0 right-0 p-1.5 bg-gradient-to-t from-black/60 to-transparent flex items-center justify-center gap-1 dark-mode"
       >
-        <Button
-          v-if="showRemove"
-          v-tooltip.top="$t('views.faces.remove_from_cluster')"
-          severity="secondary"
-          rounded
-          size="small"
-          class="cui-icon-sm text-white"
-          @click.stop="$emit('remove')"
-        >
-          <template #icon><i-tabler:minus class="w-4 h-4" /></template>
-        </Button>
-        <Button
-          v-else
-          v-tooltip.top="$t('views.faces.assign')"
-          severity="secondary"
-          rounded
-          size="small"
-          class="cui-icon-sm text-white"
-          @click.stop="$emit('assign-prompt')"
-        >
-          <template #icon><i-mdi:account-plus width="100%" height="100%" /></template>
-        </Button>
-        <Button v-tooltip.top="$t('views.faces.discard')" severity="danger" rounded size="small" class="cui-icon-sm text-white" @click.stop="$emit('skip')">
-          <template #icon><i-mdi:delete width="100%" height="100%" /></template>
-        </Button>
+        <template v-if="variant === 'ignored'">
+          <Button v-tooltip.top="$t('views.faces.restore')" severity="secondary" rounded size="small" class="cui-icon-sm text-white" @click.stop="$emit('restore')">
+            <template #icon><i-mdi:eye width="100%" height="100%" /></template>
+          </Button>
+        </template>
+
+        <template v-else>
+          <Button
+            v-if="showRemove"
+            v-tooltip.top="$t('views.faces.remove_from_cluster')"
+            severity="secondary"
+            rounded
+            size="small"
+            class="cui-icon-sm text-white"
+            @click.stop="$emit('remove')"
+          >
+            <template #icon><i-tabler:minus class="w-4 h-4" /></template>
+          </Button>
+          <Button
+            v-else
+            v-tooltip.top="$t('views.faces.assign')"
+            severity="secondary"
+            rounded
+            size="small"
+            class="cui-icon-sm text-white"
+            @click.stop="$emit('assign-prompt')"
+          >
+            <template #icon><i-mdi:account-plus width="100%" height="100%" /></template>
+          </Button>
+          <Button v-tooltip.top="$t('views.faces.ignore')" severity="secondary" rounded size="small" class="cui-icon-sm text-white" @click.stop="$emit('ignore')">
+            <template #icon><i-mdi:eye-off width="100%" height="100%" /></template>
+          </Button>
+          <Button v-tooltip.top="$t('views.faces.discard')" severity="danger" rounded size="small" class="cui-icon-sm text-white" @click.stop="$emit('skip')">
+            <template #icon><i-mdi:delete width="100%" height="100%" /></template>
+          </Button>
+        </template>
       </div>
     </div>
   </div>

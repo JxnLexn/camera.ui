@@ -53,7 +53,7 @@
 
     <template v-else>
       <div
-        v-if="!faceStore.knownFaces.value.length && !faceStore.unknownFaces.value.length"
+        v-if="!faceStore.knownFaces.value.length && !faceStore.unknownFaces.value.length && !faceStore.ignoredFaces.value.length"
         class="flex flex-1 min-h-0 flex-col items-center justify-center w-full gap-4"
       >
         <i-mdi:face-recognition class="w-12 h-12 text-muted" />
@@ -90,134 +90,181 @@
             <span class="card-title m-0!">{{ $t('views.faces.unknown_faces') }} ({{ faceStore.unknownFaces.value.length }})</span>
           </div>
 
-          <Card v-if="faceStore.unknownFaces.value.length || clustered.ungrouped.length" class="cui-card border-color-inner h-auto!" :pt="{ body: { class: 'pb-0' } }">
-            <template #content>
-              <Accordion v-if="faceStore.unknownFaces.value.length" multiple>
-                <AccordionPanel
-                  v-for="(cluster, i) in clustered.clusters"
-                  :key="cluster.clusterId"
-                  :value="cluster.clusterId"
-                  :class="{
-                    'border-b-0': clustered.ungrouped.length === 0 && i === clustered.clusters.length - 1,
-                  }"
-                >
-                  <AccordionHeader
+          <div class="flex flex-col gap-3">
+            <Card v-if="clustered.clusters.length" class="cui-card border-color-inner h-auto!" :pt="{ body: { class: 'pb-0' } }">
+              <template #content>
+                <Accordion multiple>
+                  <AccordionPanel
+                    v-for="(cluster, i) in clustered.clusters"
+                    :key="cluster.clusterId"
+                    :value="cluster.clusterId"
                     :class="{
-                      'px-0 pt-0': i === 0,
-                      'px-0': i !== 0,
-                      'pb-5': clustered.ungrouped.length === 0 && i === clustered.clusters.length - 1,
+                      'border-b-0': i === clustered.clusters.length - 1,
                     }"
                   >
-                    <span class="flex items-center gap-3 w-full">
-                      <div class="w-10 h-10 rounded-full overflow-hidden bg-surface-100 dark:bg-surface-800 shrink-0">
-                        <img v-if="cluster.bestThumbnail" :src="cluster.bestThumbnail" class="w-full h-full object-cover" />
-                      </div>
-                      <span class="font-medium">{{ cluster.faces.length }} {{ $t('views.faces.faces_in_cluster') }}</span>
-                      <span class="ml-auto flex items-center gap-1 mr-2" @click.stop>
-                        <Button
-                          v-tooltip.top="$t('views.faces.assign_cluster')"
-                          severity="secondary"
-                          text
-                          rounded
-                          class="cui-icon-lg"
-                          @click="onAssignCluster(cluster, '__new__')"
-                        >
-                          <template #icon><i-mdi:account-plus class="w-4 h-4" /></template>
-                        </Button>
-                        <Button v-tooltip.top="$t('views.faces.discard')" severity="danger" text rounded class="cui-icon-lg" @click="skipCluster(cluster)">
-                          <template #icon><i-mdi:delete width="100%" height="100%" /></template>
-                        </Button>
+                    <AccordionHeader
+                      :class="{
+                        'px-0 pt-0': i === 0,
+                        'px-0': i !== 0,
+                        'pb-5': i === clustered.clusters.length - 1,
+                      }"
+                    >
+                      <span class="flex items-center gap-3 w-full">
+                        <div v-if="selectionMode" class="shrink-0" @click.stop="toggleGroupSelection(cluster.faces)">
+                          <div
+                            class="w-6 h-6 rounded-full border-2 flex items-center justify-center transition-colors cursor-pointer"
+                            :class="groupSelectionState(cluster.faces) === 'none' ? 'border-surface-400 dark:border-surface-500' : 'bg-primary border-primary'"
+                          >
+                            <i-mdi:check v-if="groupSelectionState(cluster.faces) === 'all'" class="w-4 h-4 text-white" />
+                            <i-mdi:minus v-else-if="groupSelectionState(cluster.faces) === 'some'" class="w-4 h-4 text-white" />
+                          </div>
+                        </div>
+                        <div class="w-10 h-10 rounded-full overflow-hidden bg-surface-100 dark:bg-surface-800 shrink-0">
+                          <img v-if="cluster.bestThumbnail" :src="cluster.bestThumbnail" class="w-full h-full object-cover" />
+                        </div>
+                        <span class="font-medium">{{ cluster.faces.length }} {{ $t('views.faces.faces_in_cluster') }}</span>
+                        <span class="ml-auto flex items-center gap-1 mr-2" @click.stop>
+                          <Button
+                            v-tooltip.top="$t('views.faces.assign_cluster')"
+                            severity="secondary"
+                            text
+                            rounded
+                            class="cui-icon-lg"
+                            @click="onAssignCluster(cluster, '__new__')"
+                          >
+                            <template #icon><i-mdi:account-plus class="w-4 h-4" /></template>
+                          </Button>
+                          <Button v-tooltip.top="$t('views.faces.ignore_cluster')" severity="secondary" text rounded class="cui-icon-lg" @click="ignoreCluster(cluster)">
+                            <template #icon><i-mdi:eye-off class="w-4 h-4" /></template>
+                          </Button>
+                          <Button v-tooltip.top="$t('views.faces.discard')" severity="danger" text rounded class="cui-icon-lg" @click="skipCluster(cluster)">
+                            <template #icon><i-mdi:delete width="100%" height="100%" /></template>
+                          </Button>
+                        </span>
                       </span>
-                    </span>
-                  </AccordionHeader>
-                  <AccordionContent
-                    :pt="{
-                      content: {
-                        class: {
-                          'px-0': true,
-                          'pb-5': clustered.ungrouped.length === 0 && i === clustered.clusters.length - 1,
+                    </AccordionHeader>
+                    <AccordionContent
+                      :pt="{
+                        content: {
+                          class: {
+                            'px-0': true,
+                            'pb-5': i === clustered.clusters.length - 1,
+                          },
                         },
-                      },
-                    }"
-                  >
-                    <div class="grid w-full gap-3" :style="{ gridTemplateColumns: `repeat(auto-fill, minmax(${smBreakpoint ? '120px' : '140px'}, 1fr))` }">
-                      <CuiFaceCard
-                        v-for="face in cluster.faces"
-                        :key="face.id"
-                        variant="unknown"
-                        show-remove
-                        :thumbnail="thumbnailToUrl(face.thumbnail)"
-                        :timestamp="face.timestamp"
-                        :confidence="face.confidence"
-                        :selection-mode="selectionMode"
-                        :selected="selectedIds.has(face.id)"
-                        @click="toggleSelection(face.id)"
-                        @assign-prompt="promptAssignSingle(face)"
-                        @remove="removeFromCluster(face)"
-                        @skip="discardFace(face)"
-                      />
-                    </div>
-                  </AccordionContent>
-                </AccordionPanel>
-
-                <AccordionPanel
-                  v-if="clustered.ungrouped.length"
-                  value="__ungrouped__"
-                  :class="{
-                    'border-b-0': true,
-                  }"
-                >
-                  <AccordionHeader
-                    :class="{
-                      'px-0 pt-0': clustered.clusters.length === 0,
-                      'px-0': clustered.clusters.length !== 0,
-                      'pb-5': true,
-                    }"
-                  >
-                    <span class="flex items-center gap-3 w-full">
-                      <div class="w-10 h-10 rounded-full overflow-hidden bg-surface-100 dark:bg-surface-800 shrink-0 flex items-center justify-center">
-                        <i-mdi:account-question class="w-5 h-5 text-muted" />
+                      }"
+                    >
+                      <div class="grid w-full gap-3" :style="{ gridTemplateColumns: `repeat(auto-fill, minmax(${smBreakpoint ? '120px' : '140px'}, 1fr))` }">
+                        <CuiFaceCard
+                          v-for="face in cluster.faces"
+                          :key="face.id"
+                          variant="unknown"
+                          show-remove
+                          :thumbnail="thumbnailToUrl(face.thumbnail)"
+                          :timestamp="face.timestamp"
+                          :confidence="face.confidence"
+                          :selection-mode="selectionMode"
+                          :selected="selectedIds.has(face.id)"
+                          @click="toggleSelection(face.id)"
+                          @assign-prompt="promptAssignSingle(face)"
+                          @remove="removeFromCluster(face)"
+                          @ignore="ignoreFace(face)"
+                          @skip="discardFace(face)"
+                        />
                       </div>
-                      <span class="font-medium">{{ clustered.ungrouped.length }} {{ $t('views.faces.ungrouped') }}</span>
-                      <span class="ml-auto flex items-center gap-1 mr-2" @click.stop>
-                        <Button v-tooltip.top="$t('views.faces.discard')" severity="danger" text rounded class="cui-icon-lg" @click="clearUngrouped">
-                          <template #icon><i-mdi:delete width="100%" height="100%" /></template>
-                        </Button>
-                      </span>
-                    </span>
-                  </AccordionHeader>
-                  <AccordionContent
-                    :pt="{
-                      content: {
-                        class: {
-                          'px-0 pb-0': true,
-                          'mb-5': true,
-                        },
-                      },
-                    }"
-                  >
-                    <div class="grid w-full gap-3" :style="{ gridTemplateColumns: `repeat(auto-fill, minmax(${smBreakpoint ? '120px' : '140px'}, 1fr))` }">
-                      <CuiFaceCard
-                        v-for="face in clustered.ungrouped"
-                        :key="face.id"
-                        variant="unknown"
-                        :thumbnail="thumbnailToUrl(face.thumbnail)"
-                        :timestamp="face.timestamp"
-                        :confidence="face.confidence"
-                        :selection-mode="selectionMode"
-                        :selected="selectedIds.has(face.id)"
-                        @click="toggleSelection(face.id)"
-                        @assign-prompt="promptAssignSingle(face)"
-                        @skip="discardFace(face)"
-                      />
-                    </div>
-                  </AccordionContent>
-                </AccordionPanel>
-              </Accordion>
-            </template>
-          </Card>
+                    </AccordionContent>
+                  </AccordionPanel>
+                </Accordion>
+              </template>
+            </Card>
 
-          <div v-else class="text-muted text-sm">{{ $t('views.faces.no_unknown_faces') }}</div>
+            <Card v-if="clustered.ungrouped.length" class="cui-card border-color-inner h-auto!" :pt="{ body: { class: 'pb-0' } }">
+              <template #content>
+                <Accordion>
+                  <AccordionPanel value="__ungrouped__" class="border-b-0">
+                    <AccordionHeader class="px-0 pt-0 pb-5">
+                      <span class="flex items-center gap-3 w-full">
+                        <div v-if="selectionMode" class="shrink-0" @click.stop="toggleGroupSelection(clustered.ungrouped)">
+                          <div
+                            class="w-6 h-6 rounded-full border-2 flex items-center justify-center transition-colors cursor-pointer"
+                            :class="groupSelectionState(clustered.ungrouped) === 'none' ? 'border-surface-400 dark:border-surface-500' : 'bg-primary border-primary'"
+                          >
+                            <i-mdi:check v-if="groupSelectionState(clustered.ungrouped) === 'all'" class="w-4 h-4 text-white" />
+                            <i-mdi:minus v-else-if="groupSelectionState(clustered.ungrouped) === 'some'" class="w-4 h-4 text-white" />
+                          </div>
+                        </div>
+                        <div class="w-10 h-10 rounded-full overflow-hidden bg-surface-100 dark:bg-surface-800 shrink-0 flex items-center justify-center">
+                          <i-mdi:account-question class="w-5 h-5 text-muted" />
+                        </div>
+                        <span class="flex flex-col">
+                          <span class="font-medium">{{ $t('views.faces.ungrouped') }} ({{ clustered.ungrouped.length }})</span>
+                          <span class="text-muted text-sm font-normal">{{ $t('views.faces.ungrouped_hint') }}</span>
+                        </span>
+                        <span class="ml-auto flex items-center gap-1 mr-2" @click.stop>
+                          <Button v-tooltip.top="$t('views.faces.discard')" severity="danger" text rounded class="cui-icon-lg" @click="clearUngrouped">
+                            <template #icon><i-mdi:delete width="100%" height="100%" /></template>
+                          </Button>
+                        </span>
+                      </span>
+                    </AccordionHeader>
+                    <AccordionContent :pt="{ content: { class: 'px-0 pb-5' } }">
+                      <div class="grid w-full gap-3" :style="{ gridTemplateColumns: `repeat(auto-fill, minmax(${smBreakpoint ? '120px' : '140px'}, 1fr))` }">
+                        <CuiFaceCard
+                          v-for="face in clustered.ungrouped"
+                          :key="face.id"
+                          variant="unknown"
+                          :thumbnail="thumbnailToUrl(face.thumbnail)"
+                          :timestamp="face.timestamp"
+                          :confidence="face.confidence"
+                          :selection-mode="selectionMode"
+                          :selected="selectedIds.has(face.id)"
+                          @click="toggleSelection(face.id)"
+                          @assign-prompt="promptAssignSingle(face)"
+                          @ignore="ignoreFace(face)"
+                          @skip="discardFace(face)"
+                        />
+                      </div>
+                    </AccordionContent>
+                  </AccordionPanel>
+                </Accordion>
+              </template>
+            </Card>
+
+            <Card v-if="faceStore.ignoredFaces.value.length" class="cui-card border-color-inner h-auto!" :pt="{ body: { class: 'pb-0' } }">
+              <template #content>
+                <Accordion>
+                  <AccordionPanel value="__ignored__" class="border-b-0">
+                    <AccordionHeader class="px-0 pt-0 pb-5">
+                      <span class="flex items-center gap-3 w-full">
+                        <div class="w-10 h-10 rounded-full overflow-hidden bg-surface-100 dark:bg-surface-800 shrink-0 flex items-center justify-center">
+                          <i-mdi:eye-off class="w-5 h-5 text-muted" />
+                        </div>
+                        <span class="flex flex-col">
+                          <span class="font-medium">{{ $t('views.faces.ignored_faces') }} ({{ faceStore.ignoredFaces.value.length }})</span>
+                          <span class="text-muted text-sm font-normal">{{ $t('views.faces.ignored_hint') }}</span>
+                        </span>
+                      </span>
+                    </AccordionHeader>
+                    <AccordionContent :pt="{ content: { class: 'px-0 pb-5' } }">
+                      <div class="grid w-full gap-3" :style="{ gridTemplateColumns: `repeat(auto-fill, minmax(${smBreakpoint ? '120px' : '140px'}, 1fr))` }">
+                        <CuiFaceCard
+                          v-for="face in faceStore.ignoredFaces.value"
+                          :key="face.id"
+                          variant="ignored"
+                          :thumbnail="thumbnailToUrl(face.thumbnail)"
+                          :timestamp="face.timestamp"
+                          @restore="restoreFace(face)"
+                        />
+                      </div>
+                    </AccordionContent>
+                  </AccordionPanel>
+                </Accordion>
+              </template>
+            </Card>
+          </div>
+
+          <div v-if="!faceStore.unknownFaces.value.length && !faceStore.ignoredFaces.value.length" class="text-muted text-sm">
+            {{ $t('views.faces.no_unknown_faces') }}
+          </div>
         </section>
       </template>
     </template>
@@ -278,6 +325,14 @@
         />
         <CuiFloatingButton
           grouped
+          :tooltip-props="{ value: $t('views.faces.ignore') }"
+          :button-props="{ severity: 'secondary', disabled: !selectedIds.size || bulkBusy }"
+          :icon="IgnoreIcon"
+          :icon-props="{ width: '100%', height: '100%' }"
+          @click="bulkIgnore"
+        />
+        <CuiFloatingButton
+          grouped
           :tooltip-props="{ value: $t('views.faces.discard') }"
           :button-props="{ severity: 'danger', disabled: !selectedIds.size || bulkBusy }"
           :icon="TrashIcon"
@@ -295,6 +350,7 @@ import SelectAllIcon from '~icons/fluent/select-all-on-20-filled';
 import AssignIcon from '~icons/mdi/account-plus';
 import CloseIcon from '~icons/mdi/close';
 import TrashIcon from '~icons/mdi/delete-outline';
+import IgnoreIcon from '~icons/mdi/eye-off';
 import SelectIcon from '~icons/tabler/dots-filled';
 import RemoveIcon from '~icons/tabler/minus';
 import PlusIcon from '~icons/typcn/plus';
@@ -304,7 +360,7 @@ import FaceNewPersonDialog from '@/components/CuiDialog/templates/FaceNewPerson/
 import FaceUploadDialog from '@/components/CuiDialog/templates/FaceUpload/FaceUpload.vue';
 import { useCardSelection } from '@/composables/useCardSelection.js';
 
-import type { FaceProfile, UnknownFace } from '@camera.ui/nvr';
+import type { FaceProfile, IgnoredFace, UnknownFace } from '@camera.ui/nvr';
 
 const dialog = useCuiDialog();
 const toast = useCuiToast();
@@ -337,6 +393,25 @@ const knownSkeletonCount = computed(() => {
   const containerWidth = knownSkeletonRef.value?.clientWidth ?? windowWidth.value;
   return Math.floor((containerWidth + gap) / (minSize + gap)) || 4;
 });
+
+function groupSelectionState(faces: UnknownFace[]): 'none' | 'some' | 'all' {
+  let count = 0;
+  for (const face of faces) {
+    if (selectedIds.value.has(face.id)) count++;
+  }
+  if (count === 0) return 'none';
+  return count === faces.length ? 'all' : 'some';
+}
+
+function toggleGroupSelection(faces: UnknownFace[]) {
+  const next = new Set(selectedIds.value);
+  const all = faces.every((face) => next.has(face.id));
+  for (const face of faces) {
+    if (all) next.delete(face.id);
+    else next.add(face.id);
+  }
+  selectedIds.value = next;
+}
 
 async function rescanFaces() {
   rescanning.value = true;
@@ -469,6 +544,49 @@ async function discardFace(face: UnknownFace) {
 async function removeFromCluster(face: UnknownFace) {
   try {
     await faceStore.removeFromCluster(face.id);
+  } catch (err) {
+    toast.add({ severity: 'error', detail: err, life: 3000 });
+  }
+}
+
+async function ignoreFace(face: UnknownFace) {
+  try {
+    await faceStore.ignoreFaces([face.id]);
+    toast.add({ severity: 'success', detail: t('views.faces.face_ignored'), life: 3000 });
+  } catch (err) {
+    toast.add({ severity: 'error', detail: err, life: 3000 });
+  }
+}
+
+async function ignoreCluster(cluster: { clusterId: string }) {
+  try {
+    await faceStore.ignoreCluster(cluster.clusterId);
+    toast.add({ severity: 'success', detail: t('views.faces.face_ignored'), life: 3000 });
+  } catch (err) {
+    toast.add({ severity: 'error', detail: err, life: 3000 });
+  }
+}
+
+async function bulkIgnore() {
+  const ids = selectedItems.value.map((face) => face.id);
+  if (!ids.length) return;
+
+  bulkBusy.value = true;
+  try {
+    await faceStore.ignoreFaces(ids);
+    toast.add({ severity: 'success', detail: t('views.faces.face_ignored'), life: 3000 });
+    exitSelectionMode();
+  } catch (err) {
+    toast.add({ severity: 'error', detail: err, life: 3000 });
+  } finally {
+    bulkBusy.value = false;
+  }
+}
+
+async function restoreFace(face: IgnoredFace) {
+  try {
+    await faceStore.unignoreFaces([face.id]);
+    toast.add({ severity: 'success', detail: t('views.faces.face_restored'), life: 3000 });
   } catch (err) {
     toast.add({ severity: 'error', detail: err, life: 3000 });
   }

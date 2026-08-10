@@ -1,5 +1,5 @@
 export interface CuiFaceCardProps {
-  variant: 'known' | 'unknown';
+  variant: 'known' | 'unknown' | 'ignored';
   thumbnail?: string;
   name?: string;
   imageCount?: number;
@@ -20,4 +20,6 @@ export interface CuiFaceCardEmits {
   'assign-prompt': [];
   skip: [];
   remove: [];
+  ignore: [];
+  restore: [];
 }
