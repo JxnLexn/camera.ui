@@ -40,9 +40,11 @@ const { src, width, height, imageStyle, imageClass, imageContainerClass, imageCo
 const error = ref(false);
 const imgEl = new Image();
 const displayedUrl = ref<string | undefined>();
+const slowLoad = ref(false);
+let spinnerTimer: ReturnType<typeof setTimeout> | undefined;
 
 const preloadUrl = computed(() => (src.value ? getImageUrl(src.value) : undefined));
-const showSpinner = computed(() => !!src.value && !displayedUrl.value && !error.value);
+const showSpinner = computed(() => !!src.value && !displayedUrl.value && !error.value && slowLoad.value);
 const fallbackUrl = computed(() => getImageUrl());
 const snapshotDimensions = computed(() => {
   imgEl.src = displayedUrl.value || preloadUrl.value || '';
@@ -61,6 +63,8 @@ watch(
   preloadUrl,
   (url) => {
     error.value = false;
+    clearTimeout(spinnerTimer);
+    slowLoad.value = false;
     if (!url) {
       displayedUrl.value = undefined;
       return;
@@ -71,21 +75,34 @@ watch(
 
     const loader = new Image();
     loader.src = url;
+    if (loader.complete && loader.naturalWidth > 0) {
+      displayedUrl.value = url;
+      return;
+    }
+    spinnerTimer = setTimeout(() => {
+      slowLoad.value = true;
+    }, 150);
     loader
       .decode()
       .then(() => {
         if (preloadUrl.value === url) {
           displayedUrl.value = url;
+          clearTimeout(spinnerTimer);
+          slowLoad.value = false;
         }
       })
       .catch(() => {
         if (preloadUrl.value === url) {
           error.value = true;
+          clearTimeout(spinnerTimer);
+          slowLoad.value = false;
         }
       });
   },
   { immediate: true },
 );
+
+onUnmounted(() => clearTimeout(spinnerTimer));
 
 defineExpose({
   snapshotDimensions,
