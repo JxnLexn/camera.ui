@@ -18,8 +18,18 @@
       <Field v-slot="{ field, errors }" v-model.trim="fieldValue" :name="configKey" as="div" class="flex flex-col field-gap">
         <label :for="configKey" class="cui-label">{{ schemaField.title }}</label>
         <InputGroup>
+          <Textarea
+            v-if="schemaField.format === 'textarea'"
+            v-bind="field"
+            :invalid="errors.length > 0"
+            :readonly="schemaField.readonly"
+            :placeholder="schemaField.placeholder"
+            rows="4"
+            auto-resize
+          />
+
           <InputText
-            v-if="schemaField.format !== 'password'"
+            v-else-if="schemaField.format !== 'password'"
             v-bind="field"
             :invalid="errors.length > 0"
             :readonly="schemaField.readonly"
