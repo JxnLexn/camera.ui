@@ -13,6 +13,7 @@ import type {
   ClipEmbedding,
   Detection,
   DetectionEventType,
+  DetectionPath,
   EventTrigger,
   EventTriggerType,
   FaceDetection,
@@ -138,6 +139,9 @@ export class DetectionEventManager {
 
   private activeEvent: RecordedEvent | null = null;
   private activeSegment: RecordedSegment | null = null;
+  // first/last box center per track within the current segment, so the NVR
+  // can reason about where a subject entered and left the frame
+  private segmentTrackPaths = new Map<number, DetectionPath>();
   private segmentIndex = 0;
   private lastPublishTime = 0;
 
@@ -392,6 +396,7 @@ export class DetectionEventManager {
       detections: [],
       attributes: [],
     };
+    this.segmentTrackPaths = new Map();
     this.enrichSegment(data, now);
 
     // the tick cuts its moment before it opens the segment, and both carry the
@@ -485,6 +490,17 @@ export class DetectionEventManager {
       const labelCounts = new Map<string, { count: number; bestScore: number; bestBox?: BoundingBox; bestTrackId?: number; moving?: boolean }>();
       for (const obj of data.objects) {
         const t = obj as { trackId?: number; trackSpeed?: number; label: string; confidence: number; box: BoundingBox };
+        if (t.trackId !== undefined && obj.box) {
+          const cx = obj.box.x + obj.box.width / 2;
+          const cy = obj.box.y + obj.box.height / 2;
+          const path = this.segmentTrackPaths.get(t.trackId);
+          if (path) {
+            path.exitX = cx;
+            path.exitY = cy;
+          } else {
+            this.segmentTrackPaths.set(t.trackId, { enterX: cx, enterY: cy, exitX: cx, exitY: cy });
+          }
+        }
         const entry = labelCounts.get(obj.label);
         if (entry) {
           entry.count++;
@@ -518,6 +534,12 @@ export class DetectionEventManager {
         } else {
           this.activeSegment.detections.push({ label, score: bestScore, maxCount: count, box: bestBox, trackId: bestTrackId, moving });
         }
+      }
+
+      for (const d of this.activeSegment.detections) {
+        if (d.trackId === undefined) continue;
+        const path = this.segmentTrackPaths.get(d.trackId);
+        if (path) d.path = path;
       }
 
       // boxes and polygons are both normalized 0-1, direct overlap test
