@@ -132,6 +132,13 @@ const rangeMs = Math.max(rangeEndMs - rangeStartMs, 1);
 
 const members: EpisodeMember[] = [...props.episode.members].sort((a, b) => a.firstSeen - b.firstSeen);
 const memberCameraIds = [...new Set(members.map((m) => m.cameraId))];
+const cameraSpans = members
+  .flatMap((m) =>
+    m.segmentSpans?.length
+      ? m.segmentSpans.map((s) => ({ cameraId: m.cameraId, firstSeen: s.firstSeen, lastSeen: s.lastSeen }))
+      : [{ cameraId: m.cameraId, firstSeen: m.firstSeen, lastSeen: m.lastSeen }],
+  )
+  .sort((a, b) => a.firstSeen - b.firstSeen);
 const cameraBlocks = buildCameraBlocks();
 
 const stageRef = useTemplateRef('stageRef');
@@ -197,10 +204,10 @@ function cameraName(id: string): string {
   return props.cameraById.get(id)?.name ?? id;
 }
 
-function coveringMemberAt(tMs: number): EpisodeMember | undefined {
-  let best: EpisodeMember | undefined;
-  for (const m of members) {
-    if (m.firstSeen <= tMs && tMs <= m.lastSeen && (!best || m.firstSeen >= best.firstSeen)) best = m;
+function coveringSpanAt(tMs: number): { cameraId: string; firstSeen: number; lastSeen: number } | undefined {
+  let best: { cameraId: string; firstSeen: number; lastSeen: number } | undefined;
+  for (const s of cameraSpans) {
+    if (s.firstSeen <= tMs && tMs <= s.lastSeen && (!best || s.firstSeen >= best.firstSeen)) best = s;
   }
   return best;
 }
@@ -221,9 +228,9 @@ function grayUntil(tMs: number): number | undefined {
 
 function buildCameraBlocks(): StripBlock[] {
   const cuts = new Set<number>([rangeStartMs, rangeEndMs]);
-  for (const m of members) {
-    cuts.add(clamp(m.firstSeen, rangeStartMs, rangeEndMs));
-    cuts.add(clamp(m.lastSeen, rangeStartMs, rangeEndMs));
+  for (const s of cameraSpans) {
+    cuts.add(clamp(s.firstSeen, rangeStartMs, rangeEndMs));
+    cuts.add(clamp(s.lastSeen, rangeStartMs, rangeEndMs));
   }
   const sorted = [...cuts].sort((a, b) => a - b);
   const blocks: StripBlock[] = [];
@@ -231,7 +238,7 @@ function buildCameraBlocks(): StripBlock[] {
     const startMs = sorted[i];
     const endMs = sorted[i + 1];
     if (endMs - startMs < 1) continue;
-    const covering = coveringMemberAt((startMs + endMs) / 2);
+    const covering = coveringSpanAt((startMs + endMs) / 2);
     if (!covering) continue;
     const prev = blocks[blocks.length - 1];
     if (prev && prev.cameraId === covering.cameraId && prev.endMs >= startMs) prev.endMs = endMs;
