@@ -110,9 +110,12 @@
                 :seg-index="item.segIndex"
                 :selection-mode="selectionMode"
                 :selected="selectedIds.has(item.event.id)"
+                :sibling-active="item.segIndex !== undefined && hoveredEventId === item.event.id"
                 @select="toggleSelection(item.event.id)"
                 @scroll-to-event="() => openRecordingDialog(item.event)"
                 @open-episode="openEpisodeDialog"
+                @mouseenter="hoveredEventId = item.segIndex !== undefined ? item.event.id : null"
+                @mouseleave="hoveredEventId = null"
               />
             </template>
           </CuiRecordingsGrid>
@@ -204,6 +207,7 @@ import DownloadIcon from '~icons/tabler/download';
 import SparklesIcon from '~icons/tabler/sparkles';
 
 import { CamerasQuery } from '@/api/routes/cameras.js';
+import { UsersQuery } from '@/api/routes/users.js';
 import CameraEventDialog from '@/components/CuiDialog/templates/CameraStreamEvent/CameraStreamEvent.vue';
 import ExportRecordings from '@/components/CuiDialog/templates/ExportRecordings/ExportRecordings.vue';
 import CuiMenu from '@/components/CuiMenu/CuiMenu.vue';
@@ -225,8 +229,10 @@ interface UngroupedItem {
 }
 
 const camerasQuery = new CamerasQuery();
+const usersQuery = new UsersQuery();
 
 const dialog = useCuiDialog();
+const authStore = useAuthStore();
 const { openEpisodePlayer } = useEpisodePlayerDialog();
 const eventStore = useEventStore('@camera.ui/camera-ui-nvr');
 const toast = useCuiToast();
@@ -251,6 +257,7 @@ const {
 } = useSemanticSearch();
 
 const { data: camerasData } = camerasQuery.getCamerasQuery({ page: 1, pageSize: -1 });
+const { data: currentUser } = usersQuery.getUserQuery(computed(() => authStore.user?.username ?? ''));
 
 const SIDEBAR_WIDTH = 288;
 const GRID_COLS = 10;
@@ -287,6 +294,9 @@ const serverFilter = shallowRef<GetEventsOptions>({ state: 'ended', hasDetection
 let _prevFilterJSON = JSON.stringify(serverFilter.value);
 const ungrouped = ref(false);
 const ungroupedItems = shallowRef<UngroupedItem[]>([]);
+const hoveredEventId = ref<string | null>(null);
+
+let ungroupedTouched = false;
 
 const sidebarOpen = computed(() => {
   if (xlBreakpoint.value) return true;
@@ -457,7 +467,9 @@ const viewMenuItems = computed<MenuItem[]>(() => [
     toggle: true,
     toggleState: ungrouped.value,
     onClick: () => {
+      ungroupedTouched = true;
       ungrouped.value = !ungrouped.value;
+      authStore.updateUser({ preferences: { recordings: { ungrouped: ungrouped.value } } });
     },
   },
   {
@@ -625,29 +637,18 @@ watch(
   { deep: true, immediate: true },
 );
 
-watch(ungrouped, (isUngrouped) => {
-  if (isUngrouped) {
-    ungroupedItems.value = buildUngroupedItems(displayEvents.value);
-  } else {
-    ungroupedItems.value = [];
-  }
-});
+watch(
+  currentUser,
+  (u) => {
+    if (!u || ungroupedTouched) return;
+    const saved = u.preferences?.recordings?.ungrouped;
+    if (saved !== undefined) ungrouped.value = saved;
+  },
+  { immediate: true },
+);
 
-watch(displayEvents, (events) => {
-  if (!ungrouped.value) return;
-
-  const currentEventIds = new Set(events.map((e) => e.id));
-  const existingEventIds = new Set(ungroupedItems.value.map((item) => item.event.id));
-
-  let updated = ungroupedItems.value.filter((item) => currentEventIds.has(item.event.id));
-
-  const newEvents = events.filter((e) => !existingEventIds.has(e.id));
-  if (newEvents.length) {
-    const newItems = buildUngroupedItems(newEvents);
-    updated = [...newItems, ...updated];
-  }
-
-  ungroupedItems.value = updated;
+watch([ungrouped, displayEvents], ([isUngrouped, events]) => {
+  ungroupedItems.value = isUngrouped ? buildUngroupedItems(events) : [];
 });
 
 watch(

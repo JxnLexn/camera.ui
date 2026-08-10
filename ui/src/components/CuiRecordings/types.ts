@@ -29,6 +29,7 @@ export interface RecordingCardProps {
   segIndex?: number;
   selectionMode?: boolean;
   selected?: boolean;
+  siblingActive?: boolean;
 }
 
 export interface RecordingCardEmits {

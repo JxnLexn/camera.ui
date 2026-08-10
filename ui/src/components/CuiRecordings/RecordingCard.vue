@@ -1,16 +1,22 @@
 <template>
   <div class="recording-card relative group cursor-pointer" @click="handleClick" @mouseenter="handleMouseEnter" @mouseleave="handleMouseLeave">
-    <div class="bg-neutral-900 w-full rounded-xl overflow-hidden relative" style="aspect-ratio: 1/1">
+    <div
+      class="bg-neutral-900 w-full rounded-xl overflow-hidden relative transition-shadow duration-200"
+      :class="{ 'ring-2 ring-inset ring-primary/70': siblingActive }"
+      style="aspect-ratio: 1/1"
+    >
       <Skeleton v-if="thumbnailState === 'loading'" width="100%" height="100%" class="rounded-xl" />
 
-      <CuiImage
-        v-else-if="thumbnailUrl"
-        :src="thumbnailUrl"
-        :alt="displayCameraName"
-        class="pointer-events-none w-full h-full transition-transform duration-300 group-hover:scale-105"
-        :image-style="{ objectFit: 'cover' }"
-        image-container-class="w-full h-full"
-      />
+      <template v-else-if="displayUrl">
+        <img v-if="cropShown" :src="displayUrl" aria-hidden="true" class="absolute inset-0 w-full h-full object-cover blur-xl scale-110 opacity-50 pointer-events-none" />
+        <CuiImage
+          :src="displayUrl"
+          :alt="displayCameraName"
+          class="pointer-events-none w-full h-full transition-transform duration-300 group-hover:scale-105"
+          :image-style="{ objectFit: cropShown ? 'contain' : 'cover' }"
+          image-container-class="w-full h-full"
+        />
+      </template>
 
       <div v-else class="w-full h-full flex items-center justify-center bg-neutral-800/80">
         <component :is="eventIcons[primaryType] ?? eventIcons.motion" class="w-10 h-10 text-white/20" />
@@ -25,6 +31,7 @@
           <AiBadge v-if="descriptionTitle" position="inline" />
           <p class="text-xs font-semibold text-white truncate min-w-0 flex-1">{{ displayCameraName }}</p>
 
+          <span v-if="segPosition" class="text-[10px] font-semibold text-white/80 bg-black/60 px-1.5 py-0.5 rounded-md shrink-0">{{ segPosition }}</span>
           <span v-if="semanticDisplay" :class="['text-[10px] font-bold text-white px-1.5 py-0.5 rounded-md shrink-0', semanticDisplay.color]">
             {{ semanticDisplay.label }}
           </span>
@@ -59,6 +66,29 @@
         <p class="text-[10px] text-white/70">{{ formatDateTime }}</p>
       </div>
 
+      <template v-if="carouselImages.length > 1">
+        <button
+          class="carousel-nav absolute left-1 top-1/2 -translate-y-1/2 z-[3] w-7 h-7 rounded-full bg-black/40 hover:bg-black/60 flex items-center justify-center transition-opacity duration-200"
+          :aria-label="$t('views.recordings.prev_image')"
+          @click.stop="stepImage(-1)"
+          @mouseenter="stopPreview"
+        >
+          <i-mdi:chevron-left class="w-5 h-5 text-white" />
+        </button>
+        <button
+          class="carousel-nav absolute right-1 top-1/2 -translate-y-1/2 z-[3] w-7 h-7 rounded-full bg-black/40 hover:bg-black/60 flex items-center justify-center transition-opacity duration-200"
+          :aria-label="$t('views.recordings.next_image')"
+          @click.stop="stepImage(1)"
+          @mouseenter="stopPreview"
+        >
+          <i-mdi:chevron-right class="w-5 h-5 text-white" />
+        </button>
+      </template>
+
+      <div v-if="footerLabel" class="absolute bottom-10 left-1/2 -translate-x-1/2 z-[3] max-w-[85%] pointer-events-none">
+        <span class="block text-[11px] text-white font-medium truncate bg-black/50 rounded-md px-2 py-0.5">{{ footerLabel }}</span>
+      </div>
+
       <div ref="footerRef" class="absolute bottom-2 left-2 right-2 flex items-center justify-between gap-2 z-[3]">
         <div class="flex items-center gap-1 min-w-0">
           <div
@@ -72,16 +102,19 @@
             <component :is="eventIcons[type] ?? eventIcons.motion" class="w-3 h-3 text-white/80" />
           </div>
           <span v-if="hiddenTypes.length > 0" :title="hiddenTypes.join(', ')" class="text-[10px] text-white/60 font-medium shrink-0"> +{{ hiddenTypes.length }} </span>
-          <span v-if="primaryLabel" class="text-[11px] text-white/80 font-medium truncate">
-            {{ primaryLabel }}
-          </span>
         </div>
 
         <div
           v-if="visibleThumbnails.length > 0 || hiddenThumbnailCount > 0"
           class="flex items-center gap-0.5 shrink-0 opacity-85 group-hover:opacity-100 transition-opacity duration-200"
         >
-          <div v-for="(thumb, i) in visibleThumbnails" :key="i" class="w-7 h-7 rounded overflow-hidden border border-white/20 bg-neutral-800">
+          <div
+            v-for="(thumb, i) in visibleThumbnails"
+            :key="i"
+            class="w-7 h-7 rounded overflow-hidden border bg-neutral-800 cursor-pointer"
+            :class="i === activeImageIndex ? 'border-primary/80' : 'border-white/20'"
+            @click="onTileClick(i, $event)"
+          >
             <img :src="thumb.url" :alt="thumb.type" decoding="async" loading="lazy" class="w-full h-full object-cover" />
           </div>
           <span v-if="hiddenThumbnailCount > 0" class="text-[10px] text-white/60 font-medium">+{{ hiddenThumbnailCount }}</span>
@@ -117,12 +150,10 @@ const { plugin: nvrPluginRef } = usePlugin('@camera.ui/camera-ui-nvr');
 
 const CLIP_MIN = 0.15;
 const CLIP_MAX = 0.38;
-const MAX_FOOTER_TILES = 8;
 const ICON_PX = 24;
 const TILE_PX = 30;
 const MORE_PX = 22;
 const CHECKBOX_PX = 28;
-const LABEL_MIN_PX = 48;
 const GROUP_GAP_PX = 8;
 
 const { icons: eventIcons } = resolveEventIcons();
@@ -141,6 +172,7 @@ const isPreviewActive = ref(false);
 const loadedThumbs = ref<EventThumbnails | null>(cachedInit ?? null);
 const thumbnailState = ref<'loading' | 'loaded' | 'empty'>(initialState);
 const isDownloading = ref(false);
+const activeImageIndexRaw = ref(0);
 
 const { width: footerWidth } = useElementSize(footerRef);
 
@@ -180,6 +212,39 @@ const thumbnailUrl = computed(() => primary.value?.url);
 const primaryLabel = computed(() => primary.value?.label);
 const primaryType = computed(() => primary.value?.type ?? props.event.types[0] ?? 'motion');
 
+const segPosition = computed(() => {
+  const count = props.event.segments?.length ?? 0;
+  return props.segIndex !== undefined && count > 1 ? `${props.segIndex + 1}/${count}` : undefined;
+});
+
+const carouselImages = computed<{ url: string; label?: string; type: string; crop: boolean }[]>(() => {
+  const thumbs = loadedThumbs.value;
+  const sceneUrl = primary.value?.url;
+  if (!thumbs || !sceneUrl) return [];
+
+  const items = [{ url: sceneUrl, label: primary.value?.label, type: primaryType.value, crop: false }];
+  for (const tile of attributeThumbnails(thumbs, props.segIndex)) {
+    if (items.some((item) => item.url === tile.url)) continue;
+    items.push({ url: tile.url, label: tile.label, type: tile.type, crop: true });
+  }
+  if (props.segIndex === undefined) {
+    for (const key of Object.keys(thumbs.cards ?? thumbs.strips ?? {}).sort((a, b) => Number(a) - Number(b))) {
+      const url = thumbnailToUrl(thumbs.cards?.[key] ?? thumbs.strips?.[key]);
+      if (!url || items.some((item) => item.url === url)) continue;
+      const label = segmentLabel(props.event, key);
+      items.push({ url, label, type: label, crop: false });
+    }
+  }
+  return items.length > 1 ? items : [];
+});
+
+const carouselActive = computed(() => carouselImages.value.length > 1);
+const activeImageIndex = computed(() => (carouselImages.value.length ? Math.min(activeImageIndexRaw.value, carouselImages.value.length - 1) : 0));
+const activeImage = computed(() => (carouselActive.value ? carouselImages.value[activeImageIndex.value] : undefined));
+const cropShown = computed(() => Boolean(activeImage.value?.crop));
+const displayUrl = computed(() => activeImage.value?.url ?? thumbnailUrl.value);
+const footerLabel = computed(() => activeImage.value?.label ?? primaryLabel.value);
+
 const uniqueTypes = computed(() => {
   const segment = shownSegment.value;
   const types = segment ? segmentTypes(props.event, segment) : [...new Set(props.event.types)];
@@ -188,30 +253,7 @@ const uniqueTypes = computed(() => {
 
 const displayCameraName = computed(() => props.cameraName ?? props.event.cameraId);
 
-const stripThumbnails = computed<{ url: string; type: string }[]>(() => {
-  const thumbs = loadedThumbs.value;
-  if (!thumbs) return [];
-
-  const primaryUrl = primary.value?.url;
-  const items: { url: string; type: string }[] = [];
-
-  for (const tile of attributeThumbnails(thumbs, props.segIndex)) {
-    if (items.length >= MAX_FOOTER_TILES) break;
-    if (tile.url === primaryUrl) continue;
-    items.push({ url: tile.url, type: tile.type });
-  }
-
-  if (props.segIndex === undefined) {
-    for (const key of Object.keys(thumbs.cards ?? thumbs.strips ?? {}).sort((a, b) => Number(a) - Number(b))) {
-      if (items.length >= MAX_FOOTER_TILES) break;
-      const url = thumbnailToUrl(thumbs.cards?.[key] ?? thumbs.strips?.[key]);
-      if (!url || url === primaryUrl) continue;
-      items.push({ url, type: segmentLabel(props.event, key) });
-    }
-  }
-
-  return items;
-});
+const stripThumbnails = computed<{ url: string; type: string }[]>(() => carouselImages.value.map((img) => ({ url: img.url, type: img.type })));
 
 const displayTypes = computed(() => uniqueTypes.value.slice(0, footerLayout.value.icons));
 
@@ -221,7 +263,6 @@ const footerLayout = computed(() => {
 
   let free = width - GROUP_GAP_PX;
   if (props.selectionMode) free -= CHECKBOX_PX;
-  if (primaryLabel.value) free -= LABEL_MIN_PX;
 
   const tileFloor = stripThumbnails.value.length > 0 ? TILE_PX + MORE_PX : 0;
   const fitted = fitCount(uniqueTypes.value.length, Math.max(0, free - tileFloor), ICON_PX);
@@ -254,8 +295,29 @@ function fitCount(total: number, space: number, itemPx: number): number {
   return Math.max(0, Math.floor((space - MORE_PX) / itemPx));
 }
 
+function stepImage(delta: number): void {
+  const len = carouselImages.value.length;
+  if (!len) return;
+  stopPreview();
+  activeImageIndexRaw.value = (activeImageIndex.value + delta + len) % len;
+}
+
+function onTileClick(index: number, event: MouseEvent): void {
+  if (!carouselActive.value) return;
+  event.stopPropagation();
+  stopPreview();
+  activeImageIndexRaw.value = index;
+}
+
+function stopPreview(): void {
+  if (!preview || !isPreviewActive.value) return;
+  isPreviewActive.value = false;
+  preview.onHoverEnd();
+}
+
 function handleMouseEnter(): void {
   if (!preview || !props.event.endTime || props.event.hasRecording === false) return;
+  if (activeImageIndex.value > 0) return;
   const canvas = previewCanvasRef.value;
   if (!canvas) return;
   isPreviewActive.value = true;
@@ -335,5 +397,15 @@ onMounted(() => {
 <style scoped>
 .recording-card {
   contain: layout;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .carousel-nav {
+    opacity: 0;
+  }
+  .recording-card:hover .carousel-nav,
+  .recording-card:focus-within .carousel-nav {
+    opacity: 1;
+  }
 }
 </style>
