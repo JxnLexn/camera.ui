@@ -27,6 +27,8 @@ const ignorableLogMessages = [
   'reference picture missing during reorder',
   'Missing reference picture',
   'First slice in a frame missing',
+  'non-existing SPS',
+  'non-existing PPS',
 ];
 
 @RPCClass
