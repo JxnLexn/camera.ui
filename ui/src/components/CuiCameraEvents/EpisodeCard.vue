@@ -73,12 +73,16 @@ const formatTime = computed(() => {
   return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 });
 
-async function triggerLoad(): Promise<void> {
+async function triggerLoad(retries = 3): Promise<void> {
   const mosaic = await eventStore.loadEpisodeMosaic(props.episode.id);
   if (mosaic) {
     mosaicUrl.value = thumbnailToUrl(mosaic);
     mosaicState.value = 'loaded';
     return;
+  }
+  if (retries > 0) {
+    await new Promise((r) => setTimeout(r, 1000));
+    return triggerLoad(retries - 1);
   }
   mosaicState.value = 'empty';
 }
