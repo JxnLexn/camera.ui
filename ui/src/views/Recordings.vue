@@ -99,7 +99,9 @@
             class="flex-1 min-h-0"
           >
             <template #item="{ item }">
+              <EpisodeCard v-if="item.episode" :episode="item.episode" :camera-by-id="cameraById" fluid :click-disabled="selectionMode" />
               <RecordingCard
+                v-else
                 :event="item.event"
                 :camera-name="cameraMap.get(item.event.cameraId)"
                 :camera="cameraById.get(item.event.cameraId)"
@@ -110,6 +112,7 @@
                 :selected="selectedIds.has(item.event.id)"
                 @select="toggleSelection(item.event.id)"
                 @scroll-to-event="() => openRecordingDialog(item.event)"
+                @open-episode="openEpisodeDialog"
               />
             </template>
           </CuiRecordingsGrid>
@@ -192,7 +195,7 @@
 </template>
 
 <script setup lang="ts">
-import { EventHoverPreviewKey, useDetectionEvents, useEventHoverPreview, useSemanticSearch } from '@camera.ui/nvr';
+import { EventHoverPreviewKey, useDetectionEvents, useEventHoverPreview, useEventStore, useSemanticSearch } from '@camera.ui/nvr';
 import SelectAllIcon from '~icons/fluent/select-all-on-20-filled';
 import CloseIcon from '~icons/mdi/close';
 import TrashIcon from '~icons/mdi/delete-outline';
@@ -210,7 +213,7 @@ import type { CameraStreamEventProps } from '@/components/CuiDialog/templates/Ca
 import type { GridRegion } from '@/components/CuiGridSearch/types.js';
 import type { MenuItem } from '@/components/CuiMenu/types.js';
 import type { RecordingsFilterState } from '@/components/CuiRecordings/types.js';
-import type { GetEventsOptions, RecordedEvent } from '@camera.ui/nvr';
+import type { GetEventsOptions, RecordedEpisode, RecordedEvent } from '@camera.ui/nvr';
 import type { BoundingBox } from '@camera.ui/sdk';
 import type { DBCamera } from '@shared/types';
 
@@ -218,11 +221,14 @@ interface UngroupedItem {
   event: RecordedEvent;
   key: string;
   segIndex?: number;
+  episode?: RecordedEpisode;
 }
 
 const camerasQuery = new CamerasQuery();
 
 const dialog = useCuiDialog();
+const { openEpisodePlayer } = useEpisodePlayerDialog();
+const eventStore = useEventStore('@camera.ui/camera-ui-nvr');
 const toast = useCuiToast();
 const { t } = useI18n();
 const { smBreakpoint, xlBreakpoint, mdBreakpoint } = useSharedCuiBreakpoint();
@@ -328,6 +334,7 @@ const { events, isLoading, hasMore, loadMore, loadThumbnails, deleteEvents } = u
   realtime: true,
   pageSize: 40,
   filter: serverFilter,
+  withEpisodes: true,
 });
 
 const semanticEventIds = computed(() => {
@@ -373,9 +380,38 @@ const displayEvents = computed(() => {
   return result;
 });
 
+const episodeGridItems = computed<UngroupedItem[]>(() => {
+  if (ungrouped.value || isSemanticActive.value) return [];
+  // eslint-disable-next-line @typescript-eslint/no-unused-expressions
+  eventStore.storeVersion.value;
+  const f = filters.value;
+  if (f.gridRegions.length > 0) return [];
+  const scope = cameraIds.value.length > 0 ? cameraIds.value : allCameraIds.value;
+  const cutoff = f.timeRange && TIME_RANGE_MS[f.timeRange] ? Date.now() - TIME_RANGE_MS[f.timeRange] : 0;
+
+  const items: UngroupedItem[] = [];
+  for (const episode of eventStore.getEpisodes()) {
+    if (!episode.description) continue;
+    if (cutoff && episode.endTime < cutoff) continue;
+    if (scope.length > 0 && !episode.members.some((m) => scope.includes(m.cameraId))) continue;
+    items.push({ event: undefined as unknown as RecordedEvent, key: `episode:${episode.id}`, episode });
+  }
+  return items;
+});
+
+function gridItemTime(item: UngroupedItem): number {
+  if (item.episode) return item.episode.endTime;
+  return item.event.thumbnailAt ?? item.event.startTime;
+}
+
 const gridItems = computed<UngroupedItem[]>(() => {
   if (ungrouped.value && ungroupedItems.value.length) return ungroupedItems.value;
-  return displayEvents.value.map((event) => ({ event, key: event.id }));
+  const items: UngroupedItem[] = displayEvents.value.map((event) => ({ event, key: event.id }));
+  if (episodeGridItems.value.length) {
+    items.push(...episodeGridItems.value);
+    items.sort((a, b) => gridItemTime(b) - gridItemTime(a));
+  }
+  return items;
 });
 
 const isAdmin = computed(() => hasPermission(undefined, 'admin'));
@@ -502,6 +538,16 @@ function onSemanticSearch(query: string): void {
     return;
   }
   runSemanticSearch(query);
+}
+
+async function openEpisodeDialog(episodeId: string): Promise<void> {
+  let episode = eventStore.getEpisode(episodeId);
+  if (!episode) {
+    await eventStore.loadEpisodes({ limit: 50 });
+    episode = eventStore.getEpisode(episodeId);
+  }
+  if (!episode) return;
+  openEpisodePlayer(episode, cameraById.value);
 }
 
 function openRecordingDialog(event: RecordedEvent): void {

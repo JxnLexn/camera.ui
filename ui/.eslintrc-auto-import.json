@@ -311,6 +311,7 @@
     "useElementOverflow": true,
     "useElementSize": true,
     "useElementVisibility": true,
+    "useEpisodePlayerDialog": true,
     "useEventBus": true,
     "useEventListener": true,
     "useEventSource": true,

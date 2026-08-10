@@ -2080,6 +2080,7 @@ export default {
       search: 'Search',
       search_placeholder: 'Search faces, plates, labels...',
       download_failed: 'Download failed',
+      open_episode: 'Open episode',
       filter_and: 'AND',
       filter_or: 'OR',
       semantic_search: 'AI Search',

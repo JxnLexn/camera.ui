@@ -186,6 +186,7 @@
 </template>
 
 <script setup lang="ts">
+import { useEventStore } from '@camera.ui/nvr';
 import { HTML5Backend } from 'react-dnd-html5-backend';
 import { TouchBackend } from 'react-dnd-touch-backend';
 import InlineSvg from 'vue-inline-svg';
@@ -225,8 +226,12 @@ const camerasQuery = new CamerasQuery();
 
 const drawer = useCuiCameraDrawer();
 const dialog = useCuiDialog();
+const { openEpisodePlayer } = useEpisodePlayerDialog();
+const eventStore = useEventStore('@camera.ui/camera-ui-nvr');
+const { plugin: nvrPluginRef } = usePlugin('@camera.ui/camera-ui-nvr');
 const toast = useCuiToast();
 const queryClient = useQueryClient();
+const route = useRoute();
 const router = useRouter();
 const { t } = useI18n();
 const { smBreakpoint } = useSharedCuiBreakpoint();
@@ -241,6 +246,7 @@ const { data: cameras, isLoading: camerasLoading } = camerasQuery.getCamerasQuer
 const snapshotRefs = shallowRef<Record<string, InstanceType<typeof CuiCameraSnapshot>>>({});
 
 let lastDragEnd = 0;
+let consumedEpisodeLink: string | undefined;
 
 const isLoading = computed(() => camerasLoading.value);
 const isAdmin = computed(() => hasPermission(undefined, 'admin'));
@@ -452,6 +458,27 @@ function openConsoleDialog(cameraName: string) {
     },
   });
 }
+
+watch(
+  [() => route.query.episodeId, nvrPluginRef, cameras],
+  async ([episodeId, proxy, cams]) => {
+    if (typeof episodeId !== 'string' || !episodeId || !proxy || !cams?.result?.length) return;
+    if (consumedEpisodeLink === episodeId) return;
+    consumedEpisodeLink = episodeId;
+
+    let episode = eventStore.getEpisode(episodeId);
+    if (!episode) {
+      await eventStore.loadEpisodes({ limit: 50 });
+      episode = eventStore.getEpisode(episodeId);
+    }
+    router.replace({ query: { ...route.query, episodeId: undefined } });
+    if (!episode) return;
+
+    const cameraById = new Map<string, DBCamera>(cams.result.map((cam) => [cam._id, cam]));
+    openEpisodePlayer(episode, cameraById);
+  },
+  { immediate: true },
+);
 </script>
 
 <style scoped>

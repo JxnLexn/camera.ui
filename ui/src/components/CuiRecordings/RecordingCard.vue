@@ -29,6 +29,19 @@
             {{ semanticDisplay.label }}
           </span>
           <Button
+            v-if="memberEpisodeId && !selectionMode"
+            v-tooltip.left="{ value: $t('views.recordings.open_episode') }"
+            rounded
+            text
+            severity="secondary"
+            class="!w-5 !h-5 !p-0 shrink-0 bg-black/60 hover:!bg-black/80"
+            @click.stop="handleOpenEpisode"
+          >
+            <template #icon>
+              <i-tabler:sparkles class="w-3 h-3 text-white" />
+            </template>
+          </Button>
+          <Button
             v-if="canDownload && !selectionMode"
             v-tooltip.left="{ value: $t('views.recordings.download') }"
             rounded
@@ -135,6 +148,12 @@ const descriptionTitle = computed(() => {
   // eslint-disable-next-line @typescript-eslint/no-unused-expressions
   eventStore.storeVersion.value;
   return props.event.segments?.find((s) => s?.description)?.description?.title;
+});
+
+const memberEpisodeId = computed(() => {
+  // eslint-disable-next-line @typescript-eslint/no-unused-expressions
+  eventStore.storeVersion.value;
+  return props.event.episodeIds?.[0];
 });
 
 const semanticDisplay = computed(() => {
@@ -261,6 +280,10 @@ async function triggerLoad(retries = 2): Promise<void> {
   } else {
     thumbnailState.value = props.event.state === 'active' ? 'loading' : 'empty';
   }
+}
+
+function handleOpenEpisode(): void {
+  if (memberEpisodeId.value) emit('openEpisode', memberEpisodeId.value);
 }
 
 function handleClick(): void {

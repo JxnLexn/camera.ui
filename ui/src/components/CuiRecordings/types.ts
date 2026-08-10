@@ -34,6 +34,7 @@ export interface RecordingCardProps {
 export interface RecordingCardEmits {
   scrollToEvent: [timestamp: number];
   select: [];
+  openEpisode: [episodeId: string];
 }
 
 export interface RecordingsFilterSidebarProps {

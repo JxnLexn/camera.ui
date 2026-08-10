@@ -2096,6 +2096,7 @@ export default {
       search: 'Suche',
       search_placeholder: 'Gesichter, Kennzeichen, Labels suchen...',
       download_failed: 'Download fehlgeschlagen',
+      open_episode: 'Episode öffnen',
       filter_and: 'UND',
       filter_or: 'ODER',
       semantic_search: 'KI-Suche',
