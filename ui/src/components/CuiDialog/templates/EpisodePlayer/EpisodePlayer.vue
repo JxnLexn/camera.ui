@@ -87,9 +87,9 @@
       </div>
     </div>
 
-    <div v-if="episode.description?.description" class="px-4 pb-3 flex gap-2 items-start">
+    <div v-if="episode.description?.description" class="w-full px-4 pb-3 flex gap-2 items-start">
       <i-tabler:sparkles class="w-4 h-4 shrink-0 mt-0.5 text-color" />
-      <p class="text-xs text-muted">{{ episode.description.description }}</p>
+      <p class="flex-1 min-w-0 text-xs text-muted text-wrap">{{ episode.description.description }}</p>
     </div>
   </div>
 </template>
@@ -118,13 +118,15 @@ const { t } = useI18n();
 const dialogRefProps = inject<DialogRefProps>('dialogRefProps')!;
 const { plugin: nvrPluginRef } = usePlugin('@camera.ui/camera-ui-nvr');
 
-const PREROLL_MS = 5000;
+const PREROLL_MS = 2000;
 const GAP_SKIP_MIN_MS = 2000;
 const BLOCK_TAIL_MS = 2000;
-const BLOCK_HEAD_MS = 6000;
-const PRELOAD_AHEAD_MS = 8000;
+const BLOCK_HEAD_MS = 1500;
+const PRELOAD_AHEAD_MS = 4000;
 const HANDOFF_WAIT_MS = 1200;
 const TRANSITION_MAX_MS = 1500;
+const OVERLAP_LEAD_MS = 1000;
+const PRELOAD_RESYNC_MS = 3000;
 
 const rangeStartMs = props.episode.startTime - PREROLL_MS;
 const rangeEndMs = props.episode.endTime;
@@ -139,6 +141,16 @@ const cameraSpans = members
       : [{ cameraId: m.cameraId, firstSeen: m.firstSeen, lastSeen: m.lastSeen }],
   )
   .sort((a, b) => a.firstSeen - b.firstSeen);
+
+for (const span of cameraSpans) {
+  for (const other of cameraSpans) {
+    if (other === span || other.cameraId === span.cameraId) continue;
+    const crossing = other.firstSeen < span.firstSeen && other.lastSeen > span.firstSeen && other.lastSeen < span.lastSeen;
+    if (crossing) span.firstSeen = Math.max(span.firstSeen, Math.min(other.lastSeen - OVERLAP_LEAD_MS, span.lastSeen));
+  }
+}
+cameraSpans.sort((a, b) => a.firstSeen - b.firstSeen);
+
 const cameraBlocks = buildCameraBlocks();
 
 const stageRef = useTemplateRef('stageRef');
@@ -163,13 +175,19 @@ let playbackStarted = false;
 let wasPlayingBeforeScrub = false;
 let lastScrubSent = 0;
 let lastSkipAt = 0;
+let lastSkipTargetMs = 0;
 let handoffStartedAt = 0;
 let transitionStartedAt = 0;
 let skipNoticeTimer: ReturnType<typeof setTimeout> | undefined;
+const preloadResynced = new Set<string>();
 
 const preloadCameraId = computed(() => {
-  const next = cameraBlocks.find((b) => b.startMs > playheadMs.value && b.cameraId !== activeCameraId.value && b.startMs - playheadMs.value <= PRELOAD_AHEAD_MS);
-  return next?.cameraId;
+  const t = playheadMs.value;
+  const next = cameraBlocks.find((b) => b.startMs > t && b.cameraId !== activeCameraId.value);
+  if (!next) return undefined;
+  const current = cameraBlocks.find((b) => b.startMs <= t && t < b.endMs);
+  const waitMs = current ? Math.min(next.startMs - t, current.endMs - t + GAP_SKIP_MIN_MS) : next.startMs - t;
+  return waitMs <= PRELOAD_AHEAD_MS ? next.cameraId : undefined;
 });
 
 const activeIds = computed(() => {
@@ -289,7 +307,8 @@ function setPlayhead(tMs: number): void {
 function ctrlReady(id: string): boolean {
   const ctrl = controllers.value.get(id);
   if (!ctrl) return true;
-  const tsMs = ctrl.currentTimestamp.value / 1000;
+  // interpolated: the raw currentTimestamp freezes between worker drift reports
+  const tsMs = playheadUs(ctrl) / 1000;
   return !ctrl.loading.value && tsMs > 0 && Math.abs(tsMs - playheadMs.value) < 6000;
 }
 
@@ -311,6 +330,7 @@ function trySyncVisibleCamera(): void {
 
 function seekTo(tMs: number, forcePlay = false): void {
   setPlayhead(tMs);
+  lastSkipTargetMs = 0;
   ended.value = false;
   if (forcePlay || master.mode.value === 'play') {
     master.play(playheadMs.value * 1000);
@@ -379,6 +399,7 @@ function onStripPointerUp(e: PointerEvent): void {
   if (!scrubbing.value) return;
   scrubbing.value = false;
   setPlayhead(stripTimeFromEvent(e));
+  lastSkipTargetMs = 0;
   ended.value = false;
   if (wasPlayingBeforeScrub) master.play(playheadMs.value * 1000);
   else master.scrub(playheadMs.value * 1000, true);
@@ -415,6 +436,20 @@ function resolveGoTo(): string | undefined {
   return `/cameras/${camera.name}?startTs=${Math.floor(playheadMs.value)}`;
 }
 
+function resyncPreload(): void {
+  const preload = preloadCameraId.value;
+  for (const id of preloadResynced) {
+    if (id !== preload) preloadResynced.delete(id);
+  }
+  if (!preload || master.mode.value !== 'play' || preloadResynced.has(preload)) return;
+  const ctrl = controllers.value.get(preload);
+  if (!ctrl?.isActive.value || ctrl.loading.value) return;
+  const ctrlMs = playheadUs(ctrl) / 1000;
+  if (ctrlMs <= 0 || Math.abs(ctrlMs - playheadMs.value) <= PRELOAD_RESYNC_MS) return;
+  preloadResynced.add(preload);
+  ctrl.play(playheadMs.value * 1000);
+}
+
 watchEffect(() => {
   for (const [id, ctrl] of controllers.value) {
     ctrl.muted.value = muted.value || id !== visibleCameraId.value;
@@ -423,9 +458,13 @@ watchEffect(() => {
 
 watch(activeCameraId, (next) => {
   handoffStartedAt = performance.now();
-  if (controllers.value.get(next)?.isActive.value) {
-    visibleCameraId.value = next;
-    return;
+  const ctrl = controllers.value.get(next);
+  if (ctrl?.isActive.value) {
+    if (ctrlReady(next)) {
+      visibleCameraId.value = next;
+      return;
+    }
+    if (master.mode.value === 'play') ctrl.play(playheadMs.value * 1000);
   }
   trySyncVisibleCamera();
 });
@@ -455,6 +494,7 @@ watch(
 
 useIntervalFn(() => {
   trySyncVisibleCamera();
+  resyncPreload();
   if (scrubbing.value || master.mode.value === 'idle') return;
   const us = playheadUs(master);
   if (us <= 0) return;
@@ -462,16 +502,21 @@ useIntervalFn(() => {
 
   if (master.mode.value === 'play') {
     if (tMs >= rangeEndMs) {
-      master.pause();
       ended.value = true;
-      setPlayhead(rangeEndMs);
+      beginHandoffTransition();
+      setPlayhead(rangeStartMs);
+      master.scrub(rangeStartMs * 1000, true);
       return;
     }
     const now = performance.now();
-    if (now - lastSkipAt > 1500) {
+    // a gap seek lands on the previous keyframe, up to a few seconds before
+    // the target; while playback catches up through that stretch a second
+    // skip toward the same target would loop the seek forever
+    if (now - lastSkipAt > 1500 && tMs >= lastSkipTargetMs) {
       const targetMs = grayUntil(tMs);
       if (targetMs !== undefined && targetMs - tMs > GAP_SKIP_MIN_MS) {
         lastSkipAt = now;
+        lastSkipTargetMs = targetMs;
         showSkipNotice(Math.round((targetMs - tMs) / 1000));
         beginHandoffTransition();
         master.seek(targetMs * 1000);
