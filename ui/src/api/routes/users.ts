@@ -186,7 +186,7 @@ export class UsersQuery {
     return useQueryEnhanced({
       queryKey: ['users', username],
       queryFn: ({ signal }) => getUserFn({ username: unref(username), signal }),
-      enabled: () => this.queryActivator.value.some((query) => query.name === 'getUserQuery' && query.enabled),
+      enabled: () => Boolean(unref(username)) && this.queryActivator.value.some((query) => query.name === 'getUserQuery' && query.enabled),
     });
   }
 

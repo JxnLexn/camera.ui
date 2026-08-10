@@ -113,10 +113,15 @@ export const userPreferencesCameras = zod.object({
 
 export const userLanguageSchema = zod.enum(['auto', ...SUPPORTED_LANGUAGES]);
 
+export const userPreferencesRecordings = zod.object({
+  ungrouped: zod.boolean(),
+});
+
 export const userPreferences = zod.object({
   language: userLanguageSchema.optional(),
   camview: userPreferencesCamview,
   cameras: zod.record(zod.string().trim(), userPreferencesCameras),
+  recordings: userPreferencesRecordings.optional(),
 });
 
 export const passwordSchema = zod

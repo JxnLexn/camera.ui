@@ -54,6 +54,7 @@ export const dbUserSchema = zod.object({
           hiddenDevices: zod.object({ id: zod.string(), name: zod.string(), model: zod.string().optional() }).array().default([]),
         })
         .optional(),
+      recordings: zod.object({ ungrouped: zod.boolean() }).optional(),
     })
     .default({ language: 'auto', camview: { views: [] }, cameras: {} }),
   twoFactor: zod

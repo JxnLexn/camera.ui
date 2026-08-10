@@ -212,6 +212,9 @@ export interface DBUserPreferences {
   discovery?: {
     hiddenDevices: DBHiddenDevice[];
   };
+  recordings?: {
+    ungrouped: boolean;
+  };
 }
 
 export interface DBInstanceCredentials {
