@@ -27,7 +27,7 @@
           </template>
         </Card>
 
-        <CuiPluginCard v-else :plugin class="h-[220px]" />
+        <CuiPluginCard v-else :key="plugin.pluginName" :plugin class="h-[220px]" />
       </div>
 
       <div class="lg:col-span-1 lg:row-span-3 order-2">

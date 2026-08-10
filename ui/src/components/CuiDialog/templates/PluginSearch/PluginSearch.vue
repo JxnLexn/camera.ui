@@ -45,7 +45,7 @@
     <div v-if="!pluginsAreLoading && featuredPlugins.length" class="mt-6">
       <h3>{{ $t('components.plugin_search.featured') }}</h3>
       <div class="featured-row custom-scrollbar mt-3">
-        <div v-for="(plugin, index) in featuredPlugins" :key="index" class="featured-item">
+        <div v-for="plugin in featuredPlugins" :key="plugin.pluginName" class="featured-item">
           <CuiPluginStoreCard :plugin :in-progress="isPluginInProgress(plugin.pluginName)" @open="openDetail" @install="openDialog" />
         </div>
       </div>
@@ -77,8 +77,8 @@
 
     <div v-else class="w-full plugin-list">
       <CuiPluginStoreCard
-        v-for="(plugin, index) in listPlugins"
-        :key="index"
+        v-for="plugin in listPlugins"
+        :key="plugin.pluginName"
         v-tooltip="{ value: isPluginInProgress(plugin.pluginName) ? $t('components.plugin_search.in_progress') : undefined }"
         :plugin
         :in-progress="isPluginInProgress(plugin.pluginName)"

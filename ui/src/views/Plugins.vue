@@ -133,8 +133,8 @@
         }"
       >
         <CuiPluginCard
-          v-for="(plugin, index) in filteredPlugins"
-          :key="index"
+          v-for="plugin in filteredPlugins"
+          :key="plugin.pluginName"
           :plugin
           :selection-mode="selectionMode"
           :selected="selectedIds.has(plugin.pluginName)"
