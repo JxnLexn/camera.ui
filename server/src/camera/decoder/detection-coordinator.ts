@@ -7,6 +7,7 @@ import { normalizeZone } from '../utils/filter.js';
 import { AudioDetectionLoop } from './audio-loop.js';
 import { CascadeManager } from './cascade-manager.js';
 import { detectionRecord } from './debug/detection-record.js';
+import { PerfTracker } from './debug/perf-tracker.js';
 import { DetectionPipeline } from './detection-pipeline.js';
 import { DwellManager } from './dwell-manager.js';
 import { DetectionEventManager, MOMENT_RANK_ATTRIBUTE, MOMENT_RANK_OBJECT } from './event-manager.js';
@@ -115,7 +116,6 @@ const ACTIVE_TICK_MS = 100;
 const MOTION_INTERVAL_MS = 200;
 const TICK_SLACK_MS = 20;
 const MAIN_STREAM_HOLD_MS = 5000;
-const PERF_REPORT_MS = 60_000;
 
 @RPCClass
 export class DetectionCoordinator {
@@ -138,31 +138,16 @@ export class DetectionCoordinator {
   private readonly platesSeen = new Set<string>();
   private readonly classifierLabels = new Map<string, Set<string>>();
   private readonly feedingSensors = new Map<string, SensorType>();
+  private readonly dwell = new DwellManager();
+  private readonly videoBackoff = new ReconnectBackoff();
+
+  // debugging
+  private readonly perf = new PerfTracker();
 
   private hqUpgrade?: AnalysisFrame;
   private mainStreamActive = false;
   private idleSince = 0;
   private lastMotionAt = 0;
-  private readonly perf = {
-    since: 0,
-    loopMs: 0,
-    idleTicks: 0,
-    activeTicks: 0,
-    mainFrames: 0,
-    switches: 0,
-    decodeMs: 0,
-    scaleMs: 0,
-    jpegMs: 0,
-    inferMs: 0,
-    secondaryMs: 0,
-    objects: 0,
-    faces: 0,
-    plates: 0,
-  };
-
-  private perfCpu = process.cpuUsage();
-  private readonly dwell = new DwellManager();
-  private readonly videoBackoff = new ReconnectBackoff();
 
   private loopRunning = false;
   private loopPromise?: Promise<void>;
@@ -170,13 +155,13 @@ export class DetectionCoordinator {
   private adHocVideoLoop = false;
   private processingExternalSecondary = false;
 
-  private cascadeUnsubscribe?: () => void;
-  private dwellUnsubscribe?: () => void;
-
   private lastObjectCallAt = 0;
   private objectIntervalMs = 0;
   private objectIntervalSamples = 0;
   private objectIntervalOutliers = 0;
+
+  private cascadeUnsubscribe?: () => void;
+  private dwellUnsubscribe?: () => void;
 
   private currentDetectionState: {
     motion?: MotionResult;
@@ -1075,7 +1060,7 @@ export class DetectionCoordinator {
           this.updateStreamState();
           if (this.mainStreamActive) this.perf.activeTicks++;
           else this.perf.idleTicks++;
-          this.reportPerf();
+          this.perf.report(this.logger);
 
           const remaining = (this.mainStreamActive ? ACTIVE_TICK_MS : IDLE_TICK_MS) - (Date.now() - tickStart);
           if (remaining > 0) await sleep(remaining);
@@ -1152,69 +1137,6 @@ export class DetectionCoordinator {
       this.logger.debug('HQ frame unavailable for the opening tick:', error);
     }
     return undefined;
-  }
-
-  private reportPerf(): void {
-    const now = Date.now();
-    if (this.perf.since === 0) {
-      this.perf.since = now;
-      return;
-    }
-
-    const elapsed = now - this.perf.since;
-    if (elapsed < PERF_REPORT_MS) return;
-
-    const ticks = this.perf.idleTicks + this.perf.activeTicks;
-    if (ticks > 0) {
-      const cpu = process.cpuUsage(this.perfCpu);
-      const cpuMs = Math.round((cpu.user + cpu.system) / 1000);
-      const mem = process.memoryUsage();
-      const rssMb = Math.round(mem.rss / 1024 / 1024);
-      const externalMb = Math.round(mem.external / 1024 / 1024);
-      const { loopMs, idleTicks, activeTicks, mainFrames, switches, decodeMs, scaleMs, jpegMs, inferMs, secondaryMs, objects, faces, plates } = this.perf;
-      const rate = loopMs > 0 ? (ticks / (loopMs / 1000)).toFixed(1) : '0';
-      const activePct = Math.round((activeTicks / ticks) * 100);
-      const shape = `${Math.round(elapsed / 1000)}s loop=${Math.round(loopMs / 1000)}s ticks=${ticks} (${rate}/s) active=${activePct}% switches=${switches}`;
-      const cost = `cpu=${cpuMs}ms decode=${decodeMs}ms scale=${scaleMs}ms jpeg=${jpegMs}ms infer=${inferMs}ms secondary=${secondaryMs}ms`;
-      const found = `rss=${rssMb}MB ext=${externalMb}MB obj=${objects} face=${faces} plate=${plates}`;
-      this.logger.debug(`[perf] ${shape} ${cost} ${found}`);
-      // debugging
-      detectionRecord.perf({
-        elapsedMs: elapsed,
-        loopMs,
-        idleTicks,
-        activeTicks,
-        mainFrames,
-        switches,
-        cpuMs,
-        rssMb,
-        externalMb,
-        decodeMs,
-        scaleMs,
-        jpegMs,
-        inferMs,
-        secondaryMs,
-        objects,
-        faces,
-        plates,
-      });
-    }
-
-    this.perfCpu = process.cpuUsage();
-    this.perf.since = now;
-    this.perf.loopMs = 0;
-    this.perf.idleTicks = 0;
-    this.perf.activeTicks = 0;
-    this.perf.mainFrames = 0;
-    this.perf.switches = 0;
-    this.perf.decodeMs = 0;
-    this.perf.scaleMs = 0;
-    this.perf.jpegMs = 0;
-    this.perf.inferMs = 0;
-    this.perf.secondaryMs = 0;
-    this.perf.objects = 0;
-    this.perf.faces = 0;
-    this.perf.plates = 0;
   }
 
   private updateStreamState(): void {
