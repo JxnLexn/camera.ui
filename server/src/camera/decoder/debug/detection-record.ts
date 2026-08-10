@@ -7,10 +7,11 @@ import type { WriteStream } from 'node:fs';
 import type { CropWindow, MomentFormatName } from '../moment-crop.js';
 import type { AnalysisStream } from '../types.js';
 
+// one global debug root for all diagnostic outputs, one subdirectory per concern
 function recordDir(): string | undefined {
-  const dir = process.env.CAMERA_UI_DETECTION_RECORD_DIR;
+  const dir = process.env.CAMERA_UI_DEBUG_DIR;
   if (!dir) return undefined;
-  return dir;
+  return join(dir, 'detection-record');
 }
 
 export interface PictureRef {
