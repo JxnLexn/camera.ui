@@ -247,6 +247,7 @@ const snapshotRefs = shallowRef<Record<string, InstanceType<typeof CuiCameraSnap
 
 let lastDragEnd = 0;
 let consumedEpisodeLink: string | undefined;
+let consumedConsoleLink: string | undefined;
 
 const isLoading = computed(() => camerasLoading.value);
 const isAdmin = computed(() => hasPermission(undefined, 'admin'));
@@ -476,6 +477,20 @@ watch(
 
     const cameraById = new Map<string, DBCamera>(cams.result.map((cam) => [cam._id, cam]));
     openEpisodePlayer(episode, cameraById);
+  },
+  { immediate: true },
+);
+
+watch(
+  [() => route.query.console, cameras],
+  ([cameraId, cams]) => {
+    if (typeof cameraId !== 'string' || !cameraId || !cams?.result?.length) return;
+    if (consumedConsoleLink === cameraId) return;
+    consumedConsoleLink = cameraId;
+
+    router.replace({ query: { ...route.query, console: undefined } });
+    const camera = cams.result.find((cam) => cam._id === cameraId);
+    if (camera) openConsoleDialog(camera.name);
   },
   { immediate: true },
 );
