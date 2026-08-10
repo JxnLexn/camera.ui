@@ -20,9 +20,19 @@ export async function conditionSensorState(ctx: ActionContext, data: Record<stri
   const results = conditions.map((cond) => {
     const value = sensor.getValue(cond.property);
     const expected = parseValue(ctx.resolve(cond.expectedValue));
+    if (Array.isArray(value) && !Array.isArray(expected)) {
+      return value.some((entry) => matchesLoose(entry, expected));
+    }
     return isEqual(value, expected);
   });
 
   const result = logic === 'OR' ? results.some(Boolean) : results.every(Boolean);
   return { handle: result ? 'true' : 'false' };
+}
+
+function matchesLoose(value: unknown, expected: unknown): boolean {
+  if (typeof value === 'string' && typeof expected === 'string') {
+    return value.toLowerCase() === expected.toLowerCase();
+  }
+  return isEqual(value, expected);
 }

@@ -132,6 +132,13 @@ export class DetectionCoordinator {
   private readonly cascade = new CascadeManager();
   private readonly worldSpans = new Set<number>();
 
+  private readonly activeSensorTriggerTypes = new Map<string, string>();
+  private readonly secondaryBboxSeen = new Map<string, number>();
+  private readonly faceIdentities = new Set<string>();
+  private readonly platesSeen = new Set<string>();
+  private readonly classifierLabels = new Map<string, Set<string>>();
+  private readonly feedingSensors = new Map<string, SensorType>();
+
   private hqUpgrade?: AnalysisFrame;
   private mainStreamActive = false;
   private idleSince = 0;
@@ -165,10 +172,6 @@ export class DetectionCoordinator {
 
   private cascadeUnsubscribe?: () => void;
   private dwellUnsubscribe?: () => void;
-
-  private readonly activeSensorTriggerTypes = new Map<string, string>();
-  private readonly secondaryBboxSeen = new Map<string, number>();
-  private readonly feedingSensors = new Set<string>();
 
   private lastObjectCallAt = 0;
   private objectIntervalMs = 0;
@@ -371,7 +374,7 @@ export class DetectionCoordinator {
   @RPCMethod
   public async onSensorAdded(sensor: CoordinatorSensorInfo): Promise<void> {
     if (DETECTION_SENSOR_TYPES.has(sensor.sensorType)) {
-      this.feedingSensors.add(sensor.sensorId);
+      this.feedingSensors.set(sensor.sensorId, sensor.sensorType);
     }
 
     if (DETECTION_SENSOR_TYPES.has(sensor.sensorType) && sensor.requiresFrames) {
@@ -389,8 +392,20 @@ export class DetectionCoordinator {
 
   @RPCMethod
   public async onSensorRemoved(sensorId: string): Promise<void> {
-    if (this.feedingSensors.delete(sensorId)) {
-      this.writeSensorProperties(sensorId, { detected: false, detections: [] });
+    this.classifierLabels.delete(sensorId);
+    const sensorType = this.feedingSensors.get(sensorId);
+    if (sensorType === SensorType.Face) this.faceIdentities.clear();
+    if (sensorType === SensorType.LicensePlate) this.platesSeen.clear();
+    if (sensorType !== undefined && this.feedingSensors.delete(sensorId)) {
+      // a sensor removed mid-segment misses the cascade-end clear, so the
+      // recognized lists must reset here or they survive the re-register
+      this.writeSensorProperties(sensorId, {
+        detected: false,
+        detections: [],
+        ...(sensorType === SensorType.Face ? { identities: [] } : {}),
+        ...(sensorType === SensorType.LicensePlate ? { plates: [] } : {}),
+        ...(sensorType === SensorType.Classifier ? { labels: [] } : {}),
+      });
     }
 
     await this.removeDetectionPluginBySensor(sensorId);
@@ -618,8 +633,20 @@ export class DetectionCoordinator {
       clearTargets.push(plugin.sensorId);
     }
 
+    this.faceIdentities.clear();
+    this.platesSeen.clear();
+    this.classifierLabels.clear();
+    const faceSensorId = this.plugins.get(SensorType.Face)?.sensorId;
+    const plateSensorId = this.plugins.get(SensorType.LicensePlate)?.sensorId;
+    const classifierSensorIds = new Set(this.plugins.getAll(SensorType.Classifier).map((p) => p.sensorId));
     for (const sensorId of clearTargets) {
-      this.writeSensorProperties(sensorId, { detected: false, detections: [] });
+      this.writeSensorProperties(sensorId, {
+        detected: false,
+        detections: [],
+        ...(sensorId === faceSensorId ? { identities: [] } : {}),
+        ...(sensorId === plateSensorId ? { plates: [] } : {}),
+        ...(classifierSensorIds.has(sensorId) ? { labels: [] } : {}),
+      });
       this.secondaryBboxSeen.delete(sensorId);
     }
 
@@ -1467,18 +1494,29 @@ export class DetectionCoordinator {
       }
       const facePlugin = this.plugins.get(SensorType.Face);
       if (facePlugin) {
+        // no mid-segment clear: a turned-away head yields a no-face frame and
+        // would flap the list, departure is reflected when the segment ends
+        for (const detection of results.face.detections) {
+          if (detection.identity) this.faceIdentities.add(detection.identity);
+        }
         this.ingestDetectionResult(SensorType.Face, facePlugin.sensorId, {
           detected: results.face.detected,
           detections: results.face.detections,
+          identities: [...this.faceIdentities].sort(),
         });
       }
     }
     if (results.licensePlate) {
       const lpdPlugin = this.plugins.get(SensorType.LicensePlate);
       if (lpdPlugin) {
+        for (const detection of results.licensePlate.detections) {
+          const plate = detection.plateText ? normalizePlateText(detection.plateText) || detection.plateText : '';
+          if (plate) this.platesSeen.add(plate);
+        }
         this.ingestDetectionResult(SensorType.LicensePlate, lpdPlugin.sensorId, {
           detected: results.licensePlate.detected,
           detections: results.licensePlate.detections,
+          plates: [...this.platesSeen].sort(),
         });
       }
     }
@@ -1486,12 +1524,23 @@ export class DetectionCoordinator {
       for (const [pluginId, classifierResult] of Object.entries(results.classifiers)) {
         const plugin = this.plugins.getAll(SensorType.Classifier).find((p) => p.pluginId === pluginId);
         if (plugin) {
+          let seen = this.classifierLabels.get(plugin.sensorId);
+          if (!seen) {
+            seen = new Set<string>();
+            this.classifierLabels.set(plugin.sensorId, seen);
+          }
+          for (const detection of classifierResult.detections) {
+            // the specific answer wins (subAttribute, e.g. the bird species)
+            const label = detection.subAttribute || detection.attribute || detection.label;
+            if (label) seen.add(label);
+          }
           this.ingestDetectionResult(
             SensorType.Classifier,
             plugin.sensorId,
             {
               detected: classifierResult.detected,
               detections: classifierResult.detections,
+              labels: [...seen].sort(),
             },
             pluginId,
           );

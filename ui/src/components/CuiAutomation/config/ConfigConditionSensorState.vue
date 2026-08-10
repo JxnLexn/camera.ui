@@ -81,7 +81,6 @@
 import EqualIcon from '~icons/mdi/equal';
 import VariableIcon from '~icons/mdi/variable';
 
-import { SENSOR_TYPE_CONFIG } from '@shared/types';
 import ConfigSensorValueInput from './ConfigSensorValueInput.vue';
 import { getSensorPropertyDefaultValue } from './sensorPropertyInputs.js';
 import { useCameraOptions } from './useCameraOptions.js';
@@ -118,7 +117,7 @@ function setVariableMode(idx: number, enabled: boolean) {
   }
 }
 
-const { sensorOptions, sensorById, isLoading } = useSensorOptions((sensor) => !SENSOR_TYPE_CONFIG[sensor.type].isDetectionType);
+const { sensorOptions, sensorById, isLoading } = useSensorOptions();
 
 const propertyOptions = computed(() => {
   if (!props.data.sensorType) return [];

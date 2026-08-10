@@ -33,7 +33,6 @@
 </template>
 
 <script setup lang="ts">
-import { SENSOR_TYPE_CONFIG } from '@shared/types';
 import { useCameraOptions } from './useCameraOptions.js';
 
 import type { ConfigNodeUpdateEmits, ConfigTriggerSensorProps } from '../types.js';
@@ -45,7 +44,7 @@ const emit = defineEmits<ConfigNodeUpdateEmits>();
 const { t } = useI18n();
 const { useSensorOptions, getPropertiesForSensor } = useCameraOptions();
 
-const { sensorOptions, sensorById, isLoading } = useSensorOptions((sensor) => !SENSOR_TYPE_CONFIG[sensor.type].isDetectionType);
+const { sensorOptions, sensorById, isLoading } = useSensorOptions();
 
 const propertyOptions = computed(() => {
   if (!props.data.sensorType) return [];

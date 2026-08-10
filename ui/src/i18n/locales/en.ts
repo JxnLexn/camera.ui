@@ -312,6 +312,8 @@ export default {
       sensor_property_level: 'Battery level',
       sensor_property_charging: 'Charging',
       sensor_property_low: 'Low battery',
+      sensor_property_identities: 'Recognized faces',
+      sensor_property_plates: 'Recognized plates',
       mqtt_recent_topics: 'Recent topics',
       validation_no_trigger: 'The flow has no trigger.',
       validation_unreachable: 'This node is not connected to a trigger.',

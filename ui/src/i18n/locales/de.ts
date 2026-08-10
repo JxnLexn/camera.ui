@@ -313,6 +313,8 @@ export default {
       sensor_property_level: 'Batteriestand',
       sensor_property_charging: 'Ladezustand',
       sensor_property_low: 'Batterie schwach',
+      sensor_property_identities: 'Erkannte Gesichter',
+      sensor_property_plates: 'Erkannte Kennzeichen',
       mqtt_recent_topics: 'Letzte Topics',
       validation_no_trigger: 'Der Flow hat keinen Trigger.',
       validation_unreachable: 'Dieser Node ist mit keinem Trigger verbunden.',

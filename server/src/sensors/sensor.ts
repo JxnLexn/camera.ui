@@ -181,12 +181,23 @@ export class ServerSensor implements SensorLike {
       if (this.writeProperty(property, value)) changed[property] = value;
     }
 
+    // recognized lists (face identities, plate texts, classifier labels) get
+    // their own rows the moment they grow — recognition trails the detected
+    // flip, so the flip entry alone would never carry the names
+    const listEntry: Record<string, unknown> = {};
+    for (const property of ['identities', 'plates', 'labels']) {
+      const value = changed[property];
+      if (Array.isArray(value) && value.length > 0) listEntry[property] = value.join(', ');
+    }
+    if (Object.keys(listEntry).length > 0) this.ctx.appendHistory(this.id, listEntry);
+
     if (!('detected' in changed)) return;
 
     const entry: Record<string, unknown> = { detected: changed.detected };
     if (changed.detected === true && this.type !== SensorType.Motion) {
-      const detections = (properties.detections ?? this.getValue('detections')) as { label?: string; attribute?: string }[] | undefined;
-      const labels = [...new Set((detections ?? []).map((d) => d.label ?? d.attribute).filter((label): label is string => !!label))];
+      const detections = (properties.detections ?? this.getValue('detections')) as { label?: string; attribute?: string; subAttribute?: string }[] | undefined;
+      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- empty-string labels must fall through
+      const labels = [...new Set((detections ?? []).map((d) => d.subAttribute || d.label || d.attribute).filter((label): label is string => !!label))];
       if (labels.length > 0) entry.labels = labels.join(', ');
     }
     this.ctx.appendHistory(this.id, entry);

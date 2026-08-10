@@ -68,6 +68,7 @@
 
 <script setup lang="ts">
 import { useAllSensors } from '@camera.ui/browser';
+import { useFaceStore } from '@camera.ui/nvr';
 import { SensorType } from '@camera.ui/sdk';
 
 import { getSensorPropertyInput } from './sensorPropertyInputs.js';
@@ -101,10 +102,13 @@ const numberValue = computed(() => {
 const enumOptions = computed(() => (meta.value.options ?? []).map((option) => ({ label: t(`components.automation_nodes.${option.labelKey}`), value: option.value })));
 
 const isPresetProperty = computed(() => props.sensorType === SensorType.PTZ && props.property === 'targetPreset');
+const isFaceIdentity = computed(() => props.sensorType === SensorType.Face && props.property === 'identities');
 
 const { sensors } = useAllSensors();
+const faceStore = useFaceStore();
 
 const presetOptions = computed(() => {
+  if (isFaceIdentity.value) return faceStore.knownFaces.value.map((face) => face.name);
   if (!isPresetProperty.value) return [];
   const sensor = sensors.value.find((s) => s.id === props.sensorId);
   const presets = sensor?.getProperty('presets');
