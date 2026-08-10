@@ -28,7 +28,8 @@ const { bottombarHeight } = useSharedCuiStates();
 
 const { direction, forceVisible } = toRefs(props);
 
-const { y } = useScroll(window, { throttle: 100 });
+const { y: windowY } = useScroll(window, { throttle: 100 });
+const y = computed(() => props.scrollY ?? windowY.value);
 </script>
 
 <style scoped></style>

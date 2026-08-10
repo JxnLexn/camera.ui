@@ -129,7 +129,7 @@
       </div>
     </main>
 
-    <CuiFloatingButtonGroup v-if="availableCameras.length" :force-visible="selectionMode">
+    <CuiFloatingButtonGroup v-if="availableCameras.length" :force-visible="selectionMode" :scroll-y="gridRef?.scrollY ?? 0">
       <template v-if="!selectionMode">
         <CuiFloatingButton
           v-if="isAdmin && displayEvents.length"
@@ -262,7 +262,7 @@ const TIME_RANGE_MS: Record<string, number> = {
   '1m': 30 * 24 * 60 * 60 * 1000,
 };
 
-const gridRef = useTemplateRef<{ scrollToTop: () => void }>('gridRef');
+const gridRef = useTemplateRef<{ scrollToTop: () => void; scrollY: number }>('gridRef');
 const viewMenuRef = useTemplateRef<InstanceType<typeof CuiMenu>>('viewMenuRef');
 const sidebarState = ref<'opened' | 'closed'>('closed');
 const layoutReady = ref(false);

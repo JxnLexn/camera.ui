@@ -127,9 +127,12 @@ async function tryLoadMore(): Promise<void> {
   }
 }
 
+const scrollY = ref(0);
+
 function onScroll(event: Event): void {
   const el = event.target as HTMLElement | null;
   if (!el) return;
+  scrollY.value = el.scrollTop;
   // Trigger when the user is within 3 rows of the bottom. We read the scroll
   // position directly instead of using @scroll-index-change because the
   // latter only fires when the rendered range *index* crosses a threshold,
@@ -168,7 +171,7 @@ watch(
   { flush: 'post' },
 );
 
-defineExpose({ scrollToTop });
+defineExpose({ scrollToTop, scrollY });
 </script>
 
 <style scoped>
