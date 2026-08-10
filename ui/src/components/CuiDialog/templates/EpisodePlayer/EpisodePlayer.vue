@@ -1,9 +1,11 @@
 <template>
   <div class="episode-player-container">
     <div ref="stageRef" class="relative w-full overflow-hidden bg-black" :style="{ aspectRatio: stageAspect }">
-      <div v-for="id in memberCameraIds" v-show="id === activeCameraId" :key="id" :ref="(el) => setStageEl(id, el as HTMLElement | null)" class="absolute inset-0" />
+      <div v-for="id in memberCameraIds" v-show="id === visibleCameraId" :key="id" :ref="(el) => setStageEl(id, el as HTMLElement | null)" class="absolute inset-0" />
 
-      <div v-if="showSpinner" class="absolute inset-0 z-[3] flex items-center justify-center pointer-events-none">
+      <div class="absolute inset-0 z-[3] bg-black pointer-events-none transition-opacity duration-300" :class="transitioning ? 'opacity-100' : 'opacity-0'" />
+
+      <div v-if="showSpinner || transitioning" class="absolute inset-0 z-[3] flex items-center justify-center pointer-events-none">
         <ProgressSpinner class="w-[30px] h-[30px] m-0" stroke-width="5" />
       </div>
 
@@ -118,8 +120,11 @@ const { plugin: nvrPluginRef } = usePlugin('@camera.ui/camera-ui-nvr');
 
 const PREROLL_MS = 5000;
 const GAP_SKIP_MIN_MS = 2000;
-const GAP_SKIP_LEAD_MS = 1000;
+const BLOCK_TAIL_MS = 2000;
+const BLOCK_HEAD_MS = 6000;
 const PRELOAD_AHEAD_MS = 8000;
+const HANDOFF_WAIT_MS = 1200;
+const TRANSITION_MAX_MS = 1500;
 
 const rangeStartMs = props.episode.startTime - PREROLL_MS;
 const rangeEndMs = props.episode.endTime;
@@ -133,6 +138,7 @@ const stageRef = useTemplateRef('stageRef');
 const stripRef = useTemplateRef('stripRef');
 const playheadMs = ref(rangeStartMs);
 const activeCameraId = ref(cameraAt(rangeStartMs));
+const visibleCameraId = ref(activeCameraId.value);
 const muted = ref(true);
 const ended = ref(false);
 const scrubbing = ref(false);
@@ -140,6 +146,7 @@ const skipNoticeSec = ref(0);
 
 const isDownloading = ref(false);
 const initialHover = ref(true);
+const transitioning = ref(false);
 
 const isHovered = useElementHover(stageRef, { delayLeave: 1000 });
 
@@ -149,6 +156,8 @@ let playbackStarted = false;
 let wasPlayingBeforeScrub = false;
 let lastScrubSent = 0;
 let lastSkipAt = 0;
+let handoffStartedAt = 0;
+let transitionStartedAt = 0;
 let skipNoticeTimer: ReturnType<typeof setTimeout> | undefined;
 
 const preloadCameraId = computed(() => {
@@ -157,7 +166,9 @@ const preloadCameraId = computed(() => {
 });
 
 const activeIds = computed(() => {
-  return preloadCameraId.value ? [activeCameraId.value, preloadCameraId.value] : [activeCameraId.value];
+  const ids = new Set([activeCameraId.value, visibleCameraId.value]);
+  if (preloadCameraId.value) ids.add(preloadCameraId.value);
+  return [...ids];
 });
 
 const { master, controllers } = useMultiNvrPlayback(ref(memberCameraIds), { activeIds });
@@ -167,10 +178,10 @@ const showControl = computed(() => isHovered.value || initialHover.value);
 const showSpinner = computed(() => !scrubbing.value && (master.loading.value || master.mode.value === 'idle'));
 
 const stageAspect = computed(() => {
-  return props.cameraById.get(activeCameraId.value)?.interfaceSettings.aspectRatio.replace(':', '/') ?? '16/9';
+  return props.cameraById.get(visibleCameraId.value)?.interfaceSettings.aspectRatio.replace(':', '/') ?? '16/9';
 });
 
-const activeCameraName = computed(() => cameraName(activeCameraId.value));
+const activeCameraName = computed(() => cameraName(visibleCameraId.value));
 
 const clockLabel = computed(() => {
   return new Date(playheadMs.value).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
@@ -195,13 +206,17 @@ function coveringMemberAt(tMs: number): EpisodeMember | undefined {
 }
 
 function cameraAt(tMs: number): string {
-  const covering = coveringMemberAt(tMs);
-  if (covering) return covering.cameraId;
-  let last: EpisodeMember | undefined;
-  for (const m of members) {
-    if (m.firstSeen <= tMs) last = m;
+  for (const block of cameraBlocks) {
+    if (tMs < block.endMs) return block.cameraId;
   }
-  return (last ?? members[0])?.cameraId ?? '';
+  return cameraBlocks[cameraBlocks.length - 1]?.cameraId ?? '';
+}
+
+function grayUntil(tMs: number): number | undefined {
+  for (let i = 0; i < cameraBlocks.length - 1; i++) {
+    if (tMs >= cameraBlocks[i].endMs && tMs < cameraBlocks[i + 1].startMs) return cameraBlocks[i + 1].startMs;
+  }
+  return undefined;
 }
 
 function buildCameraBlocks(): StripBlock[] {
@@ -222,6 +237,20 @@ function buildCameraBlocks(): StripBlock[] {
     if (prev && prev.cameraId === covering.cameraId && prev.endMs >= startMs) prev.endMs = endMs;
     else blocks.push({ cameraId: covering.cameraId, startMs, endMs });
   }
+
+  for (let i = 0; i < blocks.length - 1; i++) {
+    const cur = blocks[i];
+    const next = blocks[i + 1];
+    const gap = next.startMs - cur.endMs;
+    if (gap <= 0) continue;
+    const tail = Math.min(BLOCK_TAIL_MS, Math.floor(gap / 2));
+    cur.endMs += tail;
+    next.startMs -= Math.min(BLOCK_HEAD_MS, gap - tail);
+  }
+  if (blocks.length > 0) {
+    blocks[0].startMs = rangeStartMs;
+    blocks[blocks.length - 1].endMs = rangeEndMs;
+  }
   return blocks;
 }
 
@@ -232,7 +261,8 @@ function isActiveBlock(block: StripBlock): boolean {
 function blockStyle(block: StripBlock): Record<string, string> {
   const left = ((block.startMs - rangeStartMs) / rangeMs) * 100;
   const width = ((block.endMs - block.startMs) / rangeMs) * 100;
-  return { left: `calc(${left}% + 1px)`, width: `calc(${width}% - 2px)` };
+  // short spans stay a visible chip instead of a hairline
+  return { left: `calc(${left}% + 1px)`, width: `max(calc(${width}% - 2px), 14px)` };
 }
 
 function boundLabel(tMs: number): string {
@@ -247,6 +277,29 @@ function setStageEl(id: string, el: HTMLElement | null): void {
 function setPlayhead(tMs: number): void {
   playheadMs.value = clamp(tMs, rangeStartMs, rangeEndMs);
   activeCameraId.value = cameraAt(playheadMs.value);
+}
+
+function ctrlReady(id: string): boolean {
+  const ctrl = controllers.value.get(id);
+  if (!ctrl) return true;
+  const tsMs = ctrl.currentTimestamp.value / 1000;
+  return !ctrl.loading.value && tsMs > 0 && Math.abs(tsMs - playheadMs.value) < 6000;
+}
+
+function beginHandoffTransition(): void {
+  transitioning.value = true;
+  transitionStartedAt = performance.now();
+}
+
+function trySyncVisibleCamera(): void {
+  const target = activeCameraId.value;
+  if (visibleCameraId.value !== target) {
+    if (!ctrlReady(target) && performance.now() - handoffStartedAt <= HANDOFF_WAIT_MS) return;
+    visibleCameraId.value = target;
+  }
+  if (transitioning.value && (ctrlReady(visibleCameraId.value) || performance.now() - transitionStartedAt > TRANSITION_MAX_MS)) {
+    transitioning.value = false;
+  }
 }
 
 function seekTo(tMs: number, forcePlay = false): void {
@@ -278,6 +331,7 @@ function togglePlay(): void {
 
 function jumpBlock(dir: 1 | -1): void {
   const t = playheadMs.value;
+  beginHandoffTransition();
   if (dir === 1) {
     const next = cameraBlocks.find((b) => b.startMs > t + 500);
     if (next) seekTo(next.startMs);
@@ -356,8 +410,17 @@ function resolveGoTo(): string | undefined {
 
 watchEffect(() => {
   for (const [id, ctrl] of controllers.value) {
-    ctrl.muted.value = muted.value || id !== activeCameraId.value;
+    ctrl.muted.value = muted.value || id !== visibleCameraId.value;
   }
+});
+
+watch(activeCameraId, (next) => {
+  handoffStartedAt = performance.now();
+  if (controllers.value.get(next)?.isActive.value) {
+    visibleCameraId.value = next;
+    return;
+  }
+  trySyncVisibleCamera();
 });
 
 watch(
@@ -384,6 +447,7 @@ watch(
 );
 
 useIntervalFn(() => {
+  trySyncVisibleCamera();
   if (scrubbing.value || master.mode.value === 'idle') return;
   const us = playheadUs(master);
   if (us <= 0) return;
@@ -397,12 +461,12 @@ useIntervalFn(() => {
       return;
     }
     const now = performance.now();
-    if (now - lastSkipAt > 1500 && tMs > members[0].firstSeen && !coveringMemberAt(tMs)) {
-      const next = members.find((m) => m.firstSeen > tMs);
-      if (next && next.firstSeen - tMs > GAP_SKIP_MIN_MS) {
+    if (now - lastSkipAt > 1500) {
+      const targetMs = grayUntil(tMs);
+      if (targetMs !== undefined && targetMs - tMs > GAP_SKIP_MIN_MS) {
         lastSkipAt = now;
-        const targetMs = next.firstSeen - GAP_SKIP_LEAD_MS;
         showSkipNotice(Math.round((targetMs - tMs) / 1000));
+        beginHandoffTransition();
         master.seek(targetMs * 1000);
         tMs = targetMs;
       }
