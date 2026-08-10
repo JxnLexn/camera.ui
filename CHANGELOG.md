@@ -6,11 +6,31 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
+- **Several cameras, one story.** When cameras see the same activity around the same time, the AI bundles the sightings into one episode with a title and a short story. Episodes show up on the home screen and in the recordings view as mosaic cards, and recordings that belong to one can open it. The episode player runs the whole sequence and switches between the cameras on its own, with a strip below to jump around. Also on the Apple TV app. Works when AI descriptions are enabled.
+
+- **A zone can require the whole object.** Every detection zone has a mode now: object touches the zone, as before, or object fully inside the zone. The strict mode stops a car that only clips the edge of your driveway zone from triggering it.
+
+- **A face can be ignored for good.** Unknown faces and whole groups in Faces have an ignore button now. The mail carrier you deleted every week stops coming back: new sightings of an ignored person are dropped right away. Ignored faces sit in their own list at the bottom of the page, restoring one lets the person show up again. Needs the camera-ui-nvr plugin update.
+
+- **Camera sensors can drive automations.** Motion, object, face, license plate and classifier sensors from your cameras now show up in the sensor trigger and the sensor state condition. Face sensors carry the recognized names, license plate sensors the read plates and classifiers their labels, a bird classifier for example the species, so an automation can react to a specific person, car or result. Several at once are kept as a list, and matching ignores upper and lower case. The sensor history lists the recognized names, plates and labels with the time they appeared.
+
 - **Home lists every moment of an event, the way the timeline does.** A visit that pauses and picks up again gives you one card per phase, each with its own picture and time. Before that, a whole event shared a single card.
+
+- **The Apple TV app says what to update.** With a server or recording plugin older than the app needs, it shows a clear screen naming the update instead of empty lists and missing pictures.
+
+- **Flip through a recording card's pictures in place.** When a moment has more than its scene picture, a recognized face or a read license plate, the card gets arrows to browse them right there, with the name or plate shown. The small tiles below mark the shown picture and jump straight to one. The moment cards on the home screen get the same arrows, kept lean: visible arrows say there is more, the details appear on hover.
+
+- **Hold a card for the video preview on the phone.** The short preview that plays when hovering a card on desktop now plays on touch devices while the finger rests on the card; letting go stops it, a normal tap still opens the event. Works on the home screen moment cards and in the recordings view.
+
+- **Own instructions for AI descriptions.** The recording plugin settings take free-text guidance for moment descriptions and episode stories separately, added on top of the built-in prompt. The AI settings are split into GenAI (provider), Moments and Episodes groups for that.
+
+- **One AI summary push per event.** The AI description no longer replaces the notification after every moment; the texts collect and arrive as one summary once the event stays calm for a bit, or when it ends. The first push for a person and the name upgrade stay as fast as before, and tapping the summary opens the start of the event.
 
 ### Changed
 
 - **A card shows the time of the picture on it.** A card could read 08:01 while its picture was taken at 08:28, somewhere in the middle of a long event. Clicking it now starts playback a few seconds before that moment, and it works the same way on the home screen, in the timeline and in the recordings view.
+
+- **The detection rate setting is gone.** How often a camera is analysed follows what is happening in front of it, so a fixed number only got in the way. Your old value is dropped on update, nothing to set. The high quality snapshots switch is now called main stream analysis and keeps its setting.
 
 - **Events follow the scene instead of a stopwatch.** An event ends when the scene is quiet, not after a fixed countdown. Someone who stops for a moment or is briefly hidden keeps their event instead of starting a second one, and a parked car no longer holds an event open or takes over its picture. When that car drives off, it counts as activity again.
 
@@ -18,9 +38,33 @@ All notable changes to this project will be documented in this file.
 
 - **Grouped recordings show what else happened in the event.** The other moments sit as small previews on the card and are visible without hovering, and each preview opens its own moment. Repeats of the same picture are gone.
 
+- **The recordings view remembers your grouping choice.** Grouped or split into moments is saved with your account now and follows you across devices. Split cards show their place in the event, like 2/3, and pointing at one highlights the other cards of the same event.
+
+- **The rescan button in Faces moved up.** It sits at the top of the page now, like the view options button in Recordings, and on the phone it lives in the top bar.
+
+- **Camera offline and online notifications open the camera log.** Tapping one now lands on the home screen with the console of that camera open, where the reason for the outage is usually visible. Needs the camera-ui-nvr plugin update.
+
 ### Fixed
 
+- **The buttons over the recordings view hide while scrolling.** Scrolling through recordings kept them on screen before, covering the bottom row of cards. In selection mode they stay, as intended.
+
+- **The picture on a push shows the moment the text describes.** Before, it could be one that appeared nowhere else. A push now waits a moment for the right picture instead of leaving without one, and when a better picture follows shortly after, it replaces the push silently instead of buzzing twice. Needs the camera-ui-nvr plugin update.
+
+- **Plugin logos stay with their plugin.** After installing or removing a plugin, the remaining cards could show their neighbour's logo and a freshly installed plugin often fell back to the camera.ui logo until a reload.
+
+- **Long camera names no longer break the layout.** On home screen cards, in the camera view on the phone and in camera lists, a long name wrapped onto a second line and pushed things around. It is shortened with three dots now, everywhere.
+
+- **Saving files from the app works on your home network.** Downloading a recording or an event clip failed with "The operation failed with an error" on a direct connection to the server, because downloads did not use the certificate trust the rest of the app runs on. They do now. The server certificate also covers all server addresses including IPv6 from now on, renewed on its own at the next start.
+
+- **Beta updates are announced everywhere, not just on the system page.** With beta updates switched on, the system page offered the new version while the badge in the sidebar and the notification stayed quiet. The setting now lives with the server instead of in the browser, so every place agrees, and on the mobile app it also picks the channel for app updates. It is per installation now, not per browser, so switch it on once again if you had it on.
+
 - **A running event no longer disappears from the home screen.** Live events could vanish from the camera strip after a few seconds and only came back when the page was reloaded.
+
+- **AI descriptions show up while the event is still open.** The description written for an event only appeared after a reload, so a card you were watching stayed blank. It now arrives on its own.
+
+- **What you see live matches what you find later.** An event on screen and the same event after a reload could show different pictures, because live and stored events came from two different places. There is one source now.
+
+- **Buttons in the settings of Python plugins work again.** Pressing one, "Reset to defaults" for example, failed with a "takes 1 positional argument but 3 were given" error in the log and did nothing. Affected every button in every Python plugin.
 
 - **Downloads take the quality you are watching.** Exporting from the timeline or downloading from the event view always produced the highest quality, no matter which one was playing. Both now follow the picked quality, so a low quality clip stays small. The export dialog under Recordings keeps its own quality choice.
 
