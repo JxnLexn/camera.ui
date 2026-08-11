@@ -431,6 +431,11 @@ export class DetectionCoordinator {
         this.thumbnailer.fetchEventThumbnailAsync();
       }
 
+      // the camera reported the end (or zones dropped everything): nothing to
+      // localize or crop, and an assist hit on leftover scene objects (a
+      // parked car) would resurrect the span the camera just closed
+      if (filtered.detected !== true) return;
+
       // assist alone is enough: its boxes upgrade zones, bboxes and thumbnails
       // even when no face/plate/clip secondary consumes them
       if (!this.plugins.hasFrameBasedSecondary() && !this.plugins.hasEligibleObjectAssist()) return;
@@ -571,9 +576,14 @@ export class DetectionCoordinator {
   }
 
   private externalObjectSpanActive(): boolean {
-    const objectPlugin = this.plugins.get(SensorType.Object);
-    if (!objectPlugin || objectPlugin.requiresFrames) return false;
-    return this.dwell.isActive(objectPlugin.sensorId);
+    // the registry holds frame-based providers only; a smart-camera object
+    // sensor (Reolink AI, ONVIF) lives in the feeding set, and its dwell is
+    // what keeps the span open between its report edges
+    if (this.plugins.get(SensorType.Object)?.requiresFrames) return false;
+    for (const [sensorId, sensorType] of this.feedingSensors) {
+      if (sensorType === SensorType.Object && this.dwell.isActive(sensorId)) return true;
+    }
+    return false;
   }
 
   private get cascadeEnabled(): boolean {
@@ -777,26 +787,39 @@ export class DetectionCoordinator {
       if (this.cascadeEnabled) {
         this.cascade.triggerMomentary(this.cascadeTimeoutSeconds);
       }
-    } else if (sensorType === SensorType.Object && detected) {
-      // the dwell bridges single missed frames; anchored stationary tracks
-      // don't refresh it, so parked objects can't hold events open
-      const detections = (properties.detections as TrackedDetection[] | undefined) ?? [];
-      if (detections.length > 0) {
-        this.dwell.refresh(sensorId, OBJECT_DWELL_SECONDS);
-        // a confirmed object re-arms the cascade like motion does: a time-based
-        // motion sensor (ONVIF cool-down) must not blind detection and split
-        // the event while someone is still mid-frame
-        if (this.cascadeEnabled) {
-          this.cascade.triggerMomentary(this.cascadeTimeoutSeconds);
+    } else if (sensorType === SensorType.Object) {
+      const framePlugin = this.plugins.get(SensorType.Object);
+      const frameBased = framePlugin?.requiresFrames === true && framePlugin.sensorId === sensorId;
+      if (detected) {
+        // the dwell bridges single missed frames; anchored stationary tracks
+        // don't refresh it, so parked objects can't hold events open
+        const detections = (properties.detections as TrackedDetection[] | undefined) ?? [];
+        if (detections.length > 0) {
+          // frame results re-arm every tick, so 2s only bridges a dropped
+          // frame; an external report is an edge that must hold until the
+          // camera reports the end (cleared below), capped by the object
+          // timeout in case that end never arrives
+          const dwellSeconds = frameBased ? OBJECT_DWELL_SECONDS : Math.max(this.config.detectionSettings.object.timeout ?? 30, OBJECT_DWELL_SECONDS);
+          this.dwell.refresh(sensorId, dwellSeconds);
+          // a confirmed object re-arms the cascade like motion does: a time-based
+          // motion sensor (ONVIF cool-down) must not blind detection and split
+          // the event while someone is still mid-frame
+          if (this.cascadeEnabled) {
+            this.cascade.triggerMomentary(this.cascadeTimeoutSeconds);
+          }
+        } else {
+          // clear detected + buffer so no segment opens, the UI still gets
+          // the bboxes via the property publish below
+          properties.detected = false;
+          if (this.currentDetectionState.object) {
+            this.currentDetectionState.object.detected = false;
+            this.currentDetectionState.object.detections = [];
+          }
         }
-      } else {
-        // clear detected + buffer so no segment opens, the UI still gets
-        // the bboxes via the property publish below
-        properties.detected = false;
-        if (this.currentDetectionState.object) {
-          this.currentDetectionState.object.detected = false;
-          this.currentDetectionState.object.detections = [];
-        }
+      } else if (!frameBased) {
+        // the camera's own end report closes the span; the segment linger
+        // still bridges flicker between two alarms
+        this.dwell.clear(sensorId);
       }
     }
 
