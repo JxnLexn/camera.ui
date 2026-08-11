@@ -274,6 +274,7 @@ declare module 'vue' {
     'ILucide:layoutGrid': typeof import('~icons/lucide/layout-grid')['default']
     'ILucide:lightbulb': typeof import('~icons/lucide/lightbulb')['default']
     'ILucide:moreVertical': typeof import('~icons/lucide/more-vertical')['default']
+    'ILucide:pencil': typeof import('~icons/lucide/pencil')['default']
     'ILucide:plus': typeof import('~icons/lucide/plus')['default']
     'ILucide:power': typeof import('~icons/lucide/power')['default']
     'ILucide:powerOff': typeof import('~icons/lucide/power-off')['default']
