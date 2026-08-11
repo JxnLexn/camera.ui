@@ -180,7 +180,7 @@ export const routes: RouteRecordRaw[] = [
       name: 'cameras',
       auth: {
         requiresAuth: true,
-        role: 'admin',
+        role: 'user',
       },
       ui: {
         containerSettings: {

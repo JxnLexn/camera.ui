@@ -4,145 +4,162 @@
       {{ $t(`views.${String($route.name).toLowerCase()}.title`) }}
     </h1>
 
-    <div v-if="isLoading" class="flex flex-1 min-h-0 flex-col items-center justify-center w-full gap-4">
-      <ProgressSpinner stroke-width="5" class="w-[30px] h-[30px]" />
-    </div>
-
-    <div v-if="!isLoading && !sortedDevices.length" class="flex flex-1 min-h-0 flex-col items-center justify-center w-full gap-4 py-16">
-      <div class="w-16 h-16 rounded-full bg-primary-500/10 flex items-center justify-center">
-        <i-bxs:cctv class="w-8 h-8 text-primary-500" />
-      </div>
-      <div class="flex flex-col items-center gap-1 max-w-[400px] text-center">
-        <span class="text-color font-semibold text-base">{{ isScanning ? $t('views.devices.scanning') : $t('views.devices.no_devices') }}</span>
-        <span class="text-muted text-sm">{{ isScanning ? $t('views.devices.scanning_hint') : $t('views.devices.no_devices_hint') }}</span>
-      </div>
-      <Button class="cui-button-medium mt-2" severity="secondary" :label="$t('views.devices.rescan')" :loading="isScanning" @click="handleRescan" />
-    </div>
-
-    <div v-if="!isLoading && addedDevices.length" class="flex min-h-0 flex-col">
-      <span class="card-title">{{ $t('views.devices.status_adopted_cameras') }}</span>
+    <div v-if="!isAdmin" class="flex min-h-0 flex-col">
       <Card class="cui-card">
         <template #content>
-          <CuiDataTable :value="addedDevices" striped-rows :pt="tablePtOptions" class="w-full" @row-click="(e: DataTableRowClickEvent) => handleRowClick(e.data)">
-            <Column header="" header-class="p-2 pl-4 w-5 max-w-5" class="p-2 pl-4 w-5 max-w-5">
-              <template #body="{ data }">
-                <div class="flex items-center justify-center">
-                  <Badge v-tooltip="{ value: getStatusTooltip(data.status) }" :style="{ background: getStatusColor(data.status) }" />
-                </div>
-              </template>
-            </Column>
-            <Column field="name" :header="$t('views.devices.name')" header-class="p-2" class="p-2 w-full min-w-[200px] max-w-0">
-              <template #body="{ data }">
-                <div class="font-bold text-color truncate">{{ data.name }}</div>
-                <div class="text-xs text-muted truncate">{{ data.manufacturer || $t('views.devices.unknown') }} · {{ data.model || $t('views.devices.unknown') }}</div>
-                <div v-if="data.errorMessage" class="text-xs text-red-500 truncate">{{ data.errorMessage }}</div>
-              </template>
-            </Column>
-            <Column field="room" :header="$t('components.form.label.room')" header-class="p-2 whitespace-nowrap" class="p-2 whitespace-nowrap">
-              <template #body="{ data }">
-                <Chip v-if="data.room" :label="data.room === 'Default' ? $t('components.form.label.room_default') : data.room" class="text-xs whitespace-nowrap" />
-              </template>
-            </Column>
-            <Column field="provider" :header="$t('views.devices.provider')" header-class="p-2 pr-4 whitespace-nowrap" class="p-2 pr-4 whitespace-nowrap">
-              <template #body="{ data }">
-                <Chip :label="data.provider" class="text-xs whitespace-nowrap" />
-              </template>
-            </Column>
-          </CuiDataTable>
+          <CuiCameraTable />
         </template>
       </Card>
     </div>
 
-    <div
-      v-if="!isLoading && sortedDevices.length"
-      class="flex min-h-0 flex-col"
-      :class="{
-        'mt-6': addedDevices.length,
-      }"
-    >
-      <span class="card-title">{{ $t('views.devices.status_discovered') }}</span>
-      <Card class="cui-card">
-        <template #content>
-          <template v-if="discoveredDevices.length">
-            <div class="flex flex-col gap-6">
-              <CuiDataTable
-                :value="discoveredDevices"
-                striped-rows
-                :pt="tablePtOptions"
-                class="w-full"
-                @row-click="(e: DataTableRowClickEvent) => handleRowClick(e.data)"
-              >
-                <Column header="" header-class="p-2 pl-4 w-5 max-w-5" class="p-2 pl-4 w-5 max-w-5">
-                  <template #body="{ data }">
-                    <div class="flex items-center justify-center">
-                      <Badge v-tooltip="{ value: getStatusTooltip(data.status) }" :style="{ background: getStatusColor(data.status) }" />
-                    </div>
-                  </template>
-                </Column>
-                <Column field="name" :header="$t('views.devices.name')" header-class="p-2" class="p-2 w-full min-w-[200px] max-w-0">
-                  <template #body="{ data }">
-                    <div :class="['font-bold text-color truncate', getRowClass(data)]">{{ data.name }}</div>
-                    <div :class="['text-xs text-muted truncate', getRowClass(data)]">
-                      {{ data.manufacturer || $t('views.devices.unknown') }} · {{ data.model || $t('views.devices.unknown') }}
-                    </div>
-                  </template>
-                </Column>
-                <Column field="address" :header="$t('views.devices.address')" header-class="p-2 whitespace-nowrap" class="p-2 whitespace-nowrap">
-                  <template #body="{ data }">
-                    <span v-if="data.address" :class="['text-xs text-muted whitespace-nowrap', getRowClass(data)]">{{ data.address }}</span>
-                  </template>
-                </Column>
-                <Column field="provider" :header="$t('views.devices.provider')" header-class="p-2 whitespace-nowrap" class="p-2 whitespace-nowrap">
-                  <template #body="{ data }">
-                    <Chip :label="data.provider" :class="['text-xs whitespace-nowrap', getRowClass(data)]" />
-                  </template>
-                </Column>
-                <Column header="" header-class="p-2 pr-4 w-12" class="p-2 pr-4 w-12">
-                  <template #body="{ data }">
-                    <div class="flex items-center justify-center">
-                      <Button
-                        v-if="!isDeviceHidden(data)"
-                        v-tooltip.left="{ value: $t('views.devices.hide') }"
-                        severity="secondary"
-                        text
-                        rounded
-                        class="cui-icon-md"
-                        @click="(e) => handleHideDevice(e, data)"
-                      >
-                        <template #icon>
-                          <EyeOffIcon width="100%" height="100%" class="text-muted" />
-                        </template>
-                      </Button>
-                      <Button v-else v-tooltip.left="{ value: $t('views.devices.unhide') }" text rounded class="cui-icon-md" @click="(e) => handleUnhideDevice(e, data)">
-                        <template #icon>
-                          <EyeIcon width="100%" height="100%" class="text-muted" />
-                        </template>
-                      </Button>
-                    </div>
-                  </template>
-                </Column>
-              </CuiDataTable>
+    <template v-else>
+      <div v-if="isLoading" class="flex flex-1 min-h-0 flex-col items-center justify-center w-full gap-4">
+        <ProgressSpinner stroke-width="5" class="w-[30px] h-[30px]" />
+      </div>
+
+      <div v-if="!isLoading && !sortedDevices.length" class="flex flex-1 min-h-0 flex-col items-center justify-center w-full gap-4 py-16">
+        <div class="w-16 h-16 rounded-full bg-primary-500/10 flex items-center justify-center">
+          <i-bxs:cctv class="w-8 h-8 text-primary-500" />
+        </div>
+        <div class="flex flex-col items-center gap-1 max-w-[400px] text-center">
+          <span class="text-color font-semibold text-base">{{ isScanning ? $t('views.devices.scanning') : $t('views.devices.no_devices') }}</span>
+          <span class="text-muted text-sm">{{ isScanning ? $t('views.devices.scanning_hint') : $t('views.devices.no_devices_hint') }}</span>
+        </div>
+        <Button class="cui-button-medium mt-2" severity="secondary" :label="$t('views.devices.rescan')" :loading="isScanning" @click="handleRescan" />
+      </div>
+
+      <div v-if="!isLoading && addedDevices.length" class="flex min-h-0 flex-col">
+        <span class="card-title">{{ $t('views.devices.status_adopted_cameras') }}</span>
+        <Card class="cui-card">
+          <template #content>
+            <CuiDataTable :value="addedDevices" striped-rows :pt="tablePtOptions" class="w-full" @row-click="(e: DataTableRowClickEvent) => handleRowClick(e.data)">
+              <Column header="" header-class="p-2 pl-4 w-5 max-w-5" class="p-2 pl-4 w-5 max-w-5">
+                <template #body="{ data }">
+                  <div class="flex items-center justify-center">
+                    <Badge v-tooltip="{ value: getStatusTooltip(data.status) }" :style="{ background: getStatusColor(data.status) }" />
+                  </div>
+                </template>
+              </Column>
+              <Column field="name" :header="$t('views.devices.name')" header-class="p-2" class="p-2 w-full min-w-[200px] max-w-0">
+                <template #body="{ data }">
+                  <div class="font-bold text-color truncate">{{ data.name }}</div>
+                  <div class="text-xs text-muted truncate">{{ data.manufacturer || $t('views.devices.unknown') }} · {{ data.model || $t('views.devices.unknown') }}</div>
+                  <div v-if="data.errorMessage" class="text-xs text-red-500 truncate">{{ data.errorMessage }}</div>
+                </template>
+              </Column>
+              <Column field="room" :header="$t('components.form.label.room')" header-class="p-2 whitespace-nowrap" class="p-2 whitespace-nowrap">
+                <template #body="{ data }">
+                  <Chip v-if="data.room" :label="data.room === 'Default' ? $t('components.form.label.room_default') : data.room" class="text-xs whitespace-nowrap" />
+                </template>
+              </Column>
+              <Column field="provider" :header="$t('views.devices.provider')" header-class="p-2 pr-4 whitespace-nowrap" class="p-2 pr-4 whitespace-nowrap">
+                <template #body="{ data }">
+                  <Chip :label="data.provider" class="text-xs whitespace-nowrap" />
+                </template>
+              </Column>
+            </CuiDataTable>
+          </template>
+        </Card>
+      </div>
+
+      <div
+        v-if="!isLoading && sortedDevices.length"
+        class="flex min-h-0 flex-col"
+        :class="{
+          'mt-6': addedDevices.length,
+        }"
+      >
+        <span class="card-title">{{ $t('views.devices.status_discovered') }}</span>
+        <Card class="cui-card">
+          <template #content>
+            <template v-if="discoveredDevices.length">
+              <div class="flex flex-col gap-6">
+                <CuiDataTable
+                  :value="discoveredDevices"
+                  striped-rows
+                  :pt="tablePtOptions"
+                  class="w-full"
+                  @row-click="(e: DataTableRowClickEvent) => handleRowClick(e.data)"
+                >
+                  <Column header="" header-class="p-2 pl-4 w-5 max-w-5" class="p-2 pl-4 w-5 max-w-5">
+                    <template #body="{ data }">
+                      <div class="flex items-center justify-center">
+                        <Badge v-tooltip="{ value: getStatusTooltip(data.status) }" :style="{ background: getStatusColor(data.status) }" />
+                      </div>
+                    </template>
+                  </Column>
+                  <Column field="name" :header="$t('views.devices.name')" header-class="p-2" class="p-2 w-full min-w-[200px] max-w-0">
+                    <template #body="{ data }">
+                      <div :class="['font-bold text-color truncate', getRowClass(data)]">{{ data.name }}</div>
+                      <div :class="['text-xs text-muted truncate', getRowClass(data)]">
+                        {{ data.manufacturer || $t('views.devices.unknown') }} · {{ data.model || $t('views.devices.unknown') }}
+                      </div>
+                    </template>
+                  </Column>
+                  <Column field="address" :header="$t('views.devices.address')" header-class="p-2 whitespace-nowrap" class="p-2 whitespace-nowrap">
+                    <template #body="{ data }">
+                      <span v-if="data.address" :class="['text-xs text-muted whitespace-nowrap', getRowClass(data)]">{{ data.address }}</span>
+                    </template>
+                  </Column>
+                  <Column field="provider" :header="$t('views.devices.provider')" header-class="p-2 whitespace-nowrap" class="p-2 whitespace-nowrap">
+                    <template #body="{ data }">
+                      <Chip :label="data.provider" :class="['text-xs whitespace-nowrap', getRowClass(data)]" />
+                    </template>
+                  </Column>
+                  <Column header="" header-class="p-2 pr-4 w-12" class="p-2 pr-4 w-12">
+                    <template #body="{ data }">
+                      <div class="flex items-center justify-center">
+                        <Button
+                          v-if="!isDeviceHidden(data)"
+                          v-tooltip.left="{ value: $t('views.devices.hide') }"
+                          severity="secondary"
+                          text
+                          rounded
+                          class="cui-icon-md"
+                          @click="(e) => handleHideDevice(e, data)"
+                        >
+                          <template #icon>
+                            <EyeOffIcon width="100%" height="100%" class="text-muted" />
+                          </template>
+                        </Button>
+                        <Button
+                          v-else
+                          v-tooltip.left="{ value: $t('views.devices.unhide') }"
+                          text
+                          rounded
+                          class="cui-icon-md"
+                          @click="(e) => handleUnhideDevice(e, data)"
+                        >
+                          <template #icon>
+                            <EyeIcon width="100%" height="100%" class="text-muted" />
+                          </template>
+                        </Button>
+                      </div>
+                    </template>
+                  </Column>
+                </CuiDataTable>
+              </div>
+            </template>
+            <div v-else class="flex flex-col items-center justify-center py-6 gap-2">
+              <i-svg-spinners:ring-resize v-if="isScanning" width="24px" height="24px" class="text-muted" />
+              <i-mdi:radar v-else width="32px" height="32px" class="text-muted" />
+              <span class="text-muted text-sm">{{ isScanning ? $t('views.devices.scanning') : $t('views.devices.no_discovered') }}</span>
+            </div>
+            <div class="flex flex-wrap items-center gap-2 mt-4">
+              <div class="ml-auto"></div>
+              <Button
+                v-if="hiddenCount > 0"
+                severity="secondary"
+                class="cui-button-medium"
+                :label="showHidden ? $t('views.devices.hide_hidden') : `${$t('views.devices.show_hidden')} (${hiddenCount})`"
+                @click="handleToggleShowHidden"
+              />
+              <Button severity="secondary" class="cui-button-medium" :label="$t('views.devices.rescan')" :loading="isScanning" @click="handleRescan" />
             </div>
           </template>
-          <div v-else class="flex flex-col items-center justify-center py-6 gap-2">
-            <i-svg-spinners:ring-resize v-if="isScanning" width="24px" height="24px" class="text-muted" />
-            <i-mdi:radar v-else width="32px" height="32px" class="text-muted" />
-            <span class="text-muted text-sm">{{ isScanning ? $t('views.devices.scanning') : $t('views.devices.no_discovered') }}</span>
-          </div>
-          <div class="flex flex-wrap items-center gap-2 mt-4">
-            <div class="ml-auto"></div>
-            <Button
-              v-if="hiddenCount > 0"
-              severity="secondary"
-              class="cui-button-medium"
-              :label="showHidden ? $t('views.devices.hide_hidden') : `${$t('views.devices.show_hidden')} (${hiddenCount})`"
-              @click="handleToggleShowHidden"
-            />
-            <Button severity="secondary" class="cui-button-medium" :label="$t('views.devices.rescan')" :loading="isScanning" @click="handleRescan" />
-          </div>
-        </template>
-      </Card>
-    </div>
+        </Card>
+      </div>
+    </template>
 
     <CuiFloatingButton
       v-if="hasPermission(undefined, 'admin')"
@@ -192,6 +209,7 @@ const tablePtOptions: PassThrough<DataTablePassThroughOptions> = {
   },
 };
 
+const isAdmin = computed(() => hasPermission(undefined, 'admin'));
 const sortedDevices = computed(() => camerasSocket.sortedDevices.value);
 const addedDevices = computed(() => sortedDevices.value.filter((d) => d.type === 'camera'));
 const discoveredDevices = computed(() => sortedDevices.value.filter((d) => d.type === 'discovered'));
@@ -423,11 +441,11 @@ function getRowClass(device: DeviceListItem): string {
 }
 
 onMounted(() => {
-  camerasSocket.connect();
+  if (isAdmin.value) camerasSocket.connect();
 });
 
 onUnmounted(() => {
-  camerasSocket.unsubscribe();
+  if (isAdmin.value) camerasSocket.unsubscribe();
 });
 </script>
 
