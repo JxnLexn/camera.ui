@@ -135,10 +135,15 @@
         :dark-mode="xmdBreakpoint"
         :overlay-class="xmdBreakpoint ? 'timeline-overlay !z-0' : undefined"
         :locale-settings="timelineLocaleSettings"
-        :trim-mode="cameraCardRef?.trimMode"
+        :trim-mode="cameraCardRef?.trimMode || cameraCardRef?.deleteMode"
+        :trim-variant="cameraCardRef?.deleteMode ? 'delete' : 'export'"
         :ignore-bottom-safe-area="!xmdBreakpoint"
         :md-breakpoint="mdBreakpoint"
+        :zone-filter-active="gridSearchActive"
+        :zone-has-regions="gridSearchRegions.length > 0"
+        :zone-box-matcher="zoneBoxMatcher"
         @scrolling="onTimelineScroll"
+        @toggle-zone-filter="toggleZoneFilter"
       >
         <template #bottom-right>
           <div class="flex flex-col-reverse gap-2 items-center">
@@ -204,6 +209,20 @@
               </Button>
             </template>
 
+            <Button
+              v-if="cameraCardRef?.deleteMode"
+              v-tooltip.left="{ value: $t('components.player.delete_selection') }"
+              rounded
+              severity="danger"
+              :loading="rangeDeleting"
+              class="shadow-md pointer-events-auto w-12 h-12"
+              @click="confirmRangeDelete"
+            >
+              <template #icon>
+                <i-mdi:delete width="100%" height="100%" />
+              </template>
+            </Button>
+
             <template v-if="smBreakpoint || xmdBreakpoint">
               <Button
                 v-tooltip.left="{ value: $t('components.form.tooltip.zoom_in') }"
@@ -245,10 +264,11 @@ import { CamerasQuery } from '@/api/routes/cameras.js';
 import { asyncComponent } from '@/common/asyncComponent.js';
 import { extractErrorMessage } from '@/common/utils.js';
 import { GridSearchKey } from '@/components/CuiGridSearch/types.js';
+import { boxOverlapsRegions } from '@/components/CuiGridSearch/utils.js';
 
 import type CuiCameraPipCard from '@/components/CuiCameraPipCard/CuiCameraPipCard.vue';
 import type { CuiTimelineLocale, EventDescription } from '@camera.ui/nvr';
-import type { StreamingRole } from '@camera.ui/sdk';
+import type { BoundingBox, StreamingRole } from '@camera.ui/sdk';
 const CuiCameraRecordings = asyncComponent(() => import('@/components/CuiCameraRecordings/CuiCameraRecordings.vue'));
 const CuiCameraTable = asyncComponent(() => import('@/components/CuiCameraTable/CuiCameraTable.vue'));
 const CuiCameraShares = asyncComponent(() => import('@/components/CuiCameraShares/CuiCameraShares.vue'));
@@ -258,6 +278,7 @@ const camerasQuery = new CamerasQuery();
 
 const log = useLogger();
 const toast = useCuiToast();
+const dialog = useCuiDialog();
 const i18n = useI18n();
 const primevue = usePrimeVue();
 const route = useRoute();
@@ -286,6 +307,7 @@ const qualityRole = ref<StreamingRole>();
 const consumedStartTs = ref<number>();
 const trimTimelapse = ref(0); // index into TIMELAPSE_OPTIONS
 const trimExporting = ref(false);
+const rangeDeleting = ref(false);
 
 const cameraId = computed(() => camera.value?._id);
 
@@ -325,6 +347,15 @@ const trimDurationMs = computed(() => {
 const timelapseDisabled = computed(() => trimDurationMs.value < 60 * 60 * 1000);
 
 provide(GridSearchKey, { active: gridSearchActive, regions: gridSearchRegions });
+
+function zoneBoxMatcher(box: BoundingBox): boolean {
+  return boxOverlapsRegions(box, gridSearchRegions.value);
+}
+
+function toggleZoneFilter(): void {
+  gridSearchActive.value = !gridSearchActive.value;
+  if (!gridSearchActive.value) gridSearchRegions.value = [];
+}
 
 if (!isContentReady.value) {
   const stop = watch(
@@ -388,6 +419,50 @@ async function onTrimExport() {
     toast.add({ severity: 'error', summary: i18n.t('views.recordings.download_failed'), detail: extractErrorMessage(error), life: 5000 });
   } finally {
     trimExporting.value = false;
+  }
+}
+
+function confirmRangeDelete() {
+  const tl = cuiTimelineRef.value;
+  if (!tl?.trimStartMs || !tl?.trimEndMs || !cameraId.value) return;
+
+  dialog.openTextDialog({
+    data: {
+      title: i18n.t('components.dialog.title.confirm'),
+      contentText: i18n.t('components.player.delete_range_confirm'),
+      confirmText: i18n.t('components.form.button.remove'),
+      confirmButtonProps: {
+        severity: 'danger',
+      },
+    },
+    onConfirm: () => onRangeDelete(),
+  });
+}
+
+async function onRangeDelete() {
+  const tl = cuiTimelineRef.value;
+  if (!tl?.trimStartMs || !tl?.trimEndMs || !cameraId.value) return;
+
+  const nvrPlugin = nvrPluginRef.value as { nvrDeleteRange: (...args: any[]) => Promise<any> } | undefined;
+  if (!nvrPlugin?.nvrDeleteRange) return;
+
+  rangeDeleting.value = true;
+  try {
+    const result = await nvrPlugin.nvrDeleteRange(cameraId.value, tl.trimStartMs * 1000, tl.trimEndMs * 1000);
+    if (result?.endMs > result?.startMs) {
+      toast.add({ severity: 'success', detail: i18n.t('components.player.delete_range_done'), life: 4000 });
+      if (cameraCardRef.value) cameraCardRef.value.deleteMode = false;
+    } else if (tl.trimEndMs > Date.now() - 3 * 60_000) {
+      // the writer owns the trailing minutes, the plugin refuses to touch them
+      toast.add({ severity: 'info', detail: i18n.t('components.player.delete_range_too_recent'), life: 5000 });
+    } else {
+      toast.add({ severity: 'info', detail: i18n.t('components.player.delete_range_nothing'), life: 4000 });
+    }
+  } catch (error) {
+    log.error('Range delete failed:', error);
+    toast.add({ severity: 'error', detail: extractErrorMessage(error), life: 5000 });
+  } finally {
+    rangeDeleting.value = false;
   }
 }
 

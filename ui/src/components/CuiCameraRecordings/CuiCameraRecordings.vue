@@ -256,13 +256,12 @@ import { EVENT_TYPE_OTHER, EventHoverPreviewKey, getBestScore, useDetectionEvent
 import { DETECTION_ATTRIBUTES, DETECTION_LABELS } from '@camera.ui/sdk';
 
 import { GridSearchKey } from '@/components/CuiGridSearch/types.js';
+import { boxOverlapsRegions } from '@/components/CuiGridSearch/utils.js';
 import CuiRecordingsGrid from '@/components/CuiRecordings/CuiRecordingsGrid.vue';
 import { resolveEventIcons } from '@/utils/eventIcons.js';
 
 import type { RecordedEvent } from '@camera.ui/nvr';
-import type { GridRegion } from '@/components/CuiGridSearch/types.js';
 import type { GetEventsOptions } from '@camera.ui/nvr';
-import type { BoundingBox } from '@camera.ui/sdk';
 import type { CuiCameraRecordingsEmits, CuiCameraRecordingsProps } from './types.js';
 
 const props = withDefaults(defineProps<CuiCameraRecordingsProps>(), { compact: false });
@@ -278,9 +277,6 @@ if (typeof VideoDecoder !== 'undefined') {
   provide(EventHoverPreviewKey, hoverPreview);
   tryOnScopeDispose(() => hoverPreview.dispose());
 }
-
-const GRID_COLS = 10;
-const GRID_ROWS = 11;
 
 const { icons: DETECTION_ICONS, generic: GENERIC_ICON } = resolveEventIcons();
 
@@ -365,21 +361,6 @@ const displayEvents = computed(() => {
 
   return result;
 });
-
-function boxOverlapsRegions(box: BoundingBox, regions: GridRegion[]): boolean {
-  const cellW = 1 / GRID_COLS;
-  const cellH = 1 / GRID_ROWS;
-  const bCol1 = box.x / cellW;
-  const bCol2 = (box.x + box.width) / cellW;
-  const bRow1 = box.y / cellH;
-  const bRow2 = (box.y + box.height) / cellH;
-  for (const r of regions) {
-    if (bCol2 > r.col && bCol1 < r.col + r.w && bRow2 > r.row && bRow1 < r.row + r.h) {
-      return true;
-    }
-  }
-  return false;
-}
 
 function toggleGridSearch() {
   if (!gridSearch) return;

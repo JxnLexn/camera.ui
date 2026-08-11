@@ -418,6 +418,13 @@ defineExpose({
   isFullscreen: computed(() => activeCard.value?.isFullscreen ?? false),
   timelineState: computed(() => activeCard.value?.timelineState),
   trimMode: computed(() => activeCard.value?.trimMode),
+  // writable: the view exits delete mode after a confirmed range delete
+  deleteMode: computed({
+    get: () => activeCard.value?.deleteMode ?? false,
+    set: (value: boolean) => {
+      if (activeCard.value) activeCard.value.deleteMode = value;
+    },
+  }),
   timelineScroll,
   captureScreenshot,
 });

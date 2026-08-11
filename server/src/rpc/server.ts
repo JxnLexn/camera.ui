@@ -136,6 +136,7 @@ export class NATS {
                   'rpc.plugin.*.child.rpc.onRecordingState',
                   'rpc.plugin.*.child.rpc.onSystemEvent',
                   'rpc.plugin.*.child.rpc.onEventsDeleted',
+                  'rpc.plugin.*.child.rpc.onRecordingsDeleted',
                   'rpc.plugin.*.child.rpc.onDetectionEvent',
                   'rpc.plugin.*.child.rpc.nvrScrub',
                   'rpc.plugin.*.child.rpc.nvrPlayback',

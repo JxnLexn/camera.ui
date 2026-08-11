@@ -211,14 +211,13 @@ import { UsersQuery } from '@/api/routes/users.js';
 import CameraEventDialog from '@/components/CuiDialog/templates/CameraStreamEvent/CameraStreamEvent.vue';
 import ExportRecordings from '@/components/CuiDialog/templates/ExportRecordings/ExportRecordings.vue';
 import CuiMenu from '@/components/CuiMenu/CuiMenu.vue';
+import { boxOverlapsRegions } from '@/components/CuiGridSearch/utils.js';
 import RecordingsFilterSidebar from '@/components/CuiRecordings/RecordingsFilterSidebar.vue';
 
 import type { CameraStreamEventProps } from '@/components/CuiDialog/templates/CameraStreamEvent/types.js';
-import type { GridRegion } from '@/components/CuiGridSearch/types.js';
 import type { MenuItem } from '@/components/CuiMenu/types.js';
 import type { RecordingsFilterState } from '@/components/CuiRecordings/types.js';
 import type { GetEventsOptions, RecordedEpisode, RecordedEvent } from '@camera.ui/nvr';
-import type { BoundingBox } from '@camera.ui/sdk';
 import type { DBCamera } from '@shared/types';
 
 interface UngroupedItem {
@@ -259,8 +258,6 @@ const { data: camerasData } = camerasQuery.getCamerasQuery({ page: 1, pageSize: 
 const { data: currentUser } = usersQuery.getUserQuery(computed(() => authStore.user?.username ?? ''));
 
 const SIDEBAR_WIDTH = 288;
-const GRID_COLS = 10;
-const GRID_ROWS = 11;
 const TIME_RANGE_MS: Record<string, number> = {
   '1h': 60 * 60 * 1000,
   '1d': 24 * 60 * 60 * 1000,
@@ -511,22 +508,6 @@ function toggleSidebar() {
 
 function closeSidebar() {
   sidebarState.value = 'closed';
-}
-
-function boxOverlapsRegions(box: BoundingBox, regions: GridRegion[]): boolean {
-  if (regions.length === 0) return true;
-  const cellW = 1 / GRID_COLS;
-  const cellH = 1 / GRID_ROWS;
-  const bCol1 = box.x / cellW;
-  const bCol2 = (box.x + box.width) / cellW;
-  const bRow1 = box.y / cellH;
-  const bRow2 = (box.y + box.height) / cellH;
-  for (const r of regions) {
-    if (bCol2 > r.col && bCol1 < r.col + r.w && bRow2 > r.row && bRow1 < r.row + r.h) {
-      return true;
-    }
-  }
-  return false;
 }
 
 function buildUngroupedItems(events: RecordedEvent[]): UngroupedItem[] {
