@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.1.6]
+
+### Added
+
+- **The cameras page is there for every user.** Users get the camera list with a tap straight to each camera, on the phone as the fifth tab. Discovery, adding and camera settings stay with admins.
+
+### Changed
+
+- **Workers say when they need an update.** An outdated worker shows the same dot on the Workers entry that the server and plugins already use.
+
 ## [2.1.5]
 
 ### Added
