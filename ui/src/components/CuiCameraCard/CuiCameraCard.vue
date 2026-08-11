@@ -132,7 +132,7 @@
             @wheel="onContentWheel"
           >
             <div :data-zoomable-content="randomId" class="relative h-full min-w-0" :style="videoWrapperStyle">
-              <div class="absolute inset-0 z-3 pointer-events-none">
+              <div class="absolute inset-0 pointer-events-none" :class="showPtz || timelineState ? 'z-3' : 'z-7'">
                 <CuiShortcuts
                   v-if="!inStandby && !isDisabled && showShortcuts"
                   :camera-name
@@ -141,6 +141,23 @@
                   :interaction-locked="zoomValue > 1"
                 />
 
+                <Button
+                  v-if="shortcutsVisible && !shortcutsEditMode && showShortcuts && !gridSearchActive && !timelineState && !showPtz && !inStandby && !isDisabled"
+                  v-tooltip.bottom="{ value: t('components.player.edit_shortcuts') }"
+                  class="dark-mode pointer-events-auto absolute top-[10px] bg-black/20 hover:bg-black/40 active:bg-black/60"
+                  :class="backButton ? 'left-16' : 'left-4'"
+                  rounded
+                  text
+                  severity="contrast"
+                  @click="enterShortcutsEditMode"
+                >
+                  <template #icon>
+                    <i-lucide:pencil width="100%" height="100%" />
+                  </template>
+                </Button>
+              </div>
+
+              <div class="absolute inset-0 z-3 pointer-events-none">
                 <CuiBBoxPlayground v-if="boundingBoxOverlay && !inStandby && !nvrPlaybackVisible && !isDisabled" ref="detectionCanvasRef" :classes="bboxClasses" />
 
                 <CuiPolygon v-if="zoneState && !inStandby && !isDisabled" :camera-zones :camera-lines />
@@ -1219,21 +1236,6 @@ const streamMenuItems = computed<MenuItem[]>(() => {
   }
 
   items.push({
-    key: 'edit-shortcuts',
-    label: t('components.player.edit_shortcuts'),
-    toggle: true,
-    toggleState: shortcutsEditMode.value,
-    onClick: () => {
-      if (!shortcutsEditMode.value) {
-        shortcutsVisible.value = true;
-        shortcutsEditMode.value = true;
-      } else {
-        exitShortcutsEditMode();
-      }
-    },
-  });
-
-  items.push({
     key: 'heatmap',
     label: t('components.player.heatmap'),
     toggle: true,
@@ -1897,6 +1899,11 @@ function toggleFs() {
 function toggleShortcuts(visible?: boolean) {
   shortcutsVisible.value = visible !== undefined ? visible : !shortcutsVisible.value;
   if (!shortcutsVisible.value) shortcutsEditMode.value = false;
+}
+
+function enterShortcutsEditMode() {
+  shortcutsVisible.value = true;
+  shortcutsEditMode.value = true;
 }
 
 function exitShortcutsEditMode() {
