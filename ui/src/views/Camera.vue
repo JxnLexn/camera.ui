@@ -135,8 +135,10 @@
         :dark-mode="xmdBreakpoint"
         :overlay-class="xmdBreakpoint ? 'timeline-overlay !z-0' : undefined"
         :locale-settings="timelineLocaleSettings"
-        :trim-mode="cameraCardRef?.trimMode || cameraCardRef?.deleteMode"
-        :trim-variant="cameraCardRef?.deleteMode ? 'delete' : 'export'"
+        :trim-mode="exportMode || deleteMode"
+        :trim-variant="deleteMode ? 'delete' : 'export'"
+        :export-available="true"
+        :delete-available="isAdmin"
         :ignore-bottom-safe-area="!xmdBreakpoint"
         :md-breakpoint="mdBreakpoint"
         :zone-filter-active="gridSearchActive"
@@ -144,16 +146,18 @@
         :zone-box-matcher="zoneBoxMatcher"
         @scrolling="onTimelineScroll"
         @toggle-zone-filter="toggleZoneFilter"
+        @toggle-export-mode="toggleExportMode"
+        @toggle-delete-mode="toggleDeleteMode"
       >
         <template #bottom-right>
-          <div class="flex flex-col-reverse gap-2 items-center">
+          <div class="flex gap-2 items-center" :class="xmdBreakpoint ? 'flex-row-reverse' : 'flex-col-reverse'">
             <Button
-              v-if="smBreakpoint"
+              v-if="smBreakpoint && !exportMode && !deleteMode"
               v-tooltip.left="{ value: $t('components.player.intercom') }"
               rounded
               severity="primary"
               :disabled="cameraCardRef?.micButtonDisabled ?? true"
-              class="shadow-md pointer-events-auto w-12 h-12"
+              class="shadow-md pointer-events-auto w-[46px] h-[46px]"
               @click="cameraCardRef?.toggleMicrophone(undefined, true)"
             >
               <template #icon>
@@ -163,11 +167,11 @@
             </Button>
 
             <Button
-              v-if="smBreakpoint"
+              v-if="smBreakpoint && !exportMode && !deleteMode"
               v-tooltip.left="{ value: $t('components.player.more') }"
               rounded
               severity="secondary"
-              class="shadow-md pointer-events-auto w-12 h-12"
+              class="shadow-md pointer-events-auto w-[42px] h-[42px]"
               @click="showMobileSheet = true"
             >
               <template #icon>
@@ -175,7 +179,7 @@
               </template>
             </Button>
 
-            <template v-if="cameraCardRef?.trimMode">
+            <template v-if="exportMode">
               <Button
                 v-tooltip.left="{
                   value: timelapseDisabled
@@ -188,7 +192,8 @@
                 severity="secondary"
                 :disabled="timelapseDisabled"
                 :label="trimTimelapse > 0 ? TIMELAPSE_OPTIONS[trimTimelapse] : undefined"
-                class="shadow-md pointer-events-auto w-12 h-12 !text-xs !font-semibold"
+                class="shadow-md pointer-events-auto !text-xs !font-semibold"
+                :class="xmdBreakpoint ? 'cui-button-small' : 'w-[42px] h-[42px]'"
                 @click="cycleTrimTimelapse"
               >
                 <template v-if="trimTimelapse === 0" #icon>
@@ -200,7 +205,8 @@
                 rounded
                 severity="success"
                 :loading="trimExporting"
-                class="shadow-md pointer-events-auto w-12 h-12"
+                class="shadow-md pointer-events-auto"
+                :class="xmdBreakpoint ? 'cui-button-small' : 'w-[42px] h-[42px]'"
                 @click="onTrimExport"
               >
                 <template #icon>
@@ -210,12 +216,13 @@
             </template>
 
             <Button
-              v-if="cameraCardRef?.deleteMode"
+              v-if="deleteMode"
               v-tooltip.left="{ value: $t('components.player.delete_selection') }"
               rounded
               severity="danger"
               :loading="rangeDeleting"
-              class="shadow-md pointer-events-auto w-12 h-12"
+              class="shadow-md pointer-events-auto"
+              :class="xmdBreakpoint ? 'cui-button-small' : 'w-[42px] h-[42px]'"
               @click="confirmRangeDelete"
             >
               <template #icon>
@@ -229,7 +236,8 @@
                 rounded
                 severity="secondary"
                 :disabled="(cuiTimelineRef?.zoomLevel ?? 0) >= 8"
-                class="shadow-md pointer-events-auto w-12 h-12"
+                class="shadow-md pointer-events-auto"
+                :class="xmdBreakpoint ? 'cui-button-small' : 'w-[42px] h-[42px]'"
                 @click="cuiTimelineRef?.zoomIn()"
               >
                 <template #icon>
@@ -241,7 +249,8 @@
                 rounded
                 severity="secondary"
                 :disabled="(cuiTimelineRef?.zoomLevel ?? 0) <= 0"
-                class="shadow-md pointer-events-auto w-12 h-12"
+                class="shadow-md pointer-events-auto"
+                :class="xmdBreakpoint ? 'cui-button-small' : 'w-[42px] h-[42px]'"
                 @click="cuiTimelineRef?.zoomOut()"
               >
                 <template #icon>
@@ -308,6 +317,10 @@ const consumedStartTs = ref<number>();
 const trimTimelapse = ref(0); // index into TIMELAPSE_OPTIONS
 const trimExporting = ref(false);
 const rangeDeleting = ref(false);
+const exportMode = ref(false);
+const deleteMode = ref(false);
+
+const isAdmin = computed(() => hasPermission(undefined, 'admin'));
 
 const cameraId = computed(() => camera.value?._id);
 
@@ -451,7 +464,7 @@ async function onRangeDelete() {
     const result = await nvrPlugin.nvrDeleteRange(cameraId.value, tl.trimStartMs * 1000, tl.trimEndMs * 1000);
     if (result?.endMs > result?.startMs) {
       toast.add({ severity: 'success', detail: i18n.t('components.player.delete_range_done'), life: 4000 });
-      if (cameraCardRef.value) cameraCardRef.value.deleteMode = false;
+      deleteMode.value = false;
     } else if (tl.trimEndMs > Date.now() - 3 * 60_000) {
       // the writer owns the trailing minutes, the plugin refuses to touch them
       toast.add({ severity: 'info', detail: i18n.t('components.player.delete_range_too_recent'), life: 5000 });
@@ -465,6 +478,26 @@ async function onRangeDelete() {
     rangeDeleting.value = false;
   }
 }
+
+function toggleExportMode(): void {
+  exportMode.value = !exportMode.value;
+  if (exportMode.value) deleteMode.value = false;
+}
+
+function toggleDeleteMode(): void {
+  deleteMode.value = !deleteMode.value;
+  if (deleteMode.value) exportMode.value = false;
+}
+
+watch(
+  () => cameraCardRef.value?.timelineState,
+  (open) => {
+    if (open === false) {
+      exportMode.value = false;
+      deleteMode.value = false;
+    }
+  },
+);
 
 watch(
   startTs,
@@ -516,12 +549,9 @@ watch(
   },
 );
 
-watch(
-  () => cameraCardRef.value?.trimMode,
-  (active) => {
-    if (!active) trimTimelapse.value = 0;
-  },
-);
+watch(exportMode, (active) => {
+  if (!active) trimTimelapse.value = 0;
+});
 
 watch(timelapseDisabled, (disabled) => {
   if (disabled) trimTimelapse.value = 0;

@@ -922,8 +922,6 @@ const ptzState = ref(false);
 const timelineState = ref(false);
 const heatmapEnabled = ref(false);
 const zoneState = ref(false);
-const trimMode = ref(false);
-const deleteMode = ref(false);
 const hasActiveDetection = ref(false);
 const initialHover = ref(true);
 const muted = ref(true);
@@ -1234,32 +1232,6 @@ const streamMenuItems = computed<MenuItem[]>(() => {
       }
     },
   });
-
-  if (timelineState.value || !toolbarTimelineButton.value) {
-    items.push({
-      key: 'export',
-      label: t('components.player.export'),
-      toggle: true,
-      toggleState: trimMode.value,
-      onClick: () => {
-        trimMode.value = !trimMode.value;
-        if (trimMode.value) deleteMode.value = false;
-      },
-    });
-
-    if (hasPermission(undefined, 'admin')) {
-      items.push({
-        key: 'delete-range',
-        label: t('components.player.delete_range'),
-        toggle: true,
-        toggleState: deleteMode.value,
-        onClick: () => {
-          deleteMode.value = !deleteMode.value;
-          if (deleteMode.value) trimMode.value = false;
-        },
-      });
-    }
-  }
 
   items.push({
     key: 'heatmap',
@@ -1940,10 +1912,6 @@ function togglePtz() {
 
 function toggleTimeline() {
   timelineState.value = !timelineState.value;
-  if (!timelineState.value) {
-    trimMode.value = false;
-    deleteMode.value = false;
-  }
 }
 
 function toggleRewind() {
@@ -2293,8 +2261,6 @@ defineExpose({
   timelineState,
   timelineScroll,
   captureScreenshot,
-  trimMode,
-  deleteMode,
 });
 </script>
 

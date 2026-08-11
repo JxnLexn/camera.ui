@@ -1434,6 +1434,8 @@ export default {
     },
     timeline: {
       fine_scrubbing: 'Feinsteuerung',
+      filter: 'Filter',
+      pick_date: 'Datum wählen',
       filter_events: 'Ereignisse',
       filter_cameras: 'Kameras',
       filter_zone: 'Zone',

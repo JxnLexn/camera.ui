@@ -1420,6 +1420,8 @@ export default {
     },
     timeline: {
       fine_scrubbing: 'Fine Scrubbing',
+      filter: 'Filter',
+      pick_date: 'Choose date',
       filter_events: 'Events',
       filter_cameras: 'Cameras',
       filter_zone: 'Zone',
