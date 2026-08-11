@@ -4,11 +4,37 @@ All notable changes to this project will be documented in this file.
 
 ## [2.1.5]
 
+### Added
+
+- **The navigation is yours to arrange.** A pencil at the top of the sidebar starts edit mode: drag pages into another order or another group, hide single settings pages with the eye, done with the check. The settings pages can join the sidebar as their own group, and every group can be made collapsible, both in Appearance. The layout is saved with your account, so it follows you to every browser and device, and a reset brings back the default.
+
+- **The timeline filters by zone.** The filter menu in the camera view can now do what the recordings list below already did: mark areas on the camera picture, and the timeline and the detections tab only keep events with a detection in those areas.
+
+- **A stretch of recording can be deleted from the timeline.** Admins tap the red trash button next to the timeline filter, drag the red range and confirm: the footage and the events in it are gone for good. Deletion is per minute, the minute being written stays untouched, and open apps drop the deleted range live. Needs the camera-ui-nvr plugin update.
+
+- **Export and delete live on the timeline now.** Both sit as buttons next to the filter instead of hiding in the camera menu, on the phone too.
+
+- **An object timeout for smart-camera detection.** Cameras whose own AI acts as the object sensor sometimes report a detection but never the end. The camera's detection settings take a timeout now (default 15s) after which such a detection is considered over; an end report from the camera still closes it immediately. Frame-based detection ignores the setting.
+
+### Changed
+
+- **The sidebar is grouped by purpose.** The daily pages sit on top, a labeled Manage group holds cameras, sensors, faces, automations, plugins and instances, and a collapsible System group keeps the diagnostic pages. Settings split into Personal and System sections, the phone menu follows the same grouping, and logging out no longer needs the expanded sidebar.
+
+- **Editing shortcuts starts on the picture.** While shortcuts are shown, a pencil sits on the camera picture; tapping it starts moving and arranging them. The entry in the camera menu is gone.
+
 ### Fixed
+
+- **Episodes show for every user.** Accounts without admin rights got endless loading instead of episode cards; the episode mosaics, fine scrubbing in the player and the episode export were affected the same way.
+
+- **Shortcuts near the player controls can be used again.** A shortcut placed in the lower part of the picture was swallowed by the player controls: taps opened the controls instead, and while editing it could never be picked up. Shortcuts win now where they sit, the controls keep working everywhere else.
+
+- **Exporting from the horizontal timeline works.** The export mode could be turned on there but never showed the range handles or the export button, so exporting from the phone's landscape view silently went nowhere. Both are there now, with draggable handles like on the vertical timeline.
 
 - **Episode cards stay in place while scrolling.** Episodes older than the loaded events kept collecting at the end of the list, so scrolling the home moments or the recordings view showed the same episodes again and again. They now appear only once their place in the timeline is reached, and no longer pop up before the recordings have loaded.
 
 - **The episode timeline keeps every camera bar inside the strip.** A very short pass right at the end of an episode could stick out past the right edge of the timeline.
+
+- **Cameras using their own AI as the object sensor get their events back.** With a smart camera's detection (Reolink AI, ONVIF and similar) selected as the object sensor, 2.1.4 recorded only short motion events and no person or vehicle detections at all. Frame-based detection (Coral, OpenVino, ...) was not affected.
 
 ## [2.1.4]
 
