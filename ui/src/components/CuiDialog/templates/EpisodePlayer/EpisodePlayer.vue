@@ -64,7 +64,7 @@
     <div class="px-3 pt-3 pb-2">
       <div
         ref="stripRef"
-        class="relative h-[36px] rounded-lg bg-white/5 cursor-pointer select-none touch-none"
+        class="relative h-[36px] rounded-lg bg-white/5 cursor-pointer select-none touch-none overflow-hidden"
         @pointerdown="onStripPointerDown"
         @pointermove="onStripPointerMove"
         @pointerup="onStripPointerUp"
@@ -286,8 +286,9 @@ function isActiveBlock(block: StripBlock): boolean {
 function blockStyle(block: StripBlock): Record<string, string> {
   const left = ((block.startMs - rangeStartMs) / rangeMs) * 100;
   const width = ((block.endMs - block.startMs) / rangeMs) * 100;
-  // short spans stay a visible chip instead of a hairline
-  return { left: `calc(${left}% + 1px)`, width: `max(calc(${width}% - 2px), 14px)` };
+  // short spans stay a visible chip instead of a hairline; the chip minimum
+  // must not push a right-edge block out of the strip
+  return { left: `min(calc(${left}% + 1px), calc(100% - 15px))`, width: `max(calc(${width}% - 2px), 14px)` };
 }
 
 function boundLabel(tMs: number): string {
