@@ -8,11 +8,13 @@
 // biome-ignore lint: disable
 export {}
 declare global {
+  const ALL_NAV_GROUPS: typeof import('../composables/useNavLayout').ALL_NAV_GROUPS
   const DEFAULT_DRAWER_PROPS: typeof import('../composables/useCuiCameraDrawer').DEFAULT_DRAWER_PROPS
   const DEFAULT_PROCESS_LOAD: typeof import('../composables/sockets/useMetricsSocket').DEFAULT_PROCESS_LOAD
   const EffectScope: typeof import('vue').EffectScope
   const MAX_METRICS_DATA_POINTS: typeof import('../composables/sockets/useMetricsSocket').MAX_METRICS_DATA_POINTS
   const MAX_WORKERS_DATA_POINTS: typeof import('../composables/sockets/useWorkersSocket').MAX_WORKERS_DATA_POINTS
+  const NAV_GROUPS: typeof import('../composables/useNavLayout').NAV_GROUPS
   const acceptHMRUpdate: typeof import('pinia').acceptHMRUpdate
   const adoptUpdateIfPending: typeof import('../composables/useAppUpdate').adoptUpdateIfPending
   const asyncComputed: typeof import('@vueuse/core').asyncComputed
@@ -301,6 +303,7 @@ declare global {
   const useMousePressed: typeof import('@vueuse/core').useMousePressed
   const useMutation: typeof import('@tanstack/vue-query').useMutation
   const useMutationObserver: typeof import('@vueuse/core').useMutationObserver
+  const useNavLayout: typeof import('../composables/useNavLayout').useNavLayout
   const useNavigatorLanguage: typeof import('@vueuse/core').useNavigatorLanguage
   const useNetwork: typeof import('@vueuse/core').useNetwork
   const useNotificationsSocket: typeof import('../composables/sockets/useNotificationsSocket').useNotificationsSocket
@@ -467,6 +470,9 @@ declare global {
   export type { DownloadOptions } from '../composables/useFileDownload'
   import('../composables/useFileDownload')
   // @ts-ignore
+  export type { NavLayoutGroup, NavLayoutEntry } from '../composables/useNavLayout'
+  import('../composables/useNavLayout')
+  // @ts-ignore
   export type { AppPermissionState, AppPermissionName } from '../composables/usePermissions'
   import('../composables/usePermissions')
   // @ts-ignore
@@ -512,11 +518,13 @@ import { UnwrapRef } from 'vue'
 declare module 'vue' {
   interface GlobalComponents {}
   interface ComponentCustomProperties {
+    readonly ALL_NAV_GROUPS: UnwrapRef<typeof import('../composables/useNavLayout')['ALL_NAV_GROUPS']>
     readonly DEFAULT_DRAWER_PROPS: UnwrapRef<typeof import('../composables/useCuiCameraDrawer')['DEFAULT_DRAWER_PROPS']>
     readonly DEFAULT_PROCESS_LOAD: UnwrapRef<typeof import('../composables/sockets/useMetricsSocket')['DEFAULT_PROCESS_LOAD']>
     readonly EffectScope: UnwrapRef<typeof import('vue')['EffectScope']>
     readonly MAX_METRICS_DATA_POINTS: UnwrapRef<typeof import('../composables/sockets/useMetricsSocket')['MAX_METRICS_DATA_POINTS']>
     readonly MAX_WORKERS_DATA_POINTS: UnwrapRef<typeof import('../composables/sockets/useWorkersSocket')['MAX_WORKERS_DATA_POINTS']>
+    readonly NAV_GROUPS: UnwrapRef<typeof import('../composables/useNavLayout')['NAV_GROUPS']>
     readonly acceptHMRUpdate: UnwrapRef<typeof import('pinia')['acceptHMRUpdate']>
     readonly adoptUpdateIfPending: UnwrapRef<typeof import('../composables/useAppUpdate')['adoptUpdateIfPending']>
     readonly asyncComputed: UnwrapRef<typeof import('@vueuse/core')['asyncComputed']>
@@ -805,6 +813,7 @@ declare module 'vue' {
     readonly useMousePressed: UnwrapRef<typeof import('@vueuse/core')['useMousePressed']>
     readonly useMutation: UnwrapRef<typeof import('@tanstack/vue-query')['useMutation']>
     readonly useMutationObserver: UnwrapRef<typeof import('@vueuse/core')['useMutationObserver']>
+    readonly useNavLayout: UnwrapRef<typeof import('../composables/useNavLayout')['useNavLayout']>
     readonly useNavigatorLanguage: UnwrapRef<typeof import('@vueuse/core')['useNavigatorLanguage']>
     readonly useNetwork: UnwrapRef<typeof import('@vueuse/core')['useNetwork']>
     readonly useNotificationsSocket: UnwrapRef<typeof import('../composables/sockets/useNotificationsSocket')['useNotificationsSocket']>

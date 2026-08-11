@@ -8,25 +8,10 @@
       </RouterLink>
     </section>
 
-    <section class="px-4 mb-4">
-      <span class="card-title">{{ $t('views.menu.section_app') }}</span>
+    <section v-for="section in sections" :key="section.key" class="px-4 mb-4">
+      <span class="card-title">{{ $t(`navigation.group_${section.key}`) }}</span>
       <CuiList size="large" dividers>
-        <CuiListItem v-for="item in appItems" :key="item.to" :to="item.to">
-          <template #prepend>
-            <component :is="item.icon" class="w-5 h-5 text-muted" />
-          </template>
-          {{ item.label }}
-          <template #append>
-            <i-mdi:chevron-right class="w-5 h-5 text-muted" />
-          </template>
-        </CuiListItem>
-      </CuiList>
-    </section>
-
-    <section v-if="systemItems.length" class="px-4 mb-4">
-      <span class="card-title">{{ $t('views.menu.section_system') }}</span>
-      <CuiList size="large" dividers>
-        <CuiListItem v-for="item in systemItems" :key="item.to" :to="item.to">
+        <CuiListItem v-for="item in section.items" :key="item.to" :to="item.to">
           <template #prepend>
             <component :is="item.icon" class="w-5 h-5 text-muted" />
           </template>
@@ -41,6 +26,15 @@
     <section class="px-4 mb-4">
       <span class="card-title">{{ $t('views.menu.section_actions') }}</span>
       <CuiList size="large" dividers>
+        <CuiListItem v-for="item in settingsItems" :key="item.to" :to="item.to">
+          <template #prepend>
+            <component :is="item.icon" class="w-5 h-5 text-muted" />
+          </template>
+          {{ item.label }}
+          <template #append>
+            <i-mdi:chevron-right class="w-5 h-5 text-muted" />
+          </template>
+        </CuiListItem>
         <CuiListItem to="/about">
           <template #prepend>
             <i-mdi:information-outline class="w-5 h-5 text-muted" />
@@ -74,7 +68,10 @@
 </template>
 
 <script lang="ts" setup>
+import { bounceToCloudFrontend, isCapacitor } from '@/connection/index.js';
 import { routes } from '@/router/index.js';
+
+import type { RouteRecordRaw } from 'vue-router';
 
 interface MenuItemDef {
   to: string;
@@ -82,36 +79,27 @@ interface MenuItemDef {
   icon: any;
 }
 
-import { bounceToCloudFrontend, isCapacitor } from '@/connection/index.js';
-
 const { t } = useI18n();
+const { groups: navGroups } = useNavLayout();
 
 const authStore = useAuthStore();
 const { user } = storeToRefs(authStore);
 
-const appRouteNames = new Set(['Sensors', 'Faces', 'Plugins', 'Settings']);
+const sections = computed(() =>
+  NAV_GROUPS.map((key) => ({ key, items: toItems(navGroups.value[key].map((entry) => entry.route)) })).filter((section) => section.items.length > 0),
+);
 
-const menuRoutes = computed(() => routes.filter((r) => r.meta?.menu && r.meta.auth && hasPermission(r)));
+const settingsItems = computed<MenuItemDef[]>(() => toItems(routes.filter((r) => r.name === 'Settings' && hasPermission(r))));
 
-const appItems = computed<MenuItemDef[]>(() =>
-  menuRoutes.value
-    .filter((r) => appRouteNames.has(r.name as string))
+function toItems(routesList: RouteRecordRaw[]): MenuItemDef[] {
+  return routesList
+    .filter((r) => r.meta?.menu)
     .map((r) => ({
       to: r.path,
       label: t(`navigation.${(r.name as string).toLowerCase()}`),
       icon: r.meta!.menu!.icon.default,
-    })),
-);
-
-const systemItems = computed<MenuItemDef[]>(() =>
-  menuRoutes.value
-    .filter((r) => !appRouteNames.has(r.name as string))
-    .map((r) => ({
-      to: r.path,
-      label: t(`navigation.${(r.name as string).toLowerCase()}`),
-      icon: r.meta!.menu!.icon.default,
-    })),
-);
+    }));
+}
 
 function handleReload() {
   window.location.reload();

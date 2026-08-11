@@ -3,6 +3,7 @@ import type { CameraInputSettings } from '@camera.ui/sdk/internal';
 import type { Types } from '@eneris/push-receiver/dist/client.js';
 import type { NotificationSource } from '../../manager/types.js';
 import type { UserLanguage } from '../schemas/users.schema.js';
+import type { NavLayoutSettings } from '../types/index.js';
 
 export interface DBCamera extends BaseCamera {
   sources: CameraInputSettings[];
@@ -205,6 +206,7 @@ export interface DBHiddenDevice {
 
 export interface DBUserPreferences {
   language?: UserLanguage;
+  navLayout?: NavLayoutSettings | null;
   camview: {
     views: DBCamviewLayout[];
   };

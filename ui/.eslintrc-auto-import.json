@@ -1,5 +1,6 @@
 {
   "globals": {
+    "ALL_NAV_GROUPS": true,
     "App": true,
     "AppBus": true,
     "AppPermissionName": true,
@@ -49,6 +50,9 @@
     "MaybeRef": true,
     "MaybeRefOrGetter": true,
     "MetricsSocketState": true,
+    "NAV_GROUPS": true,
+    "NavLayoutEntry": true,
+    "NavLayoutGroup": true,
     "NotificationsSocketState": true,
     "PersistedUser": true,
     "PickOptions": true,
@@ -360,6 +364,7 @@
     "useMousePressed": true,
     "useMutation": true,
     "useMutationObserver": true,
+    "useNavLayout": true,
     "useNavigatorLanguage": true,
     "useNetwork": true,
     "useNotificationsSocket": true,

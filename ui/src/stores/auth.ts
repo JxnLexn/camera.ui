@@ -4,6 +4,7 @@ import { UsersQuery } from '@/api/routes/users.js';
 import { login as connectionLogin, verify2FA as connectionVerify2FA, isTwoFactorPending, logoutCurrent, useConnection } from '@/connection/index.js';
 import router, { resolveLandingPage } from '@/router/index.js';
 
+import type { NavLayoutSettings } from '@shared/types';
 import type { UserLanguage } from '@shared/types';
 import type { LoginCredentials, LoginUserData } from '@/connection/index.js';
 import type { PatchUserInput } from '@/schemas/users.schema.js';
@@ -15,6 +16,7 @@ export interface PersistedUser {
   role: string;
   firstLogin?: boolean;
   avatar?: string;
+  navLayout?: NavLayoutSettings | null;
 }
 
 export const useAuthStore = defineStore('auth', () => {
@@ -51,6 +53,7 @@ export const useAuthStore = defineStore('auth', () => {
       role: data.role,
       firstLogin: data.firstLogin,
       avatar: data.avatar,
+      navLayout: data.navLayout ?? null,
     };
 
     if (data.language) {

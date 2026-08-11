@@ -53,8 +53,9 @@ export class UsersService {
     return this.dbs.commit(this.dbs.usersDB, existing._id, (current) => {
       if (!current) return undefined;
 
-      mergeWith(current, userData, (source: any, target: any) => {
+      mergeWith(current, userData, (source: any, target: any, key: string | number | undefined) => {
         if (Array.isArray(source)) return target;
+        if (key === 'navLayout') return target;
       });
 
       return current;

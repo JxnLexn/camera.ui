@@ -84,6 +84,7 @@ export class AuthController {
         role: user.role,
         firstLogin: user.firstLogin,
         language: user.preferences.language ?? 'auto',
+        navLayout: user.preferences.navLayout ?? null,
       });
     } catch (error: any) {
       return reply.code(500).send({
@@ -699,6 +700,7 @@ export class AuthController {
       role: user.role,
       firstLogin: user.firstLogin,
       language: user.preferences.language ?? 'auto',
+      navLayout: user.preferences.navLayout ?? null,
       access_token: token.access_token,
       refresh_token: token.refresh_token,
       token_type: 'Bearer',

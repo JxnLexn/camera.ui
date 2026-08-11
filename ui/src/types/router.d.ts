@@ -39,12 +39,14 @@ interface RouteMetaNavigation {
 
 interface RouteMetaNavbar extends RouteMetaNavigation {
   position: 'top' | 'bottom';
-  group?: 'more';
+  group?: 'manage' | 'system';
 }
 
 interface RouteMetaBottombar extends RouteMetaNavigation {}
 
-interface RouteMetaSettingsBar extends RouteMetaNavigation {}
+interface RouteMetaSettingsBar extends RouteMetaNavigation {
+  group?: 'personal' | 'system';
+}
 
 interface RouteMetaProfileMenu extends RouteMetaNavigation {}
 

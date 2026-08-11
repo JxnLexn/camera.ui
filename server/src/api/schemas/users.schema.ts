@@ -117,11 +117,37 @@ export const userPreferencesRecordings = zod.object({
   ungrouped: zod.boolean(),
 });
 
+const navLayoutOrder = zod
+  .object({
+    main: zod.string().array(),
+    manage: zod.string().array(),
+    system: zod.string().array(),
+    settings: zod.string().array(),
+  })
+  .partial();
+
+const navLayoutCollapsible = zod
+  .object({
+    main: zod.boolean(),
+    manage: zod.boolean(),
+    system: zod.boolean(),
+    settings: zod.boolean(),
+  })
+  .partial();
+
+export const userPreferencesNavLayout = zod.object({
+  order: navLayoutOrder.optional(),
+  collapsible: navLayoutCollapsible.optional(),
+  settingsInNav: zod.boolean().optional(),
+  hidden: zod.string().array().optional(),
+});
+
 export const userPreferences = zod.object({
   language: userLanguageSchema.optional(),
   camview: userPreferencesCamview,
   cameras: zod.record(zod.string().trim(), userPreferencesCameras),
   recordings: userPreferencesRecordings.optional(),
+  navLayout: userPreferencesNavLayout.nullable().optional(),
 });
 
 export const passwordSchema = zod

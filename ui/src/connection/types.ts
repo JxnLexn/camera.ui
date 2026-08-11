@@ -1,4 +1,5 @@
 import type { Logger } from '@camera.ui/logger';
+import type { NavLayoutSettings } from '@shared/types';
 import type {
   ConnectionJournal,
   ConnectionPhase,
@@ -108,6 +109,7 @@ export interface LoginUserData {
   readonly firstLogin?: boolean;
   readonly avatar?: string;
   readonly language?: string;
+  readonly navLayout?: NavLayoutSettings | null;
   readonly [key: string]: unknown;
 }
 

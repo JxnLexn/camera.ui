@@ -121,6 +121,7 @@ export interface UserData {
   role: DBRoles;
   firstLogin: boolean;
   language: UserLanguage;
+  navLayout?: NavLayoutSettings | null;
   access_token: string;
   refresh_token: string;
   token_type: string;
@@ -664,6 +665,15 @@ export interface CamerasSettings {
   groupOrder?: Record<string, string[]>; // Per-room camera order for grouped view
   viewMode?: 'default' | 'grouped';
   dragDisabled: boolean;
+}
+
+export type NavGroup = 'main' | 'manage' | 'system';
+
+export interface NavLayoutSettings {
+  order?: Partial<Record<NavGroup | 'settings', string[]>>;
+  collapsible?: Partial<Record<NavGroup | 'settings', boolean>>;
+  settingsInNav?: boolean;
+  hidden?: string[];
 }
 
 export interface InterfaceSettinges {

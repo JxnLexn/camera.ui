@@ -839,6 +839,7 @@ export default {
     },
     form: {
       button: {
+        reset_defaults: 'Auf Standard zurücksetzen',
         add: 'Hinzufügen',
         add_source: 'Quelle hinzufügen',
         create_room: 'Neuen Raum erstellen',
@@ -902,6 +903,8 @@ export default {
         no_view_selected: 'Keine Ansicht ausgewählt',
       },
       hint: {
+        nav_settings_in_nav: 'Zeigt die Settings-Seiten als eigene Gruppe in der Seitenleiste.',
+        nav_group_collapsible: 'Die Gruppe {group} lässt sich in der Seitenleiste einklappen.',
         aspect_ratio: 'Zwingt das Seitenverhältnis der Kamera auf den gewählten Wert',
         aspect_ratio_custom: 'Eigenes Verhältnis ({ratio}:1) angewendet',
         aspect_ratio_invalid: 'Verhältnis als Breite:Höhe angeben, z.B. 16:9 oder 21:9',
@@ -1003,6 +1006,8 @@ export default {
         video_codec: 'Der erkannte Video Codec für diesen Stream',
       },
       label: {
+        nav_settings_in_nav: 'Settings-Seiten in der Navigation',
+        nav_group_collapsible: '{group} einklappbar',
         aspect_ratio: 'Seitenverhältnis',
         aspect_ratio_custom: 'Eigenes Verhältnis',
         audio_codec: 'Audio Codec',
@@ -1623,6 +1628,11 @@ export default {
     role_user: 'Benutzer',
   },
   navigation: {
+    group_settings: 'Einstellungen',
+    edit_nav: 'Navigation anpassen',
+    group_main: 'Start',
+    group_manage: 'Verwalten',
+    group_system: 'System',
     sensors: 'Sensoren',
     about: 'Über',
     account: 'Konto',
@@ -2023,8 +2033,6 @@ export default {
       reload: 'Neu laden',
       switch_server: 'Server wechseln',
       logout: 'Abmelden',
-      section_app: 'App',
-      section_system: 'System',
       section_actions: 'Aktionen',
     },
     app_lock: {
@@ -2237,6 +2245,7 @@ export default {
       create_backup_info:
         'Erstellen Sie ein Backup der aktuellen Konfiguration. Das Archiv enthält Ihr camera.ui Speicherverzeichnis, aber nicht Ihre Aufnahmen und deren Ereignisverlauf. Kopieren Sie den Aufnahmen-Ordner dafür selbst. Das Archiv können Sie später auf jeder Plattform wiederherstellen, auf der camera.ui läuft.',
       edit: 'Bearbeiten',
+      navigation: 'Navigation',
       debugging: 'Debugging',
       interface: 'Interface',
       invalid_domain: 'Ungültige Domain',
@@ -2358,6 +2367,8 @@ export default {
       title_go2rtc: 'Go2RTC',
       title_notifications: 'Benachrichtigungen',
       title_settings: 'Einstellungen',
+      section_personal: 'Persönlich',
+      section_system: 'System',
       notifications: {
         general: 'Allgemein',
         general_info:

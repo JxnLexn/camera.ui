@@ -74,7 +74,7 @@
             </TabPanel>
 
             <TabPanel :value="1">
-              <SettingsAppearance />
+              <SettingsAppearance compact />
             </TabPanel>
 
             <TabPanel :value="2">

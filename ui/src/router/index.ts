@@ -1,8 +1,6 @@
 import { sleep } from '@camera.ui/common/utils';
 import { startViewTransition } from 'vue-view-transitions';
 import CctvIcon from '~icons/bx/cctv';
-import SensorsIcon from '~icons/material-symbols/home-iot-device-outline';
-import SensorsIconActive from '~icons/material-symbols/home-iot-device';
 import InstancesIcon from '~icons/bx/server';
 import CctvIconActive from '~icons/bxs/cctv';
 import InstancesIconActive from '~icons/bxs/server';
@@ -20,6 +18,8 @@ import AutomationsIconActive from '~icons/material-symbols/automation';
 import AutomationsIcon from '~icons/material-symbols/automation-outline';
 import SettingsRemoteIconActive from '~icons/material-symbols/cloud';
 import SettingsRemoteIcon from '~icons/material-symbols/cloud-outline';
+import SensorsIconActive from '~icons/material-symbols/home-iot-device';
+import SensorsIcon from '~icons/material-symbols/home-iot-device-outline';
 import HomeIcon from '~icons/material-symbols/home-outline-rounded';
 import HomeIconActive from '~icons/material-symbols/home-rounded';
 import SettingsAccountIconActive from '~icons/mdi/account-circle';
@@ -193,7 +193,8 @@ export const routes: RouteRecordRaw[] = [
         showRouterLoading: true,
       },
       navbar: {
-        position: 'top',
+        position: 'bottom',
+        group: 'manage',
         icon: {
           default: CctvIcon,
           active: CctvIconActive,
@@ -228,7 +229,8 @@ export const routes: RouteRecordRaw[] = [
         showRouterLoading: true,
       },
       navbar: {
-        position: 'top',
+        position: 'bottom',
+        group: 'manage',
         icon: {
           default: SensorsIcon,
           active: SensorsIconActive,
@@ -386,7 +388,8 @@ export const routes: RouteRecordRaw[] = [
         },
       },
       navbar: {
-        position: 'top',
+        position: 'bottom',
+        group: 'manage',
         icon: {
           default: FacesIcon,
           active: FacesIcon,
@@ -415,7 +418,8 @@ export const routes: RouteRecordRaw[] = [
         showRouterLoading: true,
       },
       navbar: {
-        position: 'top',
+        position: 'bottom',
+        group: 'manage',
         icon: {
           default: PluginsIcon,
           active: PluginsIconActive,
@@ -493,7 +497,7 @@ export const routes: RouteRecordRaw[] = [
       },
       navbar: {
         position: 'bottom',
-        group: 'more',
+        group: 'system',
         icon: {
           default: AdminpanelIcon,
           active: AdminpanelIconActive,
@@ -528,7 +532,7 @@ export const routes: RouteRecordRaw[] = [
       },
       navbar: {
         position: 'bottom',
-        group: 'more',
+        group: 'system',
         icon: {
           default: ConfigIcon,
           active: ConfigIconActive,
@@ -564,7 +568,7 @@ export const routes: RouteRecordRaw[] = [
       },
       navbar: {
         position: 'bottom',
-        group: 'more',
+        group: 'system',
         icon: {
           default: LogsIcon,
           active: LogsIconActive,
@@ -600,7 +604,7 @@ export const routes: RouteRecordRaw[] = [
       },
       navbar: {
         position: 'bottom',
-        group: 'more',
+        group: 'system',
         icon: {
           default: ConsoleIcon,
           active: ConsoleIconActive,
@@ -637,7 +641,7 @@ export const routes: RouteRecordRaw[] = [
       },
       navbar: {
         position: 'bottom',
-        group: 'more',
+        group: 'system',
         icon: {
           default: TerminalIcon,
           active: TerminalIconActive,
@@ -673,7 +677,7 @@ export const routes: RouteRecordRaw[] = [
       },
       navbar: {
         position: 'bottom',
-        group: 'more',
+        group: 'manage',
         icon: {
           default: AutomationsIcon,
           active: AutomationsIconActive,
@@ -730,7 +734,7 @@ export const routes: RouteRecordRaw[] = [
       },
       navbar: {
         position: 'bottom',
-        group: 'more',
+        group: 'manage',
         icon: {
           default: InstancesIcon,
           active: InstancesIconActive,
@@ -766,7 +770,7 @@ export const routes: RouteRecordRaw[] = [
       },
       navbar: {
         position: 'bottom',
-        group: 'more',
+        group: 'manage',
         icon: {
           default: WorkersIcon,
           active: WorkersIconActive,
@@ -870,6 +874,7 @@ export const routes: RouteRecordRaw[] = [
             showRouterLoadingSub: true,
           },
           settingsBar: {
+            group: 'personal',
             icon: {
               default: SettingsAccountIcon,
               active: SettingsAccountIconActive,
@@ -895,6 +900,7 @@ export const routes: RouteRecordRaw[] = [
             showRouterLoadingSub: true,
           },
           settingsBar: {
+            group: 'personal',
             icon: {
               default: SettingsAppearanceIcon,
               active: SettingsAppearanceIconActive,
@@ -920,6 +926,7 @@ export const routes: RouteRecordRaw[] = [
             showRouterLoadingSub: true,
           },
           settingsBar: {
+            group: 'system',
             icon: {
               default: SettingsUsersIcon,
               active: SettingsUsersIconActive,
@@ -945,6 +952,7 @@ export const routes: RouteRecordRaw[] = [
             showRouterLoadingSub: true,
           },
           settingsBar: {
+            group: 'personal',
             icon: {
               default: SettingsNotificationsIcon,
               active: SettingsNotificationsIconActive,
@@ -970,6 +978,7 @@ export const routes: RouteRecordRaw[] = [
             showRouterLoadingSub: true,
           },
           settingsBar: {
+            group: 'personal',
             icon: {
               default: SettingsPermissionsIcon,
               active: SettingsPermissionsIconActive,
@@ -995,6 +1004,7 @@ export const routes: RouteRecordRaw[] = [
             showRouterLoadingSub: true,
           },
           settingsBar: {
+            group: 'system',
             icon: {
               default: RecordingsIcon,
               active: RecordingsIconActive,
@@ -1020,6 +1030,7 @@ export const routes: RouteRecordRaw[] = [
             showRouterLoadingSub: true,
           },
           settingsBar: {
+            group: 'system',
             icon: {
               default: SettingsRemoteIcon,
               active: SettingsRemoteIconActive,
@@ -1045,6 +1056,7 @@ export const routes: RouteRecordRaw[] = [
             showRouterLoadingSub: true,
           },
           settingsBar: {
+            group: 'system',
             icon: {
               default: SettingsMqttIcon,
               active: SettingsMqttIcon,
@@ -1070,6 +1082,7 @@ export const routes: RouteRecordRaw[] = [
             showRouterLoadingSub: true,
           },
           settingsBar: {
+            group: 'system',
             icon: {
               default: SettingsBackupIcon,
               active: SettingsBackupIconActive,
@@ -1095,6 +1108,7 @@ export const routes: RouteRecordRaw[] = [
             showRouterLoadingSub: true,
           },
           settingsBar: {
+            group: 'system',
             icon: {
               default: SettingsSystemIcon,
               active: SettingsSystemIconActive,

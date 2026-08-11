@@ -827,6 +827,7 @@ export default {
     },
     form: {
       button: {
+        reset_defaults: 'Reset to defaults',
         add: 'Add',
         add_source: 'Add source',
         create_room: 'Create new room',
@@ -890,6 +891,8 @@ export default {
         no_view_selected: 'No view selected',
       },
       hint: {
+        nav_settings_in_nav: 'Shows the settings pages as their own group in the sidebar.',
+        nav_group_collapsible: 'The {group} group can be collapsed in the sidebar.',
         aspect_ratio: 'Forces the camera aspect ratio to the selected value',
         aspect_ratio_custom: 'Custom ratio ({ratio}:1) applied',
         aspect_ratio_invalid: 'Use a width:height ratio, e.g. 16:9 or 21:9',
@@ -989,6 +992,8 @@ export default {
         video_codec: 'The video codec detected for this stream',
       },
       label: {
+        nav_settings_in_nav: 'Settings pages in the navigation',
+        nav_group_collapsible: '{group} collapsible',
         aspect_ratio: 'Aspect ratio',
         aspect_ratio_custom: 'Custom ratio',
         audio_codec: 'Audio codec',
@@ -1609,6 +1614,11 @@ export default {
     role_user: 'User',
   },
   navigation: {
+    group_settings: 'Settings',
+    edit_nav: 'Edit navigation',
+    group_main: 'Main',
+    group_manage: 'Manage',
+    group_system: 'System',
     about: 'About',
     sensors: 'Sensors',
     account: 'Account',
@@ -2007,8 +2017,6 @@ export default {
       reload: 'Reload',
       switch_server: 'Switch server',
       logout: 'Logout',
-      section_app: 'App',
-      section_system: 'System',
       section_actions: 'Actions',
     },
     app_lock: {
@@ -2220,6 +2228,7 @@ export default {
       create_backup_info:
         'Create a backup of the current configuration. The archive contains your camera.ui storage directory, but not your recordings and their event history. Copy the recordings folder yourself to keep those. You can restore this later on any platform where camera.ui is running.',
       edit: 'Edit',
+      navigation: 'Navigation',
       debugging: 'Debugging',
       interface: 'Interface',
       invalid_domain: 'Invalid domain',
@@ -2340,6 +2349,8 @@ export default {
       title_permissions: 'Permissions',
       title_recordings: 'Recordings',
       title_settings: 'Settings',
+      section_personal: 'Personal',
+      section_system: 'System',
       notifications: {
         general: 'General',
         general_info:

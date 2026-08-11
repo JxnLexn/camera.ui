@@ -8,19 +8,28 @@
       paddingBottom: `calc(env(safe-area-inset-top, 0px) + env(safe-area-inset-bottom, 0px) + ${bottombarHeight}px + ${topbarHeight}px)`,
     }"
   >
-    <CuiSubNavItem
-      v-for="route in navRoutes"
-      :key="route.name"
-      :icon="route.meta!.settingsBar!.icon!.default"
-      :active-icon="route.meta!.settingsBar!.icon!.active"
-      :to="route.path"
-      :label="$t(`navigation.${(route.meta?.name as string).toLowerCase()}`)"
-      :description="$t(`navigation_description.${route.meta?.description!}`)"
-      class="cui-list-item !m-0 !p-0 shrink-0"
-      :style="{
-        width: `${SUB_NAVBAR_SIZE.EXPANDED}px`,
-      }"
-    />
+    <template v-for="section in navSections" :key="section.key">
+      <span
+        class="shrink-0 pl-4 pt-4 pb-1 text-[11px] font-semibold uppercase tracking-widest text-muted"
+        :style="{
+          width: `${SUB_NAVBAR_SIZE.EXPANDED}px`,
+        }"
+        >{{ $t(`views.settings.section_${section.key}`) }}</span
+      >
+      <CuiSubNavItem
+        v-for="route in section.routes"
+        :key="route.name"
+        :icon="route.meta!.settingsBar!.icon!.default"
+        :active-icon="route.meta!.settingsBar!.icon!.active"
+        :to="route.path"
+        :label="$t(`navigation.${(route.meta?.name as string).toLowerCase()}`)"
+        :description="$t(`navigation_description.${route.meta?.description!}`)"
+        class="cui-list-item !m-0 !p-0 shrink-0"
+        :style="{
+          width: `${SUB_NAVBAR_SIZE.EXPANDED}px`,
+        }"
+      />
+    </template>
   </nav>
 </template>
 
@@ -55,6 +64,12 @@ const subnavbarWidth = computed(() => {
 });
 const navRoutes = computed<RouteRecordRaw[]>(() =>
   routes.find((route) => route.name === 'Settings')!.children!.filter((route) => route.meta?.settingsBar && hasPermission(route)),
+);
+
+const navSections = computed(() =>
+  (['personal', 'system'] as const)
+    .map((key) => ({ key, routes: navRoutes.value.filter((route) => (route.meta!.settingsBar!.group ?? 'personal') === key) }))
+    .filter((section) => section.routes.length > 0),
 );
 
 function closeNavbar() {
