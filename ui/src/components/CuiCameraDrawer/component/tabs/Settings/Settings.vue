@@ -418,6 +418,36 @@
           </Field>
 
           <Field
+            v-slot="{ errors }"
+            :model-value="cameraForm.detectionSettings.object.timeout ?? 30"
+            name="detectionSettings.object.timeout"
+            as="div"
+            class="flex flex-col field-gap"
+          >
+            <label for="detectionSettings.object.timeout" class="cui-label">{{ $t('components.form.label.object_timeout') }}</label>
+            <InputGroup>
+              <InputNumber
+                :model-value="cameraForm.detectionSettings.object.timeout ?? 30"
+                :invalid="errors.length > 0"
+                :loading="isLoading"
+                show-buttons
+                :min="10"
+                :use-grouping="false"
+                @value-change="(e) => (cameraForm.detectionSettings.object.timeout = e ?? undefined)"
+                @input="(e) => (cameraForm.detectionSettings.object.timeout = (e.value as any) ?? undefined)"
+              />
+            </InputGroup>
+
+            <Transition name="fade">
+              <ErrorMessage name="detectionSettings.object.timeout" class="cui-input-error" />
+            </Transition>
+
+            <Message v-if="!errors.length" severity="secondary" variant="simple" size="small" class="cui-input-hint">{{
+              $t('components.form.hint.object_timeout')
+            }}</Message>
+          </Field>
+
+          <Field
             v-slot="{ field, errors }"
             :model-value="cameraForm.detectionSettings.object.suppressStatic ?? true"
             :value="true"
