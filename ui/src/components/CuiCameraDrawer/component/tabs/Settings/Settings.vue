@@ -419,7 +419,7 @@
 
           <Field
             v-slot="{ errors }"
-            :model-value="cameraForm.detectionSettings.object.timeout ?? 30"
+            :model-value="cameraForm.detectionSettings.object.timeout ?? 15"
             name="detectionSettings.object.timeout"
             as="div"
             class="flex flex-col field-gap"
@@ -427,7 +427,7 @@
             <label for="detectionSettings.object.timeout" class="cui-label">{{ $t('components.form.label.object_timeout') }}</label>
             <InputGroup>
               <InputNumber
-                :model-value="cameraForm.detectionSettings.object.timeout ?? 30"
+                :model-value="cameraForm.detectionSettings.object.timeout ?? 15"
                 :invalid="errors.length > 0"
                 :loading="isLoading"
                 show-buttons

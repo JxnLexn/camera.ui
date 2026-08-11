@@ -799,7 +799,7 @@ export class DetectionCoordinator {
           // frame; an external report is an edge that must hold until the
           // camera reports the end (cleared below), capped by the object
           // timeout in case that end never arrives
-          const dwellSeconds = frameBased ? OBJECT_DWELL_SECONDS : Math.max(this.config.detectionSettings.object.timeout ?? 30, OBJECT_DWELL_SECONDS);
+          const dwellSeconds = frameBased ? OBJECT_DWELL_SECONDS : Math.max(this.config.detectionSettings.object.timeout ?? 15, OBJECT_DWELL_SECONDS);
           this.dwell.refresh(sensorId, dwellSeconds);
           // a confirmed object re-arms the cascade like motion does: a time-based
           // motion sensor (ONVIF cool-down) must not blind detection and split

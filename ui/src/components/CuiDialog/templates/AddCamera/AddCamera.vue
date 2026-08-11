@@ -84,7 +84,7 @@ async function onSave() {
       object: {
         confidence: 0.7,
         suppressStatic: true,
-        timeout: 30,
+        timeout: 15,
       },
       audio: {
         minDecibels: -40,
