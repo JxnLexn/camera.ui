@@ -4,6 +4,7 @@ import type { INpmPluginState } from '@shared/types';
 export interface ServerSocketState {
   serverUpdateAvailable: boolean;
   pluginUpdateAvailable: boolean;
+  workerUpdateAvailable: boolean;
   serverUpdate: INpmPluginState | null;
   pluginUpdates: INpmPluginState[];
 }
@@ -11,6 +12,7 @@ export interface ServerSocketState {
 const state = reactive<ServerSocketState>({
   serverUpdateAvailable: false,
   pluginUpdateAvailable: false,
+  workerUpdateAvailable: false,
   serverUpdate: null,
   pluginUpdates: [],
 });
@@ -21,11 +23,12 @@ let channel: SocketChannel | null = null;
 async function fetchUpdates(): Promise<void> {
   if (!channel?.ready.value) return;
   try {
-    const data = await channel.request<{ plugins: INpmPluginState[]; server: INpmPluginState }>('get-updates');
+    const data = await channel.request<{ plugins: INpmPluginState[]; server: INpmPluginState; workerUpdateAvailable?: boolean }>('get-updates');
     state.pluginUpdates = data.plugins;
     state.pluginUpdateAvailable = data.plugins.length > 0;
     state.serverUpdate = data.server;
     state.serverUpdateAvailable = data.server.updateAvailable || data.server.betaUpdateAvailable || false;
+    state.workerUpdateAvailable = data.workerUpdateAvailable ?? false;
   } catch {
     // server unreachable — reconnect path fetches again
   }
@@ -51,6 +54,10 @@ function ensureChannel(): SocketChannel {
       state.serverUpdateAvailable = server.updateAvailable || server.betaUpdateAvailable || false;
     });
 
+    ch.on<{ updateAvailable: boolean }>('worker-updates', (workers) => {
+      state.workerUpdateAvailable = workers.updateAvailable;
+    });
+
     ch.onReady(() => {
       fetchUpdates();
     });
@@ -72,6 +79,7 @@ export function useServerSocket() {
     isConnected: computed(() => channel?.connected.value ?? false),
     serverUpdateAvailable: computed(() => state.serverUpdateAvailable),
     pluginUpdateAvailable: computed(() => state.pluginUpdateAvailable),
+    workerUpdateAvailable: computed(() => state.workerUpdateAvailable),
     serverUpdate: computed(() => state.serverUpdate),
     pluginUpdates: computed(() => state.pluginUpdates),
     connect,
@@ -86,6 +94,7 @@ export function resetServerSocket(): void {
   channel = null;
   state.serverUpdateAvailable = false;
   state.pluginUpdateAvailable = false;
+  state.workerUpdateAvailable = false;
   state.serverUpdate = null;
   state.pluginUpdates = [];
 }

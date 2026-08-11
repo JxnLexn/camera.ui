@@ -12,6 +12,7 @@ import type { MqttManager } from '../../../mqtt/manager.js';
 import type { MqttStatus } from '../../../mqtt/types.js';
 import type { ProxyServer } from '../../../rpc/index.js';
 import type { AppUpdateAvailableMessage } from '../../../types.js';
+import type { WorkerManager } from '../../../workers/manager.js';
 import type { INpmPluginState } from '../../types/index.js';
 import type { SocketNsp } from '../types.js';
 
@@ -29,6 +30,8 @@ export class ServerNamespace {
   };
 
   private pluginUpdates: INpmPluginState[] = [];
+
+  private workerUpdateAvailable = false;
 
   private checkPluginUpdateInterval: NodeJS.Timeout | undefined;
   private checkServerUpdateInterval: NodeJS.Timeout | undefined;
@@ -56,14 +59,31 @@ export class ServerNamespace {
     }
   }
 
-  public getUpdates(_payload?: any, callback?: Function): { server?: INpmPluginState; plugins: INpmPluginState[] } {
+  public getUpdates(_payload?: any, callback?: Function): { server?: INpmPluginState; plugins: INpmPluginState[]; workerUpdateAvailable: boolean } {
+    this.refreshWorkerUpdateAvailable();
     const data = {
       server: this.serverUpdate,
       plugins: this.pluginUpdates,
+      workerUpdateAvailable: this.workerUpdateAvailable,
     };
 
     callback?.(data);
     return data;
+  }
+
+  public refreshWorkerUpdateAvailable(): void {
+    let available = false;
+    try {
+      const workerManager = container.resolve<WorkerManager>('workerManager');
+      available = workerManager.getWorkers().some((worker) => worker.online && worker.versionMismatch);
+    } catch {
+      // manager not constructed (worker mode)
+    }
+
+    if (available !== this.workerUpdateAvailable) {
+      this.workerUpdateAvailable = available;
+      this.nsp.emit('worker-updates', { updateAvailable: available });
+    }
   }
 
   public getMqttStatus(_payload?: any, callback?: Function): MqttStatus | undefined {

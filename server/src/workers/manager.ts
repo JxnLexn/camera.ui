@@ -13,6 +13,7 @@ import type { LogEntry, LoggerOptions } from '@camera.ui/common/logger';
 import type { Promisify } from '@camera.ui/rpc';
 import type { CameraUiAPI } from '../api.js';
 import type { SocketService } from '../api/websocket/index.js';
+import type { ServerNamespace } from '../api/websocket/nsp/server.js';
 import type { WorkersNamespace } from '../api/websocket/nsp/workers.js';
 import type { ProxyServer } from '../rpc/index.js';
 import type { LogManager } from '../services/logger/logManager.js';
@@ -610,6 +611,9 @@ export class WorkerManager {
       // Push to WorkersNamespace for history accumulation
       const workersNsp = socketService.namespaces.get('/workers') as WorkersNamespace | undefined;
       workersNsp?.handleWorkerUpdate(worker);
+
+      const serverNsp = socketService.namespaces.get('/server') as ServerNamespace | undefined;
+      serverNsp?.refreshWorkerUpdateAvailable();
     } catch {
       // SocketService may not be available yet during startup
     }

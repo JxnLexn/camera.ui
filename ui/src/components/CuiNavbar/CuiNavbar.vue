@@ -91,6 +91,7 @@
                   <div v-for="item in group.items" :key="item.name" class="w-full h-[50px] relative">
                     <Badge v-if="pluginUpdateAvailable && item.name === 'Plugins'" class="absolute min-w-[8px] w-[8px] h-[8px] left-[31px] top-[10px] z-1"></Badge>
                     <Badge v-if="serverUpdateAvailable && item.name === 'system'" class="absolute min-w-[8px] w-[8px] h-[8px] left-[31px] top-[10px] z-1"></Badge>
+                    <Badge v-if="workerUpdateAvailable && item.name === 'Workers'" class="absolute min-w-[8px] w-[8px] h-[8px] left-[31px] top-[10px] z-1"></Badge>
                     <CuiNavItem
                       :icon="item.icon"
                       :active-icon="item.activeIcon"
@@ -159,6 +160,7 @@
                   <div v-for="item in group.items" :key="item.name" class="w-full h-[50px] relative">
                     <Badge v-if="pluginUpdateAvailable && item.name === 'Plugins'" class="absolute min-w-[8px] w-[8px] h-[8px] left-[31px] top-[10px] z-1"></Badge>
                     <Badge v-if="serverUpdateAvailable && item.name === 'system'" class="absolute min-w-[8px] w-[8px] h-[8px] left-[31px] top-[10px] z-1"></Badge>
+                    <Badge v-if="workerUpdateAvailable && item.name === 'Workers'" class="absolute min-w-[8px] w-[8px] h-[8px] left-[31px] top-[10px] z-1"></Badge>
                     <CuiNavItem
                       :icon="item.icon"
                       :active-icon="item.activeIcon"
@@ -326,6 +328,7 @@ const navbarRef = useTemplateRef('navbarRef');
 const state = ref<NavbarState>('closed');
 const serverUpdateAvailable = ref(false);
 const pluginUpdateAvailable = ref(false);
+const workerUpdateAvailable = ref(false);
 const groupExpanded = ref<Record<NavLayoutGroup, boolean>>({ main: true, manage: true, system: false, settings: false });
 const navEditMode = ref(false);
 const editLists = ref<Record<NavLayoutGroup, string[]>>({ main: [], manage: [], system: [], settings: [] });
@@ -549,6 +552,10 @@ watch(
 
 watch(serverSocket.pluginUpdateAvailable, (val) => {
   pluginUpdateAvailable.value = val;
+});
+
+watch(serverSocket.workerUpdateAvailable, (val) => {
+  workerUpdateAvailable.value = val;
 });
 
 watch(
