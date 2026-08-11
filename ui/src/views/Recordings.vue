@@ -396,7 +396,15 @@ const episodeGridItems = computed<UngroupedItem[]>(() => {
   const f = filters.value;
   if (f.gridRegions.length > 0) return [];
   const scope = cameraIds.value.length > 0 ? cameraIds.value : allCameraIds.value;
-  const cutoff = f.timeRange && TIME_RANGE_MS[f.timeRange] ? Date.now() - TIME_RANGE_MS[f.timeRange] : 0;
+  let cutoff = f.timeRange && TIME_RANGE_MS[f.timeRange] ? Date.now() - TIME_RANGE_MS[f.timeRange] : 0;
+
+  if (hasMore.value) {
+    let oldest = Infinity;
+    for (const event of events.value) {
+      oldest = Math.min(oldest, event.thumbnailAt ?? event.startTime);
+    }
+    cutoff = Math.max(cutoff, oldest);
+  }
 
   const items: UngroupedItem[] = [];
   for (const episode of eventStore.getEpisodes()) {

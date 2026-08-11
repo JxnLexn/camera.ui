@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.1.5]
+
+### Fixed
+
+- **Episode cards stay in place while scrolling.** Episodes older than the loaded events kept collecting at the end of the list, so scrolling the home moments or the recordings view showed the same episodes again and again. They now appear only once their place in the timeline is reached, and no longer pop up before the recordings have loaded.
+
 ## [2.1.4]
 
 ### Added
