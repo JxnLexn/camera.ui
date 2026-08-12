@@ -8,15 +8,19 @@ All notable changes to this project will be documented in this file.
 
 - **Cameras can limit which object types get detected.** A new label picker in the camera's object detection settings drops unwanted types entirely, on the frame worker as well as for camera-reported objects. Empty means all.
 
-- **Alert zones: detect everywhere, get notified only where it matters.** The zone editor has a third tab: draw a zone, pick the object types it should alert on, and those types only push while they are inside it. Detection and recording stay untouched, so the road keeps landing on the timeline while only the driveway rings your phone. Needs the camera-ui-nvr plugin update.
+- **Alert zones: detect everywhere, get notified only where it matters.** The zone editor has a third tab: draw a zone and pick the object types it should alert on. As long as a camera has an alert zone, it only notifies for those types and only from inside the zone, so the road keeps landing on the timeline while only the driveway rings your phone. A type that should notify anywhere gets a zone over the whole image. Detection and recording stay untouched. Needs the camera-ui-nvr plugin update.
 
 - **Android pushes animate now.** With Video in Push on, the expanded notification cycles through frames of the clip, an episode push shows the camera switches of the whole story. Needs the Android app update.
 
 ### Changed
 
+- **The camera metrics fall back to an average instead of showing nothing.** In Metrics, Cameras a quiet minute left most columns at "-" or 0. When the last minute had nothing to measure, the value now comes from the whole run since the camera started, marked with a ~.
+
 - **A zone now only applies to the labels selected on it.** Labels you deselect pass that zone unfiltered instead of being blocked across the whole image. This fixes zones silently disabling other detections: an exclude zone no longer kills the remaining labels everywhere, package detection survives having zones, and camera-side motion sensors work again next to an object-only zone. To drop an object type completely, use the new label picker in the camera settings.
 
 ### Fixed
+
+- **The app notices when push notifications stopped reaching this phone.** After reinstalling the app the phone could go quiet without saying so, and it only came back if you happened to open the notification settings and tap Sync. The app now checks with the server itself, repairs it in the background where it can, and otherwise shows a note with a Fix button on any screen. The settings also stop asking for a re-sync when everything is fine. Needs the camera-ui-nvr plugin update.
 
 - **Updating the desktop app from inside the app works on Windows again.** The Update button in the system settings brought up the splash and then sat on "Starting…" forever, and the update only went through after closing and reopening camera.ui. It installs right away now.
 
