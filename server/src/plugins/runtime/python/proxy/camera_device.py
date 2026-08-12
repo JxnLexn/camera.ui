@@ -10,6 +10,7 @@ from deepdiff.diff import DeepDiff
 from _camera_ui_tools.camera_ui_common import Subscribed, TaskSet
 from _camera_ui_tools.camera_ui_rpc import CloseHandler, RPCClient
 from _camera_ui_tools.camera_ui_sdk import (
+    AlertZone,
     BehaviorSubject,
     Camera,
     CameraDetectionSettings,
@@ -262,6 +263,10 @@ class CameraDeviceProxy(Subscribed, CameraDeviceInterface):
     @property
     def detectionZones(self) -> list[DetectionZone]:
         return deepcopy(self._camera_subject.value["detectionZones"])
+
+    @property
+    def alertZones(self) -> list[AlertZone]:
+        return deepcopy(self._camera_subject.value.get("alertZones", []))
 
     @property
     def detectionLines(self) -> list[DetectionLine]:

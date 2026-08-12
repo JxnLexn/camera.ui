@@ -402,7 +402,7 @@
                 <label :for="`alert[${selectedZone}].match`" class="cui-label">{{ $t('components.zone_editor.alert_match') }}</label>
                 <InputGroup>
                   <Select
-                    :model-value="alertZones[selectedZone]?.match ?? 'anchor'"
+                    :model-value="alertZones[selectedZone]?.match ?? 'contain'"
                     :options="alertMatchOptions"
                     :loading="isLoading"
                     :disabled="selectedZone < 0"
@@ -736,7 +736,7 @@ import { cameraCreatePatchAlertZones, cameraCreatePatchLines, cameraCreatePatchZ
 import { NON_SPATIAL_LABELS, NON_TRACKED_LABELS } from './types.js';
 
 import type { DialogRefProps } from '@/composables/useCuiDialog.js';
-import type { AlertZone, DetectionLine, DetectionZone, LineDirection } from '@camera.ui/sdk';
+import type { AlertZone, DetectionLine, DetectionZone, LineDirection, Point } from '@camera.ui/sdk';
 import type { ComputedRef } from 'vue';
 import type { CoordsPosition, EditorPolygon, LabelGroup, ZoneEditorProps, ZoneEditorTab } from './types.js';
 
@@ -893,7 +893,7 @@ function updateCoordinatesFromZones() {
   }
 
   coords.value = polygons.value.flatMap((zone, zoneIndex) => {
-    return zone.points.map((point, pointIndex) => {
+    return zone.points.map((point: Point, pointIndex: number) => {
       return {
         // Index-based id keeps draggies stable when the user renames a zone.
         _id: `z${zoneIndex}-p${pointIndex}`,
