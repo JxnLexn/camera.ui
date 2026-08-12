@@ -12,6 +12,12 @@ All notable changes to this project will be documented in this file.
 
 - **Workers say when they need an update.** An outdated worker shows the same dot on the Workers entry that the server and plugins already use.
 
+- **One push instead of a push flood with Moments on.** A camera with AI Moments no longer stacks the detection alert, the name update, the picture update and the AI summary; the AI description itself is now the camera's push. The timing sits in the camera's GenAI tab: one push per moment (default), or one per event. If the AI does not answer in time, the normal detection push arrives instead. Doorbell and alarms stay instant, and cameras without Moments keep their pushes as before. Needs the camera-ui-nvr plugin update.
+
+### Fixed
+
+- **Silent push updates are truly silent now.** A push that replaces an earlier one, like a better picture or a recognized name, no longer wakes the iPhone screen or slides a banner over what you are doing. It updates the existing notification quietly.
+
 ## [2.1.5]
 
 ### Added
