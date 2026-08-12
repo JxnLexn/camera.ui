@@ -689,3 +689,25 @@
   --p-datatable-row-striped-background: var(--p-surface-50);
   --p-datatable-border-color: var(--p-content-border-color);
 }
+
+[data-mode='light'] .dark-mode .cui-topnavbar {
+  --topnavbar-background: #f8f8f8;
+  --topnavbar-border-color: #e5e7eb;
+  --cui-topnavbar-item-bg: transparent;
+  --cui-topnavbar-item-color: #64748b;
+  --cui-topnavbar-item-hover-bg: #eff2f6;
+  --cui-topnavbar-item-active-bg: #e2e8f0;
+  --cui-topnavbar-item-active-color: #334155;
+  --p-form-field-background: #f8fafc;
+  --p-form-field-border-color: #cbd5e1;
+  --p-form-field-hover-border-color: #94a3b8;
+  --p-form-field-color: #334155;
+  --p-form-field-placeholder-color: #64748b;
+  --p-form-field-icon-color: #94a3b8;
+  --p-inputtext-background: var(--p-form-field-background);
+  --p-inputtext-border-color: var(--p-form-field-border-color);
+  --p-inputtext-hover-border-color: var(--p-form-field-hover-border-color);
+  --p-inputtext-color: var(--p-form-field-color);
+  --p-inputtext-placeholder-color: var(--p-form-field-placeholder-color);
+  --p-iconfield-icon-color: var(--p-form-field-icon-color);
+}

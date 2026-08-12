@@ -254,7 +254,6 @@
     <CuiMenu
       ref="menuRef"
       :items
-      class="dark-mode"
       :popover="{
         pt: {
           content: {
@@ -267,7 +266,6 @@
     <CuiMenu
       ref="newViewMenuRef"
       :items="addViewItems"
-      class="dark-mode"
       :popover="{
         pt: {
           content: {

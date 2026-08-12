@@ -15,11 +15,11 @@
             <i-carbon:arrow-left class="text-sm" />
           </template>
         </CuiTopNavbarItem>
-        <IconField class="dark-mode w-full sm:hidden">
+        <IconField class="w-full sm:hidden">
           <InputIcon>
             <i-carbon:search class="text-sm" />
           </InputIcon>
-          <InputText ref="mobileSearchInput" v-model="searchQuery" :placeholder="t('components.form.placeholder.search')" class="dark-mode text-xs h-8 w-full" />
+          <InputText ref="mobileSearchInput" v-model="searchQuery" :placeholder="t('components.form.placeholder.search')" class="text-xs h-8 w-full" />
         </IconField>
       </template>
 
@@ -34,11 +34,11 @@
           </template>
         </CuiTopNavbarItem>
 
-        <IconField class="dark-mode hidden sm:flex">
+        <IconField class="hidden sm:flex">
           <InputIcon>
             <i-carbon:search class="text-sm" />
           </InputIcon>
-          <InputText v-model="searchQuery" :placeholder="t('components.form.placeholder.search')" class="dark-mode text-xs h-8 w-40" />
+          <InputText v-model="searchQuery" :placeholder="t('components.form.placeholder.search')" class="text-xs h-8 w-40" />
         </IconField>
       </template>
     </CuiTopNavbar>
@@ -134,7 +134,6 @@
       :items="sourceItems"
       dividers="sections"
       max-height="300px"
-      class="dark-mode"
       :popover="{
         pt: {
           content: {

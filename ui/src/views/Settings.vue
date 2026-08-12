@@ -79,7 +79,11 @@ const { mdBreakpoint, xlBreakpoint, smBreakpoint } = useSharedCuiBreakpoint();
 const loadingStore = useRouterStore();
 const { routerLoading } = storeToRefs(loadingStore);
 
-const uiRoutes = routes.find((route) => route.name === 'Settings')!.children!.filter((route) => hasPermission(route) && route.meta?.settingsBar);
+const uiRoutes = (['personal', 'system'] as const).flatMap((group) =>
+  routes
+    .find((route) => route.name === 'Settings')!
+    .children!.filter((route) => hasPermission(route) && route.meta?.settingsBar && (route.meta.settingsBar.group ?? 'personal') === group),
+);
 
 const subnavbarRef = useTemplateRef<InstanceType<typeof CuiSubNavbar>>('subnavbarRef');
 const containerRef = useTemplateRef('containerRef');

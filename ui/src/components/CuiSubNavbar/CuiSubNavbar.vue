@@ -139,4 +139,8 @@ defineExpose({
   border-right-style: solid;
   border-right-color: var(--border-color);
 }
+
+.cui-subnavbar span + .cui-list-item {
+  border-top: 1px solid var(--border-color);
+}
 </style>
