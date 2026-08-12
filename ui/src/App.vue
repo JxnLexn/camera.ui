@@ -84,6 +84,7 @@
 
     <CuiConnectionIndicator />
     <CuiUpdateIndicator />
+    <CuiPushSyncIndicator v-if="isCapacitor" />
     <CuiRestoreOverlay />
 
     <CuiAppLockOverlay />

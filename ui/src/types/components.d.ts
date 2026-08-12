@@ -174,6 +174,7 @@ declare module 'vue' {
     CuiPolygon: typeof import('./../components/CuiPolygon/CuiPolygon.vue')['default']
     CuiProfileMenu: typeof import('./../components/CuiProfileMenu/CuiProfileMenu.vue')['default']
     CuiPTZControl: typeof import('./../components/CuiPTZControl/CuiPTZControl.vue')['default']
+    CuiPushSyncIndicator: typeof import('./../components/CuiPushSyncIndicator/CuiPushSyncIndicator.vue')['default']
     CuiPythonIcon: typeof import('./../components/CuiIcons/CuiPythonIcon.vue')['default']
     CuiQRCode: typeof import('./../components/CuiQRCode/CuiQRCode.vue')['default']
     CuiRecordingsGrid: typeof import('./../components/CuiRecordings/CuiRecordingsGrid.vue')['default']

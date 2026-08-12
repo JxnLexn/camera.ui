@@ -255,7 +255,7 @@ const notificationsQuery = new NotificationsQuery();
 const { t, te } = useI18n();
 const toast = useCuiToast();
 const isAdmin = hasPermission(undefined, 'admin');
-const { registerForPush, forgetIfThisDevice, isServerSynced } = usePushRegistration();
+const { registerForPush, forgetIfThisDevice, getSyncState, restoreMarker } = usePushRegistration();
 const { isElectronApp, electron } = useElectron();
 const { states: permissionStates, refresh: refreshPermissions } = usePermissions();
 
@@ -379,7 +379,9 @@ async function onToggleEnabled(next: boolean) {
 
 async function refreshDeviceSync() {
   const serverId = getCurrentServerId();
-  deviceSynced.value = serverId ? await isServerSynced(serverId) : false;
+  const state = serverId ? await getSyncState(serverId, devices.value) : { status: 'unknown' as const };
+  deviceSynced.value = state.status === 'registered';
+  if (state.status === 'registered' && state.device && serverId) await restoreMarker(serverId, state.device.id);
 }
 
 async function refreshDesktopEnabled() {
@@ -456,8 +458,9 @@ function onToggleActive(deviceId: string, active: boolean) {
 
 watch(settings, syncDraft, { immediate: true });
 
+watch(devices, () => isCapacitor && refreshDeviceSync(), { immediate: true });
+
 onMounted(() => {
-  if (isCapacitor) refreshDeviceSync();
   if (isElectronApp) refreshDesktopEnabled();
   refreshPermissions();
 });

@@ -332,6 +332,7 @@ declare global {
   const usePrevious: typeof import('@vueuse/core').usePrevious
   const usePushHandler: typeof import('../composables/usePushHandler').usePushHandler
   const usePushRegistration: typeof import('../composables/usePushRegistration').usePushRegistration
+  const usePushSync: typeof import('../composables/usePushSync').usePushSync
   const useQuery: typeof import('@tanstack/vue-query').useQuery
   const useQueryClient: typeof import('@tanstack/vue-query').useQueryClient
   const useQueryEnhanced: typeof import('../composables/useQueryEnhanced').useQueryEnhanced
@@ -478,6 +479,9 @@ declare global {
   // @ts-ignore
   export type { PluginUpdateRun } from '../composables/usePluginUpdates'
   import('../composables/usePluginUpdates')
+  // @ts-ignore
+  export type { PushSyncStatus, PushSyncState } from '../composables/usePushRegistration'
+  import('../composables/usePushRegistration')
   // @ts-ignore
   export type { HiddenDevice, CamerasSocketState } from '../composables/sockets/useCamerasSocket'
   import('../composables/sockets/useCamerasSocket')
@@ -842,6 +846,7 @@ declare module 'vue' {
     readonly usePrevious: UnwrapRef<typeof import('@vueuse/core')['usePrevious']>
     readonly usePushHandler: UnwrapRef<typeof import('../composables/usePushHandler')['usePushHandler']>
     readonly usePushRegistration: UnwrapRef<typeof import('../composables/usePushRegistration')['usePushRegistration']>
+    readonly usePushSync: UnwrapRef<typeof import('../composables/usePushSync')['usePushSync']>
     readonly useQuery: UnwrapRef<typeof import('@tanstack/vue-query')['useQuery']>
     readonly useQueryClient: UnwrapRef<typeof import('@tanstack/vue-query')['useQueryClient']>
     readonly useQueryEnhanced: UnwrapRef<typeof import('../composables/useQueryEnhanced')['useQueryEnhanced']>

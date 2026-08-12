@@ -1424,6 +1424,11 @@ export default {
       audioDetection: 'Geräuscherkennung',
       ptz: 'PTZ',
     },
+    push_sync: {
+      title: 'Push-Nachrichten kommen nicht mehr an',
+      action: 'Beheben',
+      dismiss: 'Ausblenden',
+    },
     process_table: {
       empty: 'Keine Daten verfügbar',
       status_error: 'Fehler',

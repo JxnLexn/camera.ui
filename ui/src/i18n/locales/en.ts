@@ -1410,6 +1410,11 @@ export default {
       audioDetection: 'Audio Detection',
       ptz: 'PTZ',
     },
+    push_sync: {
+      title: 'Push notifications stopped working',
+      action: 'Fix',
+      dismiss: 'Dismiss',
+    },
     process_table: {
       empty: 'No data available',
       status_error: 'Error',

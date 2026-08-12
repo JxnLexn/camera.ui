@@ -2,6 +2,8 @@ import { registerNotifierDeviceFn } from '@/api/routes/notifications.js';
 import { getPushDeviceId } from '@/common/deviceId';
 import { getCurrentServerId, isCapacitor } from '@/connection/index.js';
 
+import type { NotifierDeviceWithSource } from '@shared/types';
+
 const log = useLogger('PushRegistration');
 
 const MOBILE_PLUGIN_NAME = '@camera.ui/camera-ui-nvr';
@@ -18,6 +20,13 @@ interface PushCryptoPlugin {
 }
 
 type PushRegistrations = Record<string, PerServerRegistration>;
+
+export type PushSyncStatus = 'unknown' | 'unregistered' | 'key-mismatch' | 'registered';
+
+export interface PushSyncState {
+  status: PushSyncStatus;
+  device?: NotifierDeviceWithSource;
+}
 
 const _registering = ref(false);
 
@@ -67,16 +76,42 @@ export function usePushRegistration() {
     await deletePushKey(serverId);
   };
 
-  const isServerSynced = async (serverId: string): Promise<boolean> => {
-    if (!serverId) return false;
-    return (await readRegistration(serverId)) !== null;
+  const getSyncState = async (serverId: string, devices: NotifierDeviceWithSource[] | undefined): Promise<PushSyncState> => {
+    if (!isCapacitor || !serverId || !devices) return { status: 'unknown' };
+
+    const deviceHash = await fingerprint(await getPushDeviceId());
+    if (!deviceHash) return { status: 'unknown' };
+
+    const mine = devices.find((device) => device.pluginName === MOBILE_PLUGIN_NAME && device.metadata?.deviceHash === deviceHash);
+    if (!mine) return { status: 'unregistered' };
+
+    const localKey = await getOrCreatePushKey(serverId);
+    const localKeyHash = localKey ? await fingerprint(localKey) : '';
+    if ((mine.metadata?.keyHash ?? '') !== localKeyHash) return { status: 'key-mismatch', device: mine };
+
+    return { status: 'registered', device: mine };
+  };
+
+  const restoreMarker = async (serverId: string, deviceId: string): Promise<void> => {
+    if (await readRegistration(serverId)) return;
+    await writeRegistration(serverId, { deviceId, enabledAt: Date.now() });
   };
 
   return {
     registerForPush,
     forgetIfThisDevice,
-    isServerSynced,
+    getSyncState,
+    restoreMarker,
   };
+}
+
+async function fingerprint(value: string): Promise<string> {
+  if (!value || !globalThis.crypto?.subtle) return '';
+  const digest = await globalThis.crypto.subtle.digest('SHA-256', new TextEncoder().encode(value));
+  return Array.from(new Uint8Array(digest))
+    .map((byte) => byte.toString(16).padStart(2, '0'))
+    .join('')
+    .slice(0, 16);
 }
 
 async function readRegistrations(): Promise<PushRegistrations> {
