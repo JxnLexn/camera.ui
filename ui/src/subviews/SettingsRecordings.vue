@@ -15,6 +15,10 @@
         <span>{{ $t('views.settings.recordings.disk_small_volume') }}</span>
       </div>
 
+      <Message v-if="oauthChecked && oauthState.status !== 'connected'" severity="warn" size="small">
+        {{ $t('views.settings.recordings.cloud_login_hint') }}
+      </Message>
+
       <div>
         <span class="card-title">{{ $t('views.settings.recordings.license_title') }}</span>
         <Card class="cui-card">
@@ -30,20 +34,21 @@
         </Card>
       </div>
 
-      <div>
+      <CuiSchema
+        v-if="pluginConfig"
+        :schema-form="{ schema: pluginConfig.schema, config: pluginConfig.config }"
+        :loading="storageLoading"
+        groups-as-cards
+        :group-descriptions="groupDescriptions"
+        @on-action="onAction"
+        @on-submit="onSubmit"
+        @on-form-submit="onFormSubmit"
+      />
+      <div v-else>
         <span class="card-title">{{ $t('views.settings.recordings.global_settings') }}</span>
         <Card class="cui-card">
           <template #content>
-            <CuiSchema
-              v-if="pluginConfig"
-              :schema-form="{ schema: pluginConfig.schema, config: pluginConfig.config }"
-              :loading="storageLoading"
-              save-button-color="success"
-              @on-action="onAction"
-              @on-submit="onSubmit"
-              @on-form-submit="onFormSubmit"
-            />
-            <div v-else-if="isLoading || storageLoading" class="flex items-center justify-center py-8">
+            <div v-if="isLoading || storageLoading" class="flex items-center justify-center py-8">
               <ProgressSpinner class="w-[30px] h-[30px] m-0" stroke-width="5" />
             </div>
             <div v-else class="text-sm text-muted text-center py-8">
@@ -68,8 +73,19 @@ const NVR_PLUGIN_NAME = '@camera.ui/camera-ui-nvr';
 const { t } = useI18n();
 const toast = useCuiToast();
 const { stats, isLoading, refresh: refreshStats } = useStorageStats();
-const { state: oauthState } = useOAuth(NVR_PLUGIN_NAME);
+const { state: oauthState, refresh: refreshOAuth } = useOAuth(NVR_PLUGIN_NAME);
 const { isConnected: pluginConnected, isLoading: storageLoading, config: pluginConfig, getConfig, setConfig, setValue, submitValue } = usePluginStorage(NVR_PLUGIN_NAME);
+
+const oauthChecked = ref(false);
+
+const groupDescriptions = computed<Record<string, string>>(() => ({
+  License: t('views.settings.recordings.group_info_license'),
+  Storage: t('views.settings.recordings.group_info_storage'),
+  'Face Recognition': t('views.settings.recordings.group_info_faces'),
+  GenAI: t('views.settings.recordings.group_info_genai'),
+  Moments: t('views.settings.recordings.group_info_moments'),
+  Episodes: t('views.settings.recordings.group_info_episodes'),
+}));
 
 const licenseStatus = computed(() => {
   switch (oauthState.value.status) {
@@ -128,6 +144,14 @@ watch(
   },
   { immediate: true },
 );
+
+onMounted(async () => {
+  try {
+    await refreshOAuth();
+  } finally {
+    oauthChecked.value = true;
+  }
+});
 </script>
 
 <style scoped></style>

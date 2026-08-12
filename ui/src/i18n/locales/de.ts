@@ -2544,6 +2544,20 @@ export default {
           'Warnung: Speicherplatz unter 8%. Alte Aufnahmen werden nur mit Aufbewahrungsmodus "Overwrite" und ohne Speicherlimit automatisch gelöscht. Andernfalls pausiert die Aufnahme, wenn der Platz ausgeht.',
         disk_small_volume: 'Das Speichervolumen ist klein. Aufnahmen werden häufig rotiert, um Platz freizuhalten.',
         global_settings: 'Einstellungen',
+        cloud_login_hint:
+          'Nicht bei der camera.ui Cloud angemeldet. Über den grauen Cloud-Button darunter melden Sie sich an und registrieren diesen NVR mit Ihrem Account.',
+        group_info_license:
+          'Ihr camera.ui Plan, die enthaltenen Aufnahme-Slots und welche Kameras gerade einen belegen. Die Werte kommen aus der Cloud und aktualisieren sich selbst.',
+        group_info_storage:
+          'Wo Aufnahmen gespeichert werden, wie viel Speicherplatz sie belegen dürfen und wie lange sie aufbewahrt werden. Wird der Platz knapp, entscheidet der Aufbewahrungsmodus, ob alte Aufnahmen überschrieben werden oder die Aufnahme pausiert.',
+        group_info_faces:
+          'Gesichtserkennung für bekannte Personen. Der Schwellwert bestimmt, wie streng ein Treffer sein muss, die Limits, wie viele Bilder fürs Training und wie viele Unbekannte behalten werden.',
+        group_info_genai:
+          'Der KI-Anbieter, der die Ereignisbeschreibungen schreibt. Funktioniert mit Cloud-Anbietern oder einem lokalen Modell, die Verbindung lässt sich direkt hier testen.',
+        group_info_moments:
+          'KI-Beschreibungen für die Momente eines Ereignisses. Sie ersetzen den einfachen Erkennungs-Push; die Verzögerung bestimmt, wie lange ein Ereignis ruhig bleiben muss, bevor die Zusammenfassung rausgeht.',
+        group_info_episodes:
+          'Fasst zusammengehörige Sichtungen mehrerer Kameras zu einer Episode mit einer Geschichte zusammen. Kameragruppen begrenzen, welche Kameras dazugehören dürfen, die Zeiteinstellungen bestimmen, wann eine Episode endet.',
         not_available: 'Nicht verfügbar',
         license_title: 'Lizenz & Cloud',
         license_description: 'Verbinden Sie diesen NVR mit der camera.ui Cloud für Lizenz- und Cloud-Funktionen.',

@@ -1,7 +1,57 @@
 <template>
   <div>
     <Form ref="formRef" :validation-schema="validationSchema" @submit="onFormSubmit">
-      <div v-if="groupTabs.length" class="flex flex-col gap-6">
+      <div v-if="groupTabs.length && groupsAsCards" class="flex flex-col gap-6">
+        <div v-for="group in groupTabs" :key="group">
+          <span class="card-title">{{ group }}</span>
+          <Card class="cui-card">
+            <template #content>
+              <div class="flex flex-col gap-6">
+                <span v-if="groupDescriptions?.[group]" class="text-sm">{{ groupDescriptions[group] }}</span>
+
+                <template v-for="schema in filteredSchemas(group)" :key="schema.key">
+                  <CuiSchemaField
+                    v-if="showField(schema)"
+                    v-show="!(schema as any).hidden"
+                    v-model="formValues"
+                    :schema-field="schema"
+                    :config-key="schema.key"
+                    :loading
+                    @on-action="onAction"
+                    @on-submit="onSubmit"
+                  />
+                </template>
+
+                <div v-if="showCardSaveButton(group)" class="flex flex-row items-end justify-end">
+                  <Button
+                    class="cui-button-medium"
+                    :severity="saveButtonColor"
+                    type="submit"
+                    :loading
+                    :disabled="disableButton"
+                    :label="saveButtonLabel || $t('components.form.button.save')"
+                  />
+                </div>
+              </div>
+            </template>
+          </Card>
+        </div>
+
+        <template v-for="schema in ungroupedSchemas" :key="schema.key">
+          <CuiSchemaField
+            v-if="showField(schema)"
+            v-show="!(schema as any).hidden"
+            v-model="formValues"
+            :schema-field="schema"
+            :config-key="schema.key"
+            :loading
+            @on-action="onAction"
+            @on-submit="onSubmit"
+          />
+        </template>
+      </div>
+
+      <div v-else-if="groupTabs.length" class="flex flex-col gap-6">
         <CuiChipGroup v-model="selectedGroup" mandatory>
           <CuiChip v-for="group in groupTabs" :key="group" size="small" :value="group">
             {{ group }}
@@ -60,7 +110,7 @@
       </div>
 
       <Button
-        v-if="(!isGroupReadonly && isGroupStorable && saveButton) || showButton"
+        v-if="!(groupsAsCards && groupTabs.length) && ((!isGroupReadonly && isGroupStorable && saveButton) || showButton)"
         fluid
         class="mt-7 cui-button-medium"
         :severity="saveButtonColor"
@@ -98,11 +148,12 @@ const props = withDefaults(defineProps<CuiSchemaProps>(), {
   loading: false,
   saveButton: true,
   showButton: false,
+  groupsAsCards: false,
 });
 
 const emit = defineEmits<CuiSchemaEmits>();
 
-const { schemaForm, loading, saveButton, saveButtonLabel, showButton, disableButton, saveButtonColor } = toRefs(props);
+const { schemaForm, loading, saveButton, saveButtonLabel, showButton, disableButton, saveButtonColor, groupsAsCards } = toRefs(props);
 
 const log = useLogger();
 
@@ -142,10 +193,16 @@ watch(
 );
 
 const isGroupReadonly = computed(() => {
+  if (groupsAsCards.value && groupTabs.value.length) {
+    return groupTabs.value.every((group) => schemaGroupIsReadonly(schemaForm.value.schema, group));
+  }
   return schemaGroupIsReadonly(schemaForm.value.schema, selectedGroup.value);
 });
 
 const isGroupStorable = computed(() => {
+  if (groupsAsCards.value && groupTabs.value.length) {
+    return groupTabs.value.some((group) => schemaGroupIsStorable(schemaForm.value.schema, group));
+  }
   return schemaGroupIsStorable(schemaForm.value.schema, selectedGroup.value);
 });
 
@@ -159,6 +216,10 @@ function filteredSchemas(group: string) {
   return schemaForm.value.schema.filter((schema) => {
     return (schema as any).group === group && !(schema as any).hidden;
   });
+}
+
+function showCardSaveButton(group: string): boolean {
+  return saveButton.value && schemaGroupIsStorable(schemaForm.value.schema, group) && !schemaGroupIsReadonly(schemaForm.value.schema, group);
 }
 
 function needsValidation(schema: JsonSchema): boolean {

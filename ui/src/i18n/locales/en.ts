@@ -2471,6 +2471,18 @@ export default {
           'Warning: Disk space is below 8%. Old recordings are deleted automatically only with retention mode "Overwrite" and no storage limit set. Otherwise recording pauses when space runs out.',
         disk_small_volume: 'Storage volume is small. Recordings will rotate frequently to keep space free.',
         global_settings: 'Settings',
+        cloud_login_hint: 'Not signed in to the camera.ui cloud. Tap the gray cloud button below to sign in and register this NVR with your account.',
+        group_info_license:
+          'Your camera.ui plan, the recording slots it includes and which cameras currently use one. The values come from the cloud and update on their own.',
+        group_info_storage:
+          'Where recordings are stored, how much disk space they may use and how long they are kept. When space runs low, the retention mode decides whether old footage is overwritten or recording pauses.',
+        group_info_faces:
+          'Face recognition for known people. The threshold decides how strict a match has to be, the limits control how many pictures are kept for training and how many unknown people are remembered.',
+        group_info_genai: 'The AI provider that writes event descriptions. Works with cloud providers or a local model, and the connection can be tested right here.',
+        group_info_moments:
+          'AI-written descriptions for the moments of an event. They replace the plain detection push; the delay decides how long an event has to stay calm before the summary goes out.',
+        group_info_episodes:
+          'Combines related sightings from several cameras into one episode with a single story. Camera groups limit which cameras may join, the timing settings shape when an episode closes.',
         license_title: 'License & Cloud',
         license_description: 'Connect this NVR to the camera.ui cloud for license and cloud features.',
         license_disconnected: 'Not connected',

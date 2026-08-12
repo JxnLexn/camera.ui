@@ -10,6 +10,8 @@ export interface CuiSchemaProps {
   saveButtonLabel?: string;
   saveButtonColor?: ButtonProps['severity'];
   showButton?: boolean;
+  groupsAsCards?: boolean;
+  groupDescriptions?: Record<string, string>;
 }
 
 export interface CuiSchemaEmits {
