@@ -93,6 +93,31 @@ export class NotificationsController {
     }
   }
 
+  public async historyVideo(req: FastifyRequest<AuthLoginRequest & { Params: { id: string } }>, reply: FastifyReply): Promise<FastifyReply> {
+    const path = this.service.getHistoryVideoPath(req.locals.user!._id, req.params.id);
+    if (!path) {
+      return reply.code(404).send({ statusCode: 404, message: 'No video for this notification' });
+    }
+    try {
+      const data = await readFile(path);
+      reply.header('accept-ranges', 'bytes').header('cache-control', 'private, max-age=31536000, immutable').type('video/mp4');
+
+      // Safari refuses to play <video> without range responses
+      const range = /^bytes=(\d*)-(\d*)$/.exec(req.headers.range ?? '');
+      if (range && (range[1] || range[2])) {
+        const start = range[1] ? Number(range[1]) : Math.max(0, data.length - Number(range[2]));
+        const end = range[1] && range[2] ? Math.min(Number(range[2]), data.length - 1) : data.length - 1;
+        if (start >= data.length || start > end) {
+          return reply.code(416).header('content-range', `bytes */${data.length}`).send();
+        }
+        return reply.code(206).header('content-range', `bytes ${start}-${end}/${data.length}`).send(data.subarray(start, end + 1));
+      }
+      return reply.code(200).send(data);
+    } catch {
+      return reply.code(404).send({ statusCode: 404, message: 'No video for this notification' });
+    }
+  }
+
   public async markSeen(req: FastifyRequest<AuthLoginRequest & { Params: { id: string } }>, reply: FastifyReply): Promise<FastifyReply> {
     try {
       await this.service.markSeen(req.locals.user!._id, req.params.id);

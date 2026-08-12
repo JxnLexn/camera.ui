@@ -422,6 +422,7 @@ export interface StoredNotification {
   severity?: Severity;
   tag?: string;
   imageUrl?: string;
+  videoUrl?: string;
   deepLink?: string;
   source: NotificationSource;
   data?: Record<string, unknown>;

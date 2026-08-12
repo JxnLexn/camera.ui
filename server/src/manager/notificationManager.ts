@@ -115,6 +115,11 @@ export class NotificationManager {
     return join(this.imagesDir, `${id}.img`);
   }
 
+  public getVideoPath(userId: string, id: string): string | null {
+    if (!this.historyFor(userId).some((n) => n.id === id)) return null;
+    return join(this.imagesDir, `${id}.vid`);
+  }
+
   public unreadCount(userId: string): number {
     return this.historyFor(userId).filter((n) => n.seenAt == null).length;
   }
@@ -459,6 +464,7 @@ export class NotificationManager {
       severity: n.severity,
       tag: n.tag,
       imageUrl: await this.persistImage(n.id, n.imageUrl),
+      videoUrl: await this.persistVideo(n.id, n.videoUrl),
       deepLink: n.deepLink,
       source: n.source,
       data: n.data,
@@ -509,12 +515,26 @@ export class NotificationManager {
     }
   }
 
+  private async persistVideo(id: string, videoUrl?: string): Promise<string | undefined> {
+    if (!videoUrl) return undefined;
+    const token = /\/api\/download\/([0-9a-f-]+)/i.exec(videoUrl)?.[1];
+    const filePath = token ? this.proxyServer.downloadManager.resolveLocalFile(token) : null;
+    if (!filePath) return undefined;
+    try {
+      await copyFile(filePath, join(this.imagesDir, `${id}.vid`));
+      return `/api/notifications/history/${id}/video`;
+    } catch {
+      return undefined;
+    }
+  }
+
   private async dropImages(ids: string[]): Promise<void> {
     if (ids.length === 0) return;
     const referenced = this.referencedIds();
     for (const id of ids) {
       if (referenced.has(id)) continue;
       await unlink(join(this.imagesDir, `${id}.img`)).catch(() => {});
+      await unlink(join(this.imagesDir, `${id}.vid`)).catch(() => {});
     }
   }
 
@@ -523,7 +543,7 @@ export class NotificationManager {
     if (files.length === 0) return;
     const referenced = this.referencedIds();
     for (const file of files) {
-      if (referenced.has(file.replace(/\.img$/, ''))) continue;
+      if (referenced.has(file.replace(/\.(img|vid)$/, ''))) continue;
       await unlink(join(this.imagesDir, file)).catch(() => {});
     }
   }

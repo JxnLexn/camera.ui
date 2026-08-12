@@ -58,6 +58,10 @@ export class NotificationsService {
     return this.proxyServer.notificationManager.getImagePath(userId, id);
   }
 
+  public getHistoryVideoPath(userId: string, id: string): string | null {
+    return this.proxyServer.notificationManager.getVideoPath(userId, id);
+  }
+
   public async clearHistory(userId: string): Promise<void> {
     await this.proxyServer.notificationManager.clearHistory(userId);
   }

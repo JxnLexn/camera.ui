@@ -331,14 +331,15 @@ function openDialog(notification: StoredNotification) {
   const detail = [notification.subtitle, notification.body].filter(Boolean).join('\n');
   const confirmText = !notification?.deepLink ? t('components.form.button.mark_as_read') : t('components.form.button.go_to_message');
   const src = failedImages.value[notification.id] ? undefined : imageSource(notification);
+  const videoSrc = notificationImageUrl(notification.videoUrl);
 
-  if (src) {
+  if (src || videoSrc) {
     dialog.openComponentDialog<NotificationDetailProps>(NotificationDetail, {
       data: {
         title: notification.title,
         confirmText,
         contentClickConfirms: !!notification.deepLink,
-        contentProps: { src, text: detail },
+        contentProps: { src, videoSrc, text: detail },
       },
       dialogSize: {
         desktop: { width: '480px', maxWidth: '90vw', maxHeight: '90vh' },

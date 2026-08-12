@@ -146,4 +146,16 @@ export const NotificationsRoute: FastifyPluginAsync = async (app: FastifyInstanc
       params: deviceParamsSchema,
     },
   });
+
+  app.withTypeProvider<ZodTypeProvider>().route({
+    url: '/history/:id/video',
+    method: 'GET',
+    preValidation: [validJWTNeeded],
+    handler: controller.historyVideo.bind(controller),
+    schema: {
+      tags: ['Notifications'],
+      summary: 'Get the stored clip of a notification',
+      params: deviceParamsSchema,
+    },
+  });
 };

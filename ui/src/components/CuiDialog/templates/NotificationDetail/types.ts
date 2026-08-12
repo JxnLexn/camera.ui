@@ -1,4 +1,5 @@
 export interface NotificationDetailProps {
-  src: string;
+  src?: string;
+  videoSrc?: string;
   text: string;
 }
