@@ -47,4 +47,17 @@ export interface FrameWorkerPerfSnapshot {
   objects: number;
   faces: number;
   plates: number;
+  lifetime: FrameWorkerPerfLifetime;
+}
+
+export interface FrameWorkerPerfLifetime {
+  loopMs: number;
+  ticks: number;
+  activeTicks: number;
+  mainFrames: number;
+  inferMs: number;
+  inferCount: number;
+  objects: number;
+  faces: number;
+  plates: number;
 }

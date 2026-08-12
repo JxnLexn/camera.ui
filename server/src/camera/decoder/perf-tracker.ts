@@ -1,7 +1,7 @@
 import { detectionRecord } from './debug/detection-record.js';
 
 import type { Logger } from '@camera.ui/common/logger';
-import type { FrameWorkerPerfSnapshot } from './types.js';
+import type { FrameWorkerPerfLifetime, FrameWorkerPerfSnapshot } from './types.js';
 
 const REPORT_MS = 60_000;
 
@@ -53,7 +53,7 @@ export class PerfTracker {
     this.snapshotBase = this.copyCounters();
     this.snapshotAt = now;
 
-    return { elapsedMs, ticks: delta.idleTicks + delta.activeTicks, ...delta };
+    return { elapsedMs, ticks: delta.idleTicks + delta.activeTicks, ...delta, lifetime: this.lifetime() };
   }
 
   public report(logger: Logger): void {
@@ -106,6 +106,20 @@ export class PerfTracker {
     this.cpu = process.cpuUsage();
     this.since = now;
     this.reportBase = this.copyCounters();
+  }
+
+  private lifetime(): FrameWorkerPerfLifetime {
+    return {
+      loopMs: this.loopMs,
+      ticks: this.idleTicks + this.activeTicks,
+      activeTicks: this.activeTicks,
+      mainFrames: this.mainFrames,
+      inferMs: this.inferMs,
+      inferCount: this.inferCount,
+      objects: this.objects,
+      faces: this.faces,
+      plates: this.plates,
+    };
   }
 
   private copyCounters(): PerfCounters {

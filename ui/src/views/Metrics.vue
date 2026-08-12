@@ -52,6 +52,7 @@
         <TabPanel value="cameras">
           <div>
             <span class="card-title">{{ $t('views.metrics.cameras') }}</span>
+            <span class="block text-sm text-muted mb-3">{{ $t('views.metrics.cameras_hint') }}</span>
             <CuiChartTable
               :items="frameworkerItems"
               :headers="headers('frameworker')"
@@ -396,44 +397,69 @@ const headers = computed<(type: 'system' | 'core' | 'frameworker' | 'plugins') =
 
 const perfHeaders = computed<TableHeader[]>(() => {
   const columnProps = { headerClass: 'min-w-24', class: 'min-w-24' };
-  // detection comes from the camera itself, frames only run ad hoc: zeros would read as broken
+  // a quiet minute measures nothing, the whole run still does: fall back to it
+  // and mark the value, so a live number is never confused with an average
+  const asAverage = (value: string) => `~${value}`;
   const externalIdle = (item: ProcessInfo) => Boolean(item.perf && !item.perf.frameAnalysis && item.perf.lowFps === 0);
-  const externalTooltip = (item: ProcessInfo) => (externalIdle(item) ? t('views.metrics.info_external') : undefined);
+  const idleTooltip = (item: ProcessInfo, average: number) => {
+    if (average > 0) {
+      const minutes = item.perf?.average.minutes ?? 0;
+      return minutes >= 1 ? `${t('views.metrics.info_average')} (${minutes} min)` : t('views.metrics.info_average');
+    }
+    return externalIdle(item) ? t('views.metrics.info_external') : undefined;
+  };
 
   return [
     {
       type: 'category',
-      field: (item: ProcessInfo) => (item.perf && !externalIdle(item) ? item.perf.lowFps.toFixed(1) : '-'),
+      field(item: ProcessInfo) {
+        if (!item.perf) return '-';
+        if (item.perf.lowFps > 0) return item.perf.lowFps.toFixed(1);
+        return item.perf.average.lowFps > 0 ? asAverage(item.perf.average.lowFps.toFixed(1)) : '-';
+      },
       name: t('views.metrics.col_fps_low'),
       headerTooltip: t('views.metrics.info_fps_low'),
       columnProps,
-      tooltip: externalTooltip,
+      tooltip: (item: ProcessInfo) => (item.perf && item.perf.lowFps === 0 ? idleTooltip(item, item.perf.average.lowFps) : undefined),
     },
     {
       type: 'category',
-      field: (item: ProcessInfo) => (item.perf?.mainStreamEnabled && item.perf.activePercent > 0 ? item.perf.mainFps.toFixed(1) : '-'),
+      field(item: ProcessInfo) {
+        if (!item.perf?.mainStreamEnabled) return '-';
+        if (item.perf.activePercent > 0 && item.perf.mainFps > 0) return item.perf.mainFps.toFixed(1);
+        return item.perf.average.mainFps > 0 ? asAverage(item.perf.average.mainFps.toFixed(1)) : '-';
+      },
       name: t('views.metrics.col_fps_main'),
       headerTooltip: t('views.metrics.info_fps_main'),
       columnProps,
-      tooltip: externalTooltip,
+      tooltip: (item: ProcessInfo) => (item.perf?.mainStreamEnabled && item.perf.activePercent === 0 ? idleTooltip(item, item.perf.average.mainFps) : undefined),
     },
     {
       type: 'category',
-      field: (item: ProcessInfo) => (item.perf && !externalIdle(item) ? `${item.perf.activePercent}%` : '-'),
+      field(item: ProcessInfo) {
+        if (!item.perf) return '-';
+        if (item.perf.activePercent > 0) return `${item.perf.activePercent}%`;
+        if (item.perf.average.activePercent > 0) return asAverage(`${item.perf.average.activePercent}%`);
+        return externalIdle(item) ? '-' : '0%';
+      },
       name: t('views.metrics.col_active'),
       headerTooltip: t('views.metrics.info_active'),
       columnProps,
-      tooltip: externalTooltip,
+      tooltip: (item: ProcessInfo) => (item.perf && item.perf.activePercent === 0 ? idleTooltip(item, item.perf.average.activePercent) : undefined),
     },
     {
       type: 'category',
-      field: (item: ProcessInfo) => (item.perf && item.perf.inferMs > 0 ? `${item.perf.inferMs} ms` : '-'),
+      field(item: ProcessInfo) {
+        if (!item.perf) return '-';
+        if (item.perf.inferMs > 0) return `${item.perf.inferMs} ms`;
+        return item.perf.average.inferMs > 0 ? asAverage(`${item.perf.average.inferMs} ms`) : '-';
+      },
       name: t('views.metrics.col_inference'),
       headerTooltip: t('views.metrics.info_inference'),
       columnProps,
       tooltip(item: ProcessInfo) {
         if (!item.perf) return undefined;
-        if (externalIdle(item) && item.perf.inferMs === 0) return t('views.metrics.info_external');
+        if (item.perf.inferMs === 0) return idleTooltip(item, item.perf.average.inferMs);
         return [
           `${t('views.metrics.tip_decode')}: ${item.perf.decodeMs} ms`,
           `${t('views.metrics.tip_scale')}: ${item.perf.scaleMs} ms`,
@@ -447,14 +473,17 @@ const perfHeaders = computed<TableHeader[]>(() => {
       field(item: ProcessInfo) {
         if (!item.perf) return '-';
         const found = item.perf.objects + item.perf.faces + item.perf.plates;
-        return externalIdle(item) && found === 0 ? '-' : String(found);
+        if (found > 0) return String(found);
+        if (item.perf.average.detectionsPerMinute > 0) return asAverage(item.perf.average.detectionsPerMinute.toFixed(1));
+        return externalIdle(item) ? '-' : '0';
       },
       name: t('views.metrics.col_detections'),
       headerTooltip: t('views.metrics.info_detections'),
       columnProps,
       tooltip(item: ProcessInfo) {
         if (!item.perf) return undefined;
-        if (externalIdle(item) && item.perf.objects + item.perf.faces + item.perf.plates === 0) return t('views.metrics.info_external');
+        const found = item.perf.objects + item.perf.faces + item.perf.plates;
+        if (found === 0) return idleTooltip(item, item.perf.average.detectionsPerMinute);
         return [
           `${t('views.metrics.tip_objects')}: ${item.perf.objects}`,
           `${t('views.metrics.tip_faces')}: ${item.perf.faces}`,

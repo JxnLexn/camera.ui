@@ -26,6 +26,16 @@ export interface WorkerPerfStats {
   faces: number;
   plates: number;
   switches: number;
+  average: WorkerPerfAverages;
+}
+
+export interface WorkerPerfAverages {
+  lowFps: number;
+  mainFps: number;
+  activePercent: number;
+  inferMs: number;
+  detectionsPerMinute: number;
+  minutes: number;
 }
 
 export interface ProcessInfo {

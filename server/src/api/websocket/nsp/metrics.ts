@@ -5,11 +5,11 @@ import { container } from 'tsyringe';
 import type { Namespace, Server, Socket } from 'socket.io';
 import type { Systeminformation } from 'systeminformation';
 import type { CameraUiAPI } from '../../../api.js';
-import type { FrameWorkerPerfSnapshot } from '../../../camera/decoder/types.js';
+import type { FrameWorkerPerfLifetime, FrameWorkerPerfSnapshot } from '../../../camera/decoder/types.js';
 import type { Go2Rtc } from '../../../go2rtc/index.js';
 import type { PluginManager } from '../../../plugins/index.js';
 import type { NATS } from '../../../rpc/server.js';
-import type { AllProcesses, ProcessInfo, ProcessType, ServerProcesses, SocketNsp, WorkerPerfStats, WorkerProcesses } from '../types.js';
+import type { AllProcesses, ProcessInfo, ProcessType, ServerProcesses, SocketNsp, WorkerPerfAverages, WorkerPerfStats, WorkerProcesses } from '../types.js';
 
 export class MetricsNamespace {
   public nsp: Namespace;
@@ -129,6 +129,7 @@ export class MetricsNamespace {
     const activeSeconds = snapshot.ticks > 0 ? seconds * (snapshot.activeTicks / snapshot.ticks) : 0;
 
     return {
+      average: this.derivePerfAverages(snapshot.lifetime),
       lowFps: perSecond(snapshot.ticks),
       mainFps: activeSeconds > 0 ? Math.round((snapshot.mainFrames / activeSeconds) * 10) / 10 : 0,
       mainStreamEnabled: snapshot.mainStreamEnabled,
@@ -143,6 +144,22 @@ export class MetricsNamespace {
       faces: snapshot.faces,
       plates: snapshot.plates,
       switches: snapshot.switches,
+    };
+  }
+
+  private derivePerfAverages(lifetime: FrameWorkerPerfLifetime): WorkerPerfAverages {
+    const round = (value: number) => Math.round(value * 10) / 10;
+    const loopSeconds = lifetime.loopMs / 1000;
+    const activeSeconds = lifetime.ticks > 0 ? loopSeconds * (lifetime.activeTicks / lifetime.ticks) : 0;
+    const detections = lifetime.objects + lifetime.faces + lifetime.plates;
+
+    return {
+      lowFps: loopSeconds > 0 ? round(lifetime.ticks / loopSeconds) : 0,
+      mainFps: activeSeconds > 0 ? round(lifetime.mainFrames / activeSeconds) : 0,
+      activePercent: lifetime.ticks > 0 ? Math.round((lifetime.activeTicks / lifetime.ticks) * 100) : 0,
+      inferMs: lifetime.inferCount > 0 ? round(lifetime.inferMs / lifetime.inferCount) : 0,
+      detectionsPerMinute: loopSeconds > 0 ? round(detections / (loopSeconds / 60)) : 0,
+      minutes: Math.round(loopSeconds / 60),
     };
   }
 
