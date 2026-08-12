@@ -110,7 +110,10 @@ export class NotificationsController {
         if (start >= data.length || start > end) {
           return reply.code(416).header('content-range', `bytes */${data.length}`).send();
         }
-        return reply.code(206).header('content-range', `bytes ${start}-${end}/${data.length}`).send(data.subarray(start, end + 1));
+        return reply
+          .code(206)
+          .header('content-range', `bytes ${start}-${end}/${data.length}`)
+          .send(data.subarray(start, end + 1));
       }
       return reply.code(200).send(data);
     } catch {

@@ -3,17 +3,17 @@ import { isNoRespondersError, RPCClass, RPCMethod } from '@camera.ui/rpc';
 import { SensorType } from '@camera.ui/sdk';
 import { NamespaceManager } from '../../rpc/namespaces.js';
 import { DETECTION_SENSOR_TYPES } from '../../sensors/types.js';
-import { normalizeZone } from '../utils/filter.js';
+import { normalizePolygon, normalizeZone } from '../utils/filter.js';
 import { AudioDetectionLoop } from './audio-loop.js';
 import { CascadeManager } from './cascade-manager.js';
 import { detectionRecord } from './debug/detection-record.js';
-import { PerfTracker } from './perf-tracker.js';
 import { DetectionPipeline } from './detection-pipeline.js';
 import { DwellManager } from './dwell-manager.js';
 import { DetectionEventManager, MOMENT_RANK_ATTRIBUTE, MOMENT_RANK_OBJECT } from './event-manager.js';
 import { EventThumbnailer } from './event-thumbnailer.js';
 import { FrameScaler } from './frame-scaler.js';
 import { directionBetween, directionOf, MOMENT_FORMATS, MOMENT_QUALITY, momentWindow, unionBox } from './moment-crop.js';
+import { PerfTracker } from './perf-tracker.js';
 import { normalizePlateText } from './plate-vote.js';
 import { isVideoInputSpec, PluginRegistry } from './plugin-registry.js';
 import { PtzAutotracker } from './ptz/autotracker.js';
@@ -26,6 +26,7 @@ import type { Logger } from '@camera.ui/common/logger';
 import type { RPCClient } from '@camera.ui/rpc';
 import type { WorldObject } from '@camera.ui/rust-postprocessor';
 import type {
+  AlertZone,
   AudioResult,
   BoundingBox,
   CameraDetectionSettings,
@@ -68,6 +69,7 @@ export interface DetectionCoordinatorConfig {
   controllerSnapshotSourceId?: string;
   availableSources?: CoordinatorSourceUrl[];
   zones: DetectionZone[];
+  alertZones?: AlertZone[];
   lines: DetectionLine[];
   detectionSettings: CameraDetectionSettings;
   ptzAutotrack: PtzAutotrackSettings;
@@ -311,6 +313,10 @@ export class DetectionCoordinator {
   public updateZones(zones: DetectionZone[]): void {
     this.config.zones = zones;
     this.pipeline.updateZones(zones);
+  }
+
+  public updateAlertZones(zones: AlertZone[]): void {
+    this.config.alertZones = zones;
   }
 
   public updateLines(lines: DetectionLine[]): void {
@@ -710,13 +716,15 @@ export class DetectionCoordinator {
   }
 
   private getNormalizedDetectionZones(): NormalizedDetectionZone[] {
-    if (!this.config.zones || this.config.zones.length === 0) return [];
     const result: NormalizedDetectionZone[] = [];
-    for (const zone of this.config.zones) {
+    for (const zone of this.config.zones ?? []) {
       if (zone.isPrivacyMask) continue;
       if (!zone.name) continue;
-      const normalized = normalizeZone(zone);
-      result.push({ name: zone.name, points: normalized.points });
+      result.push({ name: zone.name, points: normalizeZone(zone).points });
+    }
+    for (const zone of this.config.alertZones ?? []) {
+      if (!zone.name) continue;
+      result.push({ name: zone.name, points: normalizePolygon(zone.points), match: zone.match ?? 'contain' });
     }
     return result;
   }

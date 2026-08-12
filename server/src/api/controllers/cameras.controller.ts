@@ -18,6 +18,7 @@ import type { ConfigService } from '../../services/config/index.js';
 import type { DBCamera } from '../database/types.js';
 import type {
   AuthLoginRequest,
+  CameraAlertZoneInsertPatchRequest,
   CameraLineInsertPatchRequest,
   CameraProbeSourceQueryRequest,
   CameraSnapshotQueryRequest,
@@ -117,6 +118,51 @@ export class CamerasController {
       }
 
       const newZone = await this.service.patchZones(req.params.cameraname, req.body);
+
+      return reply.code(200).send(newZone);
+    } catch (error: any) {
+      return reply.code(500).send({
+        statusCode: 500,
+        message: error.message,
+      });
+    }
+  }
+
+  public getAlertZones(req: FastifyRequest<AuthLoginRequest & CamerasParamsRequest>, reply: FastifyReply): FastifyReply {
+    try {
+      const camera = this.service.findByName(req.params.cameraname) ?? this.service.findById(req.params.cameraname);
+
+      if (!camera) {
+        return reply.code(404).send({
+          statusCode: 404,
+          message: 'Camera not exists',
+        });
+      }
+
+      return reply.code(200).send(camera.alertZones ?? []);
+    } catch (error: any) {
+      return reply.code(500).send({
+        statusCode: 500,
+        message: error.message,
+      });
+    }
+  }
+
+  public async patchAlertZones(
+    req: FastifyRequest<AuthLoginRequest & CamerasParamsRequest & CameraAlertZoneInsertPatchRequest>,
+    reply: FastifyReply,
+  ): Promise<FastifyReply> {
+    try {
+      const camera = this.service.findByName(req.params.cameraname) ?? this.service.findById(req.params.cameraname);
+
+      if (!camera) {
+        return reply.code(404).send({
+          statusCode: 404,
+          message: 'Camera not exists',
+        });
+      }
+
+      const newZone = await this.service.patchAlertZones(req.params.cameraname, req.body);
 
       return reply.code(200).send(newZone);
     } catch (error: any) {

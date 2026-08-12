@@ -22,6 +22,14 @@ export interface CameraOptionsTabEmits {
   (e: 'close'): void;
 }
 
+export interface ZoneEntry {
+  kind: 'zone' | 'alert' | 'line';
+  index: number;
+  name: string;
+  color: string;
+  typeLabel: string;
+}
+
 export interface CameraSourceProps {
   cameraId: string;
   cameraName: string;

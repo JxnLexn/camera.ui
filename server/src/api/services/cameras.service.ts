@@ -12,6 +12,7 @@ import { PluginsService } from './plugins.service.js';
 import { UsersService } from './users.service.js';
 
 import type {
+  AlertZone,
   AssignedPlugin,
   Camera,
   CameraInput,
@@ -114,6 +115,24 @@ export class CamerasService {
       if (!current) return undefined;
 
       current.detectionZones = zoneData;
+
+      return current;
+    });
+    if (!camera) return undefined;
+
+    this.api.updateCamera(this.transformCamera(camera));
+
+    return camera;
+  }
+
+  public async patchAlertZones(cameraname: string, zoneData: AlertZone[]): Promise<DBCamera | undefined> {
+    const existing = this.findByName(cameraname);
+    if (!existing) return undefined;
+
+    const camera = await this.dbs.commit(this.dbs.camerasDB, existing._id, (current) => {
+      if (!current) return undefined;
+
+      current.alertZones = zoneData;
 
       return current;
     });

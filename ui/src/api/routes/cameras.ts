@@ -2,7 +2,7 @@ import { i18n } from '@/i18n/index.js';
 import { axiosInstance as api } from '..';
 
 import type { CreateCameraInput, PatchCameraInput, PreviewCameraInput } from '@/schemas/cameras.schema.js';
-import type { DetectionLine, DetectionZone, FormSubmitResponse, ProbeConfig, SensorType } from '@camera.ui/sdk';
+import type { AlertZone, DetectionLine, DetectionZone, FormSubmitResponse, ProbeConfig, SensorType } from '@camera.ui/sdk';
 import type {
   BulkPatchCamerasInput,
   BulkResult,
@@ -258,6 +258,11 @@ export async function getZonesFn({ cameraname, signal }: { cameraname: string; s
 
 export async function patchZonesFn({ cameraname, zoneData }: { cameraname: string; zoneData: DetectionZone[] }): Promise<DBCamera> {
   const response: AxiosResponse<DBCamera> = await api.patch(`/cameras/${cameraname}/zones`, zoneData);
+  return response.data;
+}
+
+export async function patchAlertZonesFn({ cameraname, zoneData }: { cameraname: string; zoneData: AlertZone[] }): Promise<DBCamera> {
+  const response: AxiosResponse<DBCamera> = await api.patch(`/cameras/${cameraname}/alert-zones`, zoneData);
   return response.data;
 }
 
@@ -654,6 +659,16 @@ export class CamerasQuery {
   public patchZonesQuery() {
     return useMutation({
       mutationFn: patchZonesFn,
+      onSuccess: async (_data, variables) => {
+        await this._queryClient.refetchQueries({ queryKey: ['cameras', variables.cameraname], exact: true });
+        this.toast.add({ severity: 'success', detail: this.t('components.toast.zone_updated'), life: 3000 });
+      },
+    });
+  }
+
+  public patchAlertZonesQuery() {
+    return useMutation({
+      mutationFn: patchAlertZonesFn,
       onSuccess: async (_data, variables) => {
         await this._queryClient.refetchQueries({ queryKey: ['cameras', variables.cameraname], exact: true });
         this.toast.add({ severity: 'success', detail: this.t('components.toast.zone_updated'), life: 3000 });

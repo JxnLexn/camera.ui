@@ -3,6 +3,7 @@ import { BehaviorSubject, distinctUntilChanged, filter, mergeMap, pairwise, Repl
 import { TTLCache } from '@isaacs/ttlcache';
 
 import type {
+  AlertZone,
   Camera,
   CameraDetectionSettings,
   CameraRecordingSettings,
@@ -119,6 +120,10 @@ export abstract class CameraDevice extends Subscribed implements CameraDeviceInt
 
   get detectionZones(): DetectionZone[] {
     return structuredClone(this.cameraSubject.getValue().detectionZones);
+  }
+
+  get alertZones(): AlertZone[] {
+    return structuredClone(this.cameraSubject.getValue().alertZones ?? []);
   }
 
   get detectionLines(): DetectionLine[] {

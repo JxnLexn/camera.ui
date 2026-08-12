@@ -1,13 +1,14 @@
 import { randomUUID } from 'node:crypto';
 
 import { NamespaceManager } from '../../rpc/namespaces.js';
-import { boxIntersectsPolygon } from '../utils/filter.js';
+import { boxAnchorInPolygon, boxInsidePolygon, boxIntersectsPolygon } from '../utils/filter.js';
 import { detectionRecord } from './debug/detection-record.js';
 import { leanEvent, NvrSink } from './nvr-sink.js';
 import { MAX_UNTRACKED_PLATES, normalizePlateText, PlateVoteTracker } from './plate-vote.js';
 
 import type { RPCClient } from '@camera.ui/rpc';
 import type {
+  AlertZoneMatch,
   BoundingBox,
   ClassifierDetection,
   ClipEmbedding,
@@ -40,6 +41,8 @@ export interface TrackedClipEmbedding extends ClipEmbedding, TrackedSecondary {}
 export interface NormalizedDetectionZone {
   name: string;
   points: Point[];
+  /** Alert zones bring their own rule; filter zones are always tested by touch. */
+  match?: AlertZoneMatch;
 }
 
 export const MOMENT_RANK_OBJECT = 0;
@@ -91,6 +94,12 @@ const MOMENT_IMPROVEMENT = 1.25;
 const CLIP_ATTRIBUTE = 'clip';
 const MIN_MOVING_SPEED = 0.05;
 const STATIONARY_SPEED_THRESHOLD = 0.002;
+
+function zoneHit(box: BoundingBox, zone: NormalizedDetectionZone): boolean {
+  if (zone.match === 'anchor') return boxAnchorInPolygon(box, zone.points);
+  if (zone.match === 'contain') return boxInsidePolygon(box, zone.points);
+  return boxIntersectsPolygon(box, zone.points);
+}
 
 function jpegInfo(jpeg: Buffer): string {
   let i = 2;
@@ -542,16 +551,36 @@ export class DetectionEventManager {
         if (path) d.path = path;
       }
 
-      // boxes and polygons are both normalized 0-1, direct overlap test
+      // boxes and polygons are both normalized 0-1, direct overlap test.
+      // Per-label hits matter on their own: an alert zone gates pushes per
+      // label, so "the car was in the driveway" must not vouch for the person
+      // on the road.
       if (data.detectionZones && data.detectionZones.length > 0) {
-        const zonesSet = new Set<string>(this.activeSegment.zones ?? []);
+        const labelZones = new Map<string, Set<string>>();
+        for (const detection of this.activeSegment.detections) {
+          if (detection.zones?.length) labelZones.set(detection.label, new Set(detection.zones));
+        }
+
         for (const obj of data.objects) {
+          let hits = labelZones.get(obj.label);
+          if (!hits) {
+            hits = new Set<string>();
+            labelZones.set(obj.label, hits);
+          }
           for (const zone of data.detectionZones) {
-            if (zonesSet.has(zone.name)) continue;
-            if (boxIntersectsPolygon(obj.box, zone.points)) {
-              zonesSet.add(zone.name);
+            if (hits.has(zone.name)) continue;
+            if (zoneHit(obj.box, zone)) {
+              hits.add(zone.name);
             }
           }
+        }
+
+        const zonesSet = new Set<string>(this.activeSegment.zones ?? []);
+        for (const detection of this.activeSegment.detections) {
+          const hits = labelZones.get(detection.label);
+          if (!hits || hits.size === 0) continue;
+          detection.zones = [...hits];
+          for (const name of hits) zonesSet.add(name);
         }
         if (zonesSet.size > 0) {
           this.activeSegment.zones = [...zonesSet];

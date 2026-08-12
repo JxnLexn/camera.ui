@@ -1,10 +1,15 @@
-import type { DetectionLine, DetectionZone } from '@camera.ui/sdk';
+import type { AlertZone, DetectionLine, DetectionZone } from '@camera.ui/sdk';
+
+export type ZoneEditorTab = 'zones' | 'alerts' | 'lines';
+
+export type EditorPolygon = DetectionZone | AlertZone;
 
 export interface ZoneEditorProps {
   cameraName: string;
   zones: DetectionZone[];
+  alerts: AlertZone[];
   lines: DetectionLine[];
-  initialTab?: 'zones' | 'lines';
+  initialTab?: ZoneEditorTab;
   initialSelection?: number;
 }
 

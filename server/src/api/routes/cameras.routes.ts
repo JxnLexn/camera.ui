@@ -3,6 +3,7 @@ import { onlyAdminCanDoThisAction } from '../middlewares/authPermission.middlewa
 import { validJWTNeeded } from '../middlewares/authValidation.middleware.js';
 import { pages } from '../middlewares/pagination.middleware.js';
 import {
+  alertZoneSchema,
   bulkDeleteCamerasSchema,
   bulkPatchCamerasSchema,
   cameraParamsSchema,
@@ -246,6 +247,31 @@ export const CamerasRoute: FastifyPluginAsync = async (app: FastifyInstance): Pr
       summary: 'Update the detection zones for a camera',
       params: cameraParamsSchema,
       body: detectionZoneSchema,
+    },
+  });
+
+  app.withTypeProvider<ZodTypeProvider>().route({
+    url: '/:cameraname/alert-zones',
+    method: 'GET',
+    preValidation: [validJWTNeeded, onlyAdminCanDoThisAction],
+    handler: camerasController.getAlertZones.bind(camerasController),
+    schema: {
+      tags: ['Cameras'],
+      summary: 'Get the alert zones for a camera',
+      params: cameraParamsSchema,
+    },
+  });
+
+  app.withTypeProvider<ZodTypeProvider>().route({
+    url: '/:cameraname/alert-zones',
+    method: 'PATCH',
+    preValidation: [validJWTNeeded, onlyAdminCanDoThisAction],
+    handler: camerasController.patchAlertZones.bind(camerasController),
+    schema: {
+      tags: ['Cameras'],
+      summary: 'Update the alert zones for a camera',
+      params: cameraParamsSchema,
+      body: alertZoneSchema,
     },
   });
 

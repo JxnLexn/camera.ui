@@ -1476,7 +1476,7 @@ import type {
 import { SENSOR_TYPE_CONFIG } from '@shared/types';
 
 import type { DBCamera } from '@shared/types';
-import type { CameraOptionsTabEmits, CameraOptionsTabProps } from '../../types.js';
+import type { CameraOptionsTabEmits, CameraOptionsTabProps, ZoneEntry } from '../../types.js';
 
 const TRIGGERABLE_TYPES = new Set(
   Object.entries(SENSOR_TYPE_CONFIG)
@@ -1508,6 +1508,7 @@ const { data: roomsData, isBusy: roomsLoading } = camerasQueryRooms.getRoomsQuer
 const { data: cameraExtensions } = camerasQuery.getCameraExtensionsQuery(cameraForm.value.name);
 const { mutateAsync: removeCamera, isPending: removeLoading } = camerasQuery.removeCameraQuery();
 const { mutateAsync: patchZones, isPending: zonesPatching } = camerasQuery.patchZonesQuery();
+const { mutateAsync: patchAlertZones, isPending: alertZonesPatching } = camerasQuery.patchAlertZonesQuery();
 const { mutateAsync: patchLines, isPending: linesPatching } = camerasQuery.patchLinesQuery();
 
 const cameraTypes = ref<CameraType[]>(['camera', 'doorbell']);
@@ -1551,15 +1552,22 @@ const workerDecoderDeviceVisible = computed(() => {
 
 const hasNvrPlugin = computed(() => (cameraExtensions.value ?? []).some((p) => p.contract.interfaces?.includes(PluginInterface.NVR)));
 
-const zoneEntryDeleting = computed(() => zonesPatching.value || linesPatching.value);
+const zoneEntryDeleting = computed(() => zonesPatching.value || alertZonesPatching.value || linesPatching.value);
 
-const zoneEntries = computed(() => [
+const zoneEntries = computed<ZoneEntry[]>(() => [
   ...(camera.value.detectionZones ?? []).map((zone, index) => ({
     kind: 'zone' as const,
     index,
     name: zone.name,
     color: zone.color,
     typeLabel: zone.isPrivacyMask ? t('components.camera_options.zone_entry_privacy_mask') : t('components.camera_options.zone_entry_zone'),
+  })),
+  ...(camera.value.alertZones ?? []).map((zone, index) => ({
+    kind: 'alert' as const,
+    index,
+    name: zone.name,
+    color: zone.color,
+    typeLabel: t('components.camera_options.zone_entry_alert'),
   })),
   ...(camera.value.detectionLines ?? []).map((line, index) => ({
     kind: 'line' as const,
@@ -1680,6 +1688,7 @@ function openEditZoneDialog(zones: DetectionZone[] = []) {
       contentProps: {
         cameraName: camera.value.name,
         zones,
+        alerts: camera.value.alertZones ?? [],
         lines: camera.value.detectionLines ?? [],
       },
     },
@@ -1703,7 +1712,7 @@ function openAspectRatioDialog() {
   });
 }
 
-function openEditZoneEntry(entry: { kind: 'zone' | 'line'; index: number }) {
+function openEditZoneEntry(entry: ZoneEntry) {
   dialog.openComponentDialog<ZoneEditorProps>(ZoneEditorDialog, {
     data: {
       title: t('components.zone_editor.edit_zones'),
@@ -1711,15 +1720,16 @@ function openEditZoneEntry(entry: { kind: 'zone' | 'line'; index: number }) {
       contentProps: {
         cameraName: camera.value.name,
         zones: camera.value.detectionZones ?? [],
+        alerts: camera.value.alertZones ?? [],
         lines: camera.value.detectionLines ?? [],
-        initialTab: entry.kind === 'line' ? 'lines' : 'zones',
+        initialTab: entry.kind === 'line' ? 'lines' : entry.kind === 'alert' ? 'alerts' : 'zones',
         initialSelection: entry.index,
       },
     },
   });
 }
 
-function confirmDeleteZoneEntry(entry: { kind: 'zone' | 'line'; index: number }) {
+function confirmDeleteZoneEntry(entry: ZoneEntry) {
   dialog.openTextDialog({
     data: {
       title: t('components.camera_options.zone_entry_delete'),
@@ -1731,6 +1741,9 @@ function confirmDeleteZoneEntry(entry: { kind: 'zone' | 'line'; index: number })
       if (entry.kind === 'zone') {
         const zoneData = (camera.value.detectionZones ?? []).filter((_, index) => index !== entry.index);
         await patchZones({ cameraname: camera.value.name, zoneData });
+      } else if (entry.kind === 'alert') {
+        const zoneData = (camera.value.alertZones ?? []).filter((_, index) => index !== entry.index);
+        await patchAlertZones({ cameraname: camera.value.name, zoneData });
       } else {
         const lineData = (camera.value.detectionLines ?? []).filter((_, index) => index !== entry.index);
         await patchLines({ cameraname: camera.value.name, lineData });

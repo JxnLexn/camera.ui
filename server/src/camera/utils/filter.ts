@@ -8,15 +8,18 @@ function pointsEqual(p1: Point, p2: Point): boolean {
   return p1[0] === p2[0] && p1[1] === p2[1];
 }
 
-// Normalize a zone's polygon from [0, 100] UI space to [0, 1] and ensure the polygon is closed.
-export function normalizeZone(zone: DetectionZone): NormalizedZone {
-  const points: Point[] = zone.points.map(([x, y]) => [x / 100, y / 100]);
+export function normalizePolygon(polygon: Point[]): Point[] {
+  const points: Point[] = polygon.map(([x, y]) => [x / 100, y / 100]);
 
   if (points.length > 0 && !pointsEqual(points[0], points[points.length - 1])) {
     points.push(points[0]);
   }
 
-  return { ...zone, points };
+  return points;
+}
+
+export function normalizeZone(zone: DetectionZone): NormalizedZone {
+  return { ...zone, points: normalizePolygon(zone.points) };
 }
 
 function isPointInPolygon(px: number, py: number, polygon: Point[]): boolean {
@@ -26,9 +29,6 @@ function isPointInPolygon(px: number, py: number, polygon: Point[]): boolean {
     const [xi, yi] = polygon[i];
     const [xj, yj] = polygon[j];
 
-    // Edge containment check — if the point lies on (or very near) an
-    // edge it counts as inside, even though the strict ray-cast below
-    // might miss it depending on which side the cast lands.
     if (px >= Math.min(xi, xj) && px <= Math.max(xi, xj) && py >= Math.min(yi, yj) && py <= Math.max(yi, yj)) {
       if (Math.abs(xi - xj) < 1e-9) {
         if (Math.abs(px - xi) < 1e-9) return true;
@@ -68,7 +68,14 @@ function boxCorners(box: BoundingBox): [Point, Point, Point, Point] {
   ];
 }
 
-// True if the box intersects or is contained within the polygon.
+export function boxAnchorInPolygon(box: BoundingBox, polygon: Point[]): boolean {
+  return isPointInPolygon(box.x + box.width / 2, box.y + box.height, polygon);
+}
+
+export function boxInsidePolygon(box: BoundingBox, polygon: Point[]): boolean {
+  return boxCorners(box).every(([cx, cy]) => isPointInPolygon(cx, cy, polygon));
+}
+
 export function boxIntersectsPolygon(box: BoundingBox, polygon: Point[]): boolean {
   const corners = boxCorners(box);
   const x2 = box.x + box.width;

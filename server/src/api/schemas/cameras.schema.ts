@@ -67,6 +67,20 @@ export const detectionZoneSchema = zod
   })
   .array();
 
+export const alertZoneSchema = zod
+  .object({
+    name: zod.string().trim().min(1, 'Zone Name is required'),
+    points: pointsSchema.array().min(3, 'At least 3 points are required'),
+    labels: detectionLabelSchema.array(),
+    match: zod.union([zod.literal('anchor'), zod.literal('intersect'), zod.literal('contain')]).default('contain'),
+    color: zod
+      .string()
+      .trim()
+      .regex(/^#([0-9A-Fa-f]{3}){1,2}$/, 'Must be a valid hex color (e.g. #FF0000 or #F00)')
+      .default('#df2a4c'),
+  })
+  .array();
+
 export const detectionLineSchema = zod
   .object({
     name: zod.string().trim().min(1, 'Line Name is required'),
@@ -432,6 +446,7 @@ export const createCameraBaseSchema = zod
       aspectRatio: '16:9',
     }),
     detectionZones: detectionZoneSchema.default([]),
+    alertZones: alertZoneSchema.default([]),
     detectionLines: detectionLineSchema.default([]),
     detectionSettings: detectionSettingsSchema.default({
       motion: {

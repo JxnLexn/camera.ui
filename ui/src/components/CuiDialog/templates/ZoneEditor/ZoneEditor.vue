@@ -19,7 +19,7 @@
                     <div class="handles">
                       <div
                         v-for="coord in coords"
-                        v-show="activeTab === 'zones'"
+                        v-show="activeTab !== 'lines'"
                         :key="coord._id"
                         ref="draggablesRef"
                         class="handle"
@@ -51,6 +51,28 @@
                               }"
                               @click="selectZone(i)"
                               @dblclick="() => (zone.isPrivacyMask = !zone.isPrivacyMask)"
+                              @mousedown="startDragPolygon($event, i)"
+                              @mousemove="onDragPolygon"
+                              @mouseup="endDragPolygon"
+                              @touchstart="startDragPolygon($event, i)"
+                              @touchmove="onDragPolygon"
+                              @touchend="endDragPolygon"
+                            />
+                          </template>
+
+                          <template v-if="activeTab === 'alerts'">
+                            <path
+                              v-for="(zone, i) in alertZones"
+                              :key="`alert-${i}`"
+                              :d="convertToSvgPath(zone.points)"
+                              class="cursor-pointer dash"
+                              :class="{ selected: selectedZone === i }"
+                              :style="{
+                                fill: `${zone.color}4D`,
+                                stroke: zone.color,
+                                'stroke-width': '2',
+                              }"
+                              @click="selectZone(i)"
                               @mousedown="startDragPolygon($event, i)"
                               @mousemove="onDragPolygon"
                               @mouseup="endDragPolygon"
@@ -199,6 +221,7 @@
             <SelectButton
               v-model="activeTab"
               :options="tabOptions"
+              :allow-empty="false"
               option-label="label"
               option-value="value"
               class="w-full"
@@ -209,6 +232,8 @@
             />
 
             <template v-if="activeTab === 'lines'">
+              <p class="cui-input-hint w-full">{{ $t('components.zone_editor.lines_hint') }}</p>
+
               <div class="flex flex-col field-gap w-full">
                 <label :for="`line[${selectedLine}].name`" class="cui-label">{{ $t('components.form.label.name') }}</label>
                 <InputGroup>
@@ -318,7 +343,180 @@
               </div>
             </template>
 
+            <template v-if="activeTab === 'alerts'">
+              <p class="cui-input-hint w-full">{{ $t('components.zone_editor.alert_zones_hint') }}</p>
+
+              <div class="flex flex-col field-gap w-full">
+                <label :for="`alert[${selectedZone}].name`" class="cui-label">{{ $t('components.form.label.name') }}</label>
+                <InputGroup>
+                  <InputText
+                    :model-value="alertZones[selectedZone]?.name"
+                    :invalid="!!selectedZoneNameError"
+                    :loading="isLoading"
+                    :disabled="selectedZone < 0"
+                    type="text"
+                    @value-change="
+                      (e) => {
+                        if (alertZones[selectedZone]) alertZones[selectedZone].name = e ?? '';
+                      }
+                    "
+                  />
+                </InputGroup>
+
+                <Transition name="fade">
+                  <span v-if="selectedZoneNameError" class="cui-input-error">{{ selectedZoneNameError }}</span>
+                </Transition>
+              </div>
+
+              <div class="flex flex-col field-gap w-full">
+                <label :for="`alert[${selectedZone}].labels`" class="cui-label inline-flex items-center gap-1">
+                  {{ $t('components.form.label.labels') }}
+                  <span v-tooltip="{ value: $t('components.zone_editor.alert_labels_info') }" class="inline-flex shrink-0">
+                    <i-mdi:information-outline class="w-3.5 h-3.5 text-muted-color" />
+                  </span>
+                </label>
+                <InputGroup>
+                  <MultiSelect
+                    :model-value="alertZones[selectedZone]?.labels"
+                    :options="alertLabelOptions"
+                    :loading="isLoading"
+                    :disabled="selectedZone < 0"
+                    :max-selected-labels="2"
+                    :show-toggle-all="false"
+                    option-label="label"
+                    option-value="value"
+                    option-group-label="label"
+                    option-group-children="items"
+                    show-clear
+                    type="text"
+                    @value-change="
+                      (e) => {
+                        if (alertZones[selectedZone]) alertZones[selectedZone].labels = e ?? [];
+                      }
+                    "
+                  />
+                </InputGroup>
+              </div>
+
+              <div class="flex flex-col field-gap w-full">
+                <label :for="`alert[${selectedZone}].match`" class="cui-label">{{ $t('components.zone_editor.alert_match') }}</label>
+                <InputGroup>
+                  <Select
+                    :model-value="alertZones[selectedZone]?.match ?? 'anchor'"
+                    :options="alertMatchOptions"
+                    :loading="isLoading"
+                    :disabled="selectedZone < 0"
+                    option-label="label"
+                    option-value="value"
+                    @value-change="
+                      (e) => {
+                        if (alertZones[selectedZone]) alertZones[selectedZone].match = e;
+                      }
+                    "
+                  />
+                </InputGroup>
+              </div>
+
+              <div class="flex flex-col field-gap w-full">
+                <label :for="`alert[${selectedZone}].color`" class="cui-label">{{ $t('components.form.label.color') }}</label>
+                <InputGroup>
+                  <InputText :model-value="alertZones[selectedZone]?.color" :loading="isLoading" readonly type="text" />
+                  <InputGroupAddon>
+                    <ColorPicker
+                      :key="selectedZone"
+                      :model-value="alertZones[selectedZone]?.color"
+                      format="hex"
+                      @value-change="(e) => (e && alertZones[selectedZone] ? (alertZones[selectedZone].color = `#${e}`) : null)"
+                    />
+                  </InputGroupAddon>
+                </InputGroup>
+              </div>
+
+              <div class="flex flex-row h-[50px] rounded-full overflow-hidden justify-self-center max-w-max border-[1px] border-color-inner mt-auto">
+                <Button
+                  v-if="!customizing"
+                  v-tooltip.top="{ value: $t('components.form.tooltip.new') }"
+                  :loading="isLoading"
+                  severity="secondary"
+                  class="!rounded-none !h-full w-[60px]"
+                  @click="startCustomizing"
+                >
+                  <template #icon>
+                    <i-mdi:plus width="20px" height="20px" />
+                  </template>
+                </Button>
+
+                <Button
+                  v-else
+                  v-tooltip.top="{ value: $t('components.form.tooltip.finish') }"
+                  :disabled="Boolean(currentZone !== undefined && alertZones[currentZone]?.points?.length < 3)"
+                  :loading="isLoading"
+                  severity="secondary"
+                  class="!rounded-none !h-full w-[60px]"
+                  @click="finishCustomizing(false)"
+                >
+                  <template #icon>
+                    <i-mdi:check width="20px" height="20px" />
+                  </template>
+                </Button>
+
+                <Button
+                  v-tooltip.top="{ value: $t('components.form.tooltip.edit') }"
+                  :loading="isLoading"
+                  :disabled="!alertZones.length || selectedZone < 0 || customizing"
+                  severity="secondary"
+                  class="!rounded-none !h-full w-[60px]"
+                  @click="editZone"
+                >
+                  <template #icon>
+                    <i-mdi:pencil width="20px" height="20px" />
+                  </template>
+                </Button>
+
+                <Button
+                  v-tooltip.top="{ value: $t('components.form.tooltip.delete') }"
+                  :loading="isLoading"
+                  :disabled="!alertZones.length || selectedZone < 0"
+                  severity="secondary"
+                  class="!rounded-none !h-full w-[60px]"
+                  @click="removeZone"
+                >
+                  <template #icon>
+                    <i-mdi:delete width="20px" height="20px" />
+                  </template>
+                </Button>
+
+                <Button
+                  v-tooltip.top="{ value: $t('components.form.tooltip.undo') }"
+                  :loading="isLoading"
+                  :disabled="!alertZones.length"
+                  severity="secondary"
+                  class="!rounded-none !h-full w-[60px]"
+                  @click="undo"
+                >
+                  <template #icon>
+                    <i-mdi:undo width="20px" height="20px" />
+                  </template>
+                </Button>
+
+                <Button
+                  v-tooltip.top="{ value: $t('components.form.tooltip.clear') }"
+                  :loading="isLoading"
+                  :disabled="!alertZones.length"
+                  severity="secondary"
+                  class="!rounded-none !h-full w-[60px]"
+                  @click="clear"
+                >
+                  <template #icon>
+                    <i-mdi:cancel width="20px" height="20px" />
+                  </template>
+                </Button>
+              </div>
+            </template>
+
             <template v-if="activeTab === 'zones'">
+              <p class="cui-input-hint w-full">{{ $t('components.zone_editor.zones_hint') }}</p>
+
               <div class="flex flex-col field-gap w-full">
                 <label :for="`zone[${selectedZone}].name`" class="cui-label">{{ $t('components.form.label.name') }}</label>
                 <InputGroup>
@@ -534,12 +732,13 @@ import Draggabilly from 'draggabilly';
 
 import { CamerasQuery } from '@/api/routes/cameras.js';
 import { deepToRaw } from '@/common/utils.js';
-import { cameraCreatePatchLines, cameraCreatePatchZones } from '@/schemas/cameras.schema.js';
+import { cameraCreatePatchAlertZones, cameraCreatePatchLines, cameraCreatePatchZones } from '@/schemas/cameras.schema.js';
 import { NON_SPATIAL_LABELS, NON_TRACKED_LABELS } from './types.js';
 
 import type { DialogRefProps } from '@/composables/useCuiDialog.js';
-import type { DetectionLine, DetectionZone, LineDirection } from '@camera.ui/sdk';
-import type { CoordsPosition, LabelGroup, ZoneEditorProps } from './types.js';
+import type { AlertZone, DetectionLine, DetectionZone, LineDirection } from '@camera.ui/sdk';
+import type { ComputedRef } from 'vue';
+import type { CoordsPosition, EditorPolygon, LabelGroup, ZoneEditorProps, ZoneEditorTab } from './types.js';
 
 const camerasQuery = new CamerasQuery();
 
@@ -551,6 +750,7 @@ const { t } = useI18n();
 const dialogRefProps = inject<DialogRefProps>('dialogRefProps')!;
 
 const { mutateAsync: patchCameraZones, isPending: patchCameraZonesLoading } = camerasQuery.patchZonesQuery();
+const { mutateAsync: patchCameraAlertZones, isPending: patchCameraAlertZonesLoading } = camerasQuery.patchAlertZonesQuery();
 const { mutateAsync: patchCameraLines, isPending: patchCameraLinesLoading } = camerasQuery.patchLinesQuery();
 
 const { cameraName, zones } = toRefs(props);
@@ -559,9 +759,10 @@ const containerRef = useTemplateRef('container');
 const draggablesRef = useTemplateRef<HTMLElement[]>('draggablesRef');
 const outsideRef = useTemplateRef('outsideRef');
 const playgroundContainerRef = useTemplateRef<HTMLElement>('playgroundContainerRef');
-const activeTab = ref<'zones' | 'lines'>(props.initialTab ?? 'zones');
+const activeTab = ref<ZoneEditorTab>(props.initialTab ?? 'zones');
 const draggies = shallowRef<Draggabilly[]>([]);
 const detectionZones = ref<DetectionZone[]>([]);
+const alertZones = ref<AlertZone[]>([]);
 const detectionLines = ref<DetectionLine[]>([]);
 const customizing = ref(false);
 const coords = ref<CoordsPosition[]>([]);
@@ -571,10 +772,10 @@ const selectedAction = ref(-1);
 const selectedLine = ref(-1);
 
 if (props.initialSelection !== undefined) {
-  if ((props.initialTab ?? 'zones') === 'zones') {
-    selectedZone.value = props.initialSelection;
-  } else {
+  if ((props.initialTab ?? 'zones') === 'lines') {
     selectedLine.value = props.initialSelection;
+  } else {
+    selectedZone.value = props.initialSelection;
   }
 }
 const dragStart = { x: 0, y: 0 };
@@ -586,13 +787,17 @@ const containerSize = useElementSize(containerRef);
 const playgroundSize = useElementSize(playgroundContainerRef);
 
 const zoneNameSchema = cameraCreatePatchZones.element.shape.name;
+const alertZoneNameSchema = cameraCreatePatchAlertZones.element.shape.name;
 const lineNameSchema = cameraCreatePatchLines.element.shape.name;
+
+const isAlertTab = computed(() => activeTab.value === 'alerts');
+const polygons = computed(() => (isAlertTab.value ? alertZones.value : detectionZones.value)) as ComputedRef<EditorPolygon[]>;
 
 const selectedZoneNameError = computed(() => {
   if (selectedZone.value < 0) return '';
-  const zone = detectionZones.value[selectedZone.value];
-  if (!zone || zone.isPrivacyMask) return '';
-  const result = zoneNameSchema.safeParse(zone.name);
+  const zone = polygons.value[selectedZone.value];
+  if (!zone || ('isPrivacyMask' in zone && zone.isPrivacyMask)) return '';
+  const result = (isAlertTab.value ? alertZoneNameSchema : zoneNameSchema).safeParse(zone.name);
   return result.success ? '' : (result.error.issues[0]?.message ?? '');
 });
 
@@ -611,11 +816,32 @@ const contentHeight = computed(() => Math.max(0, playgroundSize.height.value - 2
 
 const tabOptions = computed(() => [
   { label: t('components.zone_editor.tab_zones'), value: 'zones' as const },
+  { label: t('components.zone_editor.tab_alerts'), value: 'alerts' as const },
   { label: t('components.zone_editor.tab_lines'), value: 'lines' as const },
 ]);
 
 const labelOptions = computed<LabelGroup[]>(() => {
   const filteredLabels = DETECTION_LABELS.filter((label) => !NON_SPATIAL_LABELS.includes(label));
+
+  if (filteredLabels.length === 0) return [];
+
+  return [
+    {
+      label: t('components.zone_editor.base_labels'),
+      items: filteredLabels.map((label) => ({ label, value: label })),
+    },
+  ];
+});
+
+const alertMatchOptions = computed(() => [
+  { label: t('components.zone_editor.alert_match_anchor'), value: 'anchor' as const },
+  { label: t('components.zone_editor.alert_match_intersect'), value: 'intersect' as const },
+  { label: t('components.zone_editor.alert_match_contain'), value: 'contain' as const },
+]);
+
+// an alert zone gates pushes, and a push needs an object with geometry
+const alertLabelOptions = computed<LabelGroup[]>(() => {
+  const filteredLabels = DETECTION_LABELS.filter((label) => !NON_TRACKED_LABELS.includes(label));
 
   if (filteredLabels.length === 0) return [];
 
@@ -640,7 +866,9 @@ const lineLabelOptions = computed<LabelGroup[]>(() => {
   ];
 });
 
-const isLoading = computed(() => Boolean(dialogRefProps.loading?.value || patchCameraZonesLoading.value || patchCameraLinesLoading.value));
+const isLoading = computed(() =>
+  Boolean(dialogRefProps.loading?.value || patchCameraZonesLoading.value || patchCameraAlertZonesLoading.value || patchCameraLinesLoading.value),
+);
 
 const playgroundClasses = computed(() => {
   const classes: string[] = [];
@@ -649,7 +877,7 @@ const playgroundClasses = computed(() => {
     classes.push('customizing');
   }
 
-  if (!detectionZones.value?.length) {
+  if (!polygons.value?.length) {
     classes.push('start');
   }
 
@@ -657,14 +885,14 @@ const playgroundClasses = computed(() => {
 });
 
 function updateCoordinatesFromZones() {
-  if (!detectionZones.value) return;
+  if (!polygons.value) return;
 
-  if (detectionZones.value.length === 0) {
+  if (polygons.value.length === 0) {
     coords.value = [];
     return;
   }
 
-  coords.value = detectionZones.value.flatMap((zone, zoneIndex) => {
+  coords.value = polygons.value.flatMap((zone, zoneIndex) => {
     return zone.points.map((point, pointIndex) => {
       return {
         // Index-based id keeps draggies stable when the user renames a zone.
@@ -709,7 +937,7 @@ function startDragPolygon(e: MouseEvent | TouchEvent, zoneIndex: number) {
 }
 
 function onDragPolygon(e: MouseEvent | TouchEvent): void {
-  if (!isDragging || !playgroundContainerRef.value || selectedZone.value === -1 || !detectionZones.value.length) {
+  if (!isDragging || !playgroundContainerRef.value || selectedZone.value === -1 || !polygons.value.length) {
     return;
   }
 
@@ -724,7 +952,7 @@ function onDragPolygon(e: MouseEvent | TouchEvent): void {
   const offsetX = currentX - dragStart.x;
   const offsetY = currentY - dragStart.y;
 
-  const points = detectionZones.value[selectedZone.value].points;
+  const points = polygons.value[selectedZone.value].points;
   let boundaryHit = false;
 
   for (let i = 0; i < points.length; i++) {
@@ -792,34 +1020,41 @@ function addHandle(e: MouseEvent): void {
     return;
   }
 
-  const zoneIndex = currentZone.value !== undefined ? currentZone.value : detectionZones.value.length;
+  const zoneIndex = currentZone.value !== undefined ? currentZone.value : polygons.value.length;
   const x = Math.min(Math.max(Math.round(((e.offsetX - 10) / contentWidth.value) * 100), 0), 100);
   const y = Math.min(Math.max(Math.round(((e.offsetY - 10) / contentHeight.value) * 100), 0), 100);
 
   if (currentZone.value === undefined) {
-    // Create a new zone
-    const newZoneName = `zone-${Date.now()}`;
-    detectionZones.value.push({
-      name: newZoneName,
-      points: [],
-      filter: 'include',
-      type: 'intersect',
-      labels: ['motion', 'person', 'vehicle', 'animal'],
-      isPrivacyMask: false,
-      color: getRandomHexColor(),
-    });
+    if (isAlertTab.value) {
+      alertZones.value.push({
+        name: `alert-${Date.now()}`,
+        points: [],
+        labels: ['person', 'vehicle'],
+        match: 'contain',
+        color: getRandomHexColor(),
+      });
+    } else {
+      detectionZones.value.push({
+        name: `zone-${Date.now()}`,
+        points: [],
+        filter: 'include',
+        type: 'intersect',
+        labels: ['motion', 'person', 'vehicle', 'animal'],
+        isPrivacyMask: false,
+        color: getRandomHexColor(),
+      });
+    }
 
-    currentZone.value = detectionZones.value.length - 1;
+    currentZone.value = polygons.value.length - 1;
   }
 
-  // Add new point to the current zone
-  detectionZones.value[zoneIndex].points.push([x, y]);
+  polygons.value[zoneIndex].points.push([x, y]);
 
   // Refresh coords to ensure draggies are correctly displayed
   updateCoordinatesFromZones();
 
   nextTick(() => {
-    const pointIndex = detectionZones.value[zoneIndex].points.length - 1;
+    const pointIndex = polygons.value[zoneIndex].points.length - 1;
     handleAdded({
       _id: `z${zoneIndex}-p${pointIndex}`,
       zoneIndex,
@@ -844,14 +1079,14 @@ function handleAdded(payload: CoordsPosition): void {
 }
 
 function updateHandle(payload: CoordsPosition): void {
-  if (!detectionZones.value.length) {
+  if (!polygons.value.length) {
     return;
   }
 
   const x = Math.round((payload.point[0] / contentWidth.value) * 100);
   const y = Math.round((payload.point[1] / contentHeight.value) * 100);
 
-  detectionZones.value[payload.zoneIndex].points[payload.pointIndex] = [x, y];
+  polygons.value[payload.zoneIndex].points[payload.pointIndex] = [x, y];
 }
 
 function startCustomizing(): void {
@@ -868,12 +1103,12 @@ function finishCustomizing(inEdit: boolean): void {
   customizing.value = inEdit || false;
   const zoneIndex = currentZone.value;
 
-  if (!detectionZones.value[zoneIndex] || !detectionZones.value[zoneIndex].points) {
+  if (!polygons.value[zoneIndex] || !polygons.value[zoneIndex].points) {
     return;
   }
 
-  if (detectionZones.value[zoneIndex].points.length < 3) {
-    detectionZones.value.splice(zoneIndex, 1);
+  if (polygons.value[zoneIndex].points.length < 3) {
+    polygons.value.splice(zoneIndex, 1);
     updateCoordinatesFromZones();
   } else {
     draggablesRef.value?.forEach((el) => makeDraggable(el));
@@ -889,11 +1124,11 @@ function editZone(): void {
 }
 
 function removeZone(): void {
-  if (selectedZone.value === -1 || !detectionZones.value.length) {
+  if (selectedZone.value === -1 || !polygons.value.length) {
     return;
   }
 
-  detectionZones.value.splice(selectedZone.value, 1);
+  polygons.value.splice(selectedZone.value, 1);
   selectedZone.value = Math.max(-1, selectedZone.value - 1);
 
   updateCoordinatesFromZones();
@@ -903,17 +1138,17 @@ function removeZone(): void {
 }
 
 function undo(): void {
-  if (!detectionZones.value?.length) {
+  if (!polygons.value?.length) {
     return;
   }
 
   if (customizing.value && currentZone.value !== undefined) {
-    const zone = detectionZones.value[currentZone.value];
+    const zone = polygons.value[currentZone.value];
     if (zone.points.length) {
       zone.points.pop();
 
       if (zone.points.length === 0) {
-        detectionZones.value.splice(currentZone.value, 1);
+        polygons.value.splice(currentZone.value, 1);
         currentZone.value = undefined;
       }
 
@@ -922,8 +1157,8 @@ function undo(): void {
     return;
   }
 
-  if (detectionZones.value.length > 0) {
-    detectionZones.value.pop();
+  if (polygons.value.length > 0) {
+    polygons.value.pop();
 
     updateCoordinatesFromZones();
     nextTick(() => {
@@ -937,8 +1172,8 @@ function clear(): void {
   customizing.value = false;
   currentZone.value = undefined;
 
-  if (detectionZones.value) {
-    detectionZones.value.length = 0;
+  if (polygons.value) {
+    polygons.value.length = 0;
     coords.value = [];
     nextTick(() => {
       clearDraggies();
@@ -996,11 +1231,11 @@ function resetHandles(): void {
     const zoneIndex = parseInt(el.dataset.zoneIndex);
     const pointIndex = parseInt(el.dataset.pointIndex);
 
-    if (!detectionZones.value[zoneIndex] || !detectionZones.value[zoneIndex].points[pointIndex]) {
+    if (!polygons.value[zoneIndex] || !polygons.value[zoneIndex].points[pointIndex]) {
       return;
     }
 
-    const point = detectionZones.value[zoneIndex].points[pointIndex];
+    const point = polygons.value[zoneIndex].points[pointIndex];
 
     if (point) {
       styleHandle(el, point);
@@ -1015,11 +1250,11 @@ function clearDraggies(): void {
 }
 
 function removeHandler(coord: CoordsPosition): void {
-  if (!detectionZones.value.length || !detectionZones.value[coord.zoneIndex] || detectionZones.value[coord.zoneIndex].points.length < 4) {
+  if (!polygons.value.length || !polygons.value[coord.zoneIndex] || polygons.value[coord.zoneIndex].points.length < 4) {
     return;
   }
 
-  detectionZones.value[coord.zoneIndex].points.splice(coord.pointIndex, 1);
+  polygons.value[coord.zoneIndex].points.splice(coord.pointIndex, 1);
 
   updateCoordinatesFromZones();
   nextTick(() => {
@@ -1210,6 +1445,11 @@ async function onConfirm(): Promise<void | null> {
       zoneData: detectionZones.value,
     });
 
+    await patchCameraAlertZones({
+      cameraname: cameraName.value,
+      zoneData: alertZones.value,
+    });
+
     await patchCameraLines({
       cameraname: cameraName.value,
       lineData: detectionLines.value,
@@ -1240,12 +1480,12 @@ watch(selectedAction, () => {
 });
 
 watch(selectedZone, (newZone, oldZone) => {
-  if (newZone === -1 && detectionZones.value?.length && detectionZones.value[oldZone]) {
+  if (newZone === -1 && polygons.value?.length && polygons.value[oldZone]) {
     selectedZone.value = oldZone;
     return;
   }
 
-  if (newZone === -1 && detectionZones.value?.length) {
+  if (newZone === -1 && polygons.value?.length) {
     selectedAction.value = 0;
   }
 });
@@ -1260,6 +1500,15 @@ watch(
 );
 
 watch(
+  () => props.alerts,
+  () => {
+    alertZones.value = deepToRaw(props.alerts ?? []);
+    if (isAlertTab.value) updateCoordinatesFromZones();
+  },
+  { deep: true, immediate: true },
+);
+
+watch(
   () => props.lines,
   () => {
     detectionLines.value = deepToRaw(props.lines);
@@ -1269,13 +1518,26 @@ watch(
 
 watch(
   activeTab,
-  (tab) => {
-    if (tab === 'zones') {
-      if (detectionZones.value.length && (selectedZone.value < 0 || selectedZone.value >= detectionZones.value.length)) {
-        selectedZone.value = 0;
+  (tab, previous) => {
+    if (tab === 'lines') {
+      if (detectionLines.value.length && (selectedLine.value < 0 || selectedLine.value >= detectionLines.value.length)) {
+        selectedLine.value = 0;
       }
-    } else if (detectionLines.value.length && (selectedLine.value < 0 || selectedLine.value >= detectionLines.value.length)) {
-      selectedLine.value = 0;
+      return;
+    }
+
+    if (!polygons.value.length) {
+      selectedZone.value = -1;
+    } else if (selectedZone.value < 0 || selectedZone.value >= polygons.value.length) {
+      selectedZone.value = 0;
+    }
+
+    if (previous && previous !== tab) {
+      finishCustomizing(false);
+      updateCoordinatesFromZones();
+      nextTick(() => {
+        resetHandles();
+      });
     }
   },
   { immediate: true },

@@ -12,6 +12,7 @@ import { nodeDecoderPath } from '../../utils/path.js';
 import type { LogEntry } from '@camera.ui/common/logger';
 import type { PrivateChannel, Promisify } from '@camera.ui/rpc';
 import type {
+  AlertZone,
   CameraDetectionSettings,
   CameraFrameWorkerSettings,
   CameraInput,
@@ -192,7 +193,17 @@ export class FrameWorker extends Subscribed {
   private setupEventListeners(): void {
     this.addSubscriptions(
       this.camera
-        .onPropertyChange(['name', 'sources', 'detectionSettings', 'ptzAutotrack', 'detectionZones', 'detectionLines', 'frameWorkerSettings', 'interfaceSettings'])
+        .onPropertyChange([
+          'name',
+          'sources',
+          'detectionSettings',
+          'ptzAutotrack',
+          'detectionZones',
+          'alertZones',
+          'detectionLines',
+          'frameWorkerSettings',
+          'interfaceSettings',
+        ])
         .subscribe(({ property, newData, oldData }) => {
           if (this.status !== PLUGIN_STATUS.STARTED) {
             return;
@@ -250,6 +261,11 @@ export class FrameWorker extends Subscribed {
 
           if (property === 'detectionZones') {
             this.pushChildUpdate('zones', this.frameWorkerChildProxy.updateZones(newData as DetectionZone[]));
+            return;
+          }
+
+          if (property === 'alertZones') {
+            this.pushChildUpdate('alert zones', this.frameWorkerChildProxy.updateAlertZones(newData as AlertZone[]));
             return;
           }
 
@@ -443,6 +459,7 @@ export class FrameWorker extends Subscribed {
         controllerSnapshotSourceId: this.getControllerSnapshotSourceId(),
         availableSources,
         zones: this.camera.detectionZones,
+        alertZones: this.camera.alertZones,
         lines: this.camera.detectionLines,
         detectionSettings: this.camera.detectionSettings,
         ptzAutotrack: this.camera.ptzAutotrack,

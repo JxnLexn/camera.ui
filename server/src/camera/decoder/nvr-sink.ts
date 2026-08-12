@@ -39,7 +39,7 @@ export function leanEvent(event: RecordedEvent): DetectionEvent {
     ...rest,
     segments: segments.map(({ thumbnailAt: _segAt, detections, attributes, ...segment }) => ({
       ...segment,
-      detections: detections.map(({ box: _box, trackId: _trackId, ...detection }) => detection),
+      detections: detections.map(({ box: _box, trackId: _trackId, zones: _zones, ...detection }) => detection),
       attributes: attributes
         .filter((attribute) => attribute.type !== 'clip')
         .map(({ parentTrackId: _parent, embedding: _e, embeddingModel: _em, clipEmbedding: _c, clipEmbeddingModel: _cm, ...attribute }) => attribute),

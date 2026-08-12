@@ -635,6 +635,7 @@ export default {
       zones_empty: 'Noch keine Zonen oder Linien an dieser Kamera.',
       zone_entry_zone: 'Zone',
       zone_entry_privacy_mask: 'Ignorierte Zone',
+      zone_entry_alert: 'Alarmzone',
       zone_entry_line: 'Linienüberquerung',
       zone_entry_delete: 'Löschen',
       zone_entry_delete_confirm: 'Sind Sie sicher, dass Sie diesen Eintrag löschen möchten?',
@@ -1590,9 +1591,20 @@ export default {
       base_labels: 'Basis',
       labels_info: 'Die Zone gilt nur für die gewählten Labels, nicht gewählte passieren sie ungefiltert. Leer heißt alle.',
       line_labels_info: 'Nur die gewählten Labels lösen diese Linie aus. Leer heißt alle.',
+      alert_labels_info: 'Die gewählten Typen benachrichtigen nur, solange sie in dieser Zone sind. Nicht gewählte Typen benachrichtigen an dieser Kamera nicht mehr.',
+      alert_match: 'Gilt als drin, wenn',
+      alert_match_anchor: 'Das Objekt in der Zone steht',
+      alert_match_intersect: 'Das Objekt die Zone berührt',
+      alert_match_contain: 'Das Objekt ganz drin ist',
+      alert_zones_hint:
+        'Alarmzonen ändern nichts an Erkennung und Aufnahme. Solange eine Kamera eine hat, benachrichtigt sie nur noch für die hier gewählten Typen, und nur aus der Zone heraus. Für einen Typ, der überall melden soll, eine Zone übers ganze Bild zeichnen.',
+      zones_hint:
+        'Zonen entscheiden, wo Erkennung zählt. Eine Include-Zone behält ihre Labels nur darin, eine Exclude-Zone verwirft sie dort, eine ignorierte Zone verwirft alles darin.',
+      lines_hint: 'Eine Linie meldet Objekte, die sie in der gewählten Richtung überqueren. Sie filtert die Erkennung nicht.',
       edit_zones: 'Zonen bearbeiten',
       zone: 'Zone',
       tab_zones: 'Zonen',
+      tab_alerts: 'Alarmzonen',
       tab_lines: 'Linien',
     },
   },
@@ -1744,6 +1756,9 @@ export default {
       info_active: 'Anteil der letzten Minute mit Bewegung oder Events auf dieser Kamera.',
       info_detections: 'Gefundene Objekte, Gesichter und Kennzeichen der letzten Minute.',
       info_external: 'Die Kamera stößt die Erkennung selbst an, Bilder werden nur bei Bedarf analysiert. Werte erscheinen, während das läuft.',
+      info_average: 'In der letzten Minute gab es nichts zu messen, daher der Durchschnitt seit dem Start der Kamera.',
+      cameras_hint:
+        'Die Werte gelten für die letzte Minute. Ein ~ steht für den Durchschnitt seit dem Start der Kamera, wenn in der letzten Minute nichts zu messen war.',
       info_fps_low: 'Wie viele Bilder pro Sekunde auf dem kleinen Stream auf Bewegung und Objekte geprüft werden. Läuft rund um die Uhr.',
       info_fps_main:
         'Wie schnell der hochauflösende Stream analysiert wurde, während etwas los war. Bleibt -, wenn die Kamera im Leerlauf ist oder die Hauptstream-Analyse aus ist. Eine 0 trotz Aktivität heißt, das Dekodieren schlägt fehl.',

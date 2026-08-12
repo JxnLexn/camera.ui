@@ -75,6 +75,7 @@ async function onSave() {
     type: cameraData.type,
     isCloud: false,
     detectionZones: [],
+    alertZones: [],
     detectionLines: [],
     detectionSettings: {
       motion: {

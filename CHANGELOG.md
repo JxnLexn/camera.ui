@@ -8,9 +8,19 @@ All notable changes to this project will be documented in this file.
 
 - **Cameras can limit which object types get detected.** A new label picker in the camera's object detection settings drops unwanted types entirely, on the frame worker as well as for camera-reported objects. Empty means all.
 
+- **Alert zones: detect everywhere, get notified only where it matters.** The zone editor has a third tab: draw a zone, pick the object types it should alert on, and those types only push while they are inside it. Detection and recording stay untouched, so the road keeps landing on the timeline while only the driveway rings your phone. Needs the camera-ui-nvr plugin update.
+
+- **Android pushes animate now.** With Video in Push on, the expanded notification cycles through frames of the clip, an episode push shows the camera switches of the whole story. Needs the Android app update.
+
 ### Changed
 
 - **A zone now only applies to the labels selected on it.** Labels you deselect pass that zone unfiltered instead of being blocked across the whole image. This fixes zones silently disabling other detections: an exclude zone no longer kills the remaining labels everywhere, package detection survives having zones, and camera-side motion sensors work again next to an object-only zone. To drop an object type completely, use the new label picker in the camera settings.
+
+### Fixed
+
+- **Updating the desktop app from inside the app works on Windows again.** The Update button in the system settings brought up the splash and then sat on "Starting…" forever, and the update only went through after closing and reopening camera.ui. It installs right away now.
+
+- **Filtered recordings stay filtered when new events come in.** A live event no longer jumps to the top of the recordings list when it doesn't match the active filter.
 
 ## [2.1.6]
 

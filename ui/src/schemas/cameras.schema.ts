@@ -1,6 +1,7 @@
 import {
   createCameraBaseSchema as _createCameraBaseSchema,
   createCameraSchema as _createCameraSchema,
+  alertZoneSchema,
   allowedSourceProtocols,
   detectionLineSchema,
   detectionZoneSchema,
@@ -68,6 +69,7 @@ export const createCameraSchema = zod
 export const cameraCreateSchema = createCameraSchema;
 export const cameraPatchSchema = patchCameraSchema;
 export const cameraCreatePatchZones = detectionZoneSchema;
+export const cameraCreatePatchAlertZones = alertZoneSchema;
 export const cameraCreatePatchLines = detectionLineSchema;
 
 export type CreateCameraInput = zod.output<typeof _createCameraSchema>;
@@ -75,4 +77,5 @@ export type PreviewCameraInput = zod.output<typeof previewCameraSchema>;
 export type PatchCameraInput = zod.output<typeof patchCameraSchema>;
 export type PatchExtensionsInput = zod.output<typeof patchStorageSchema>;
 export type CreatePatchCameraZone = zod.output<typeof detectionZoneSchema>;
+export type CreatePatchCameraAlertZone = zod.output<typeof alertZoneSchema>;
 export type CreatePatchCameraLine = zod.output<typeof detectionLineSchema>;
