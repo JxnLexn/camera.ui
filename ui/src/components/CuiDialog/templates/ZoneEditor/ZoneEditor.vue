@@ -232,7 +232,12 @@
               </div>
 
               <div class="flex flex-col field-gap w-full">
-                <label :for="`line[${selectedLine}].labels`" class="cui-label">{{ $t('components.form.label.labels') }}</label>
+                <label :for="`line[${selectedLine}].labels`" class="cui-label inline-flex items-center gap-1">
+                  {{ $t('components.form.label.labels') }}
+                  <span v-tooltip="{ value: $t('components.zone_editor.line_labels_info') }" class="inline-flex shrink-0">
+                    <i-mdi:information-outline class="w-3.5 h-3.5 text-muted-color" />
+                  </span>
+                </label>
                 <InputGroup>
                   <MultiSelect
                     :model-value="detectionLines[selectedLine]?.labels"
@@ -337,7 +342,12 @@
               </div>
 
               <div class="flex flex-col field-gap w-full">
-                <label :for="`zone[${selectedZone}].labels`" class="cui-label">{{ $t('components.form.label.labels') }}</label>
+                <label :for="`zone[${selectedZone}].labels`" class="cui-label inline-flex items-center gap-1">
+                  {{ $t('components.form.label.labels') }}
+                  <span v-tooltip="{ value: $t('components.zone_editor.labels_info') }" class="inline-flex shrink-0">
+                    <i-mdi:information-outline class="w-3.5 h-3.5 text-muted-color" />
+                  </span>
+                </label>
                 <InputGroup>
                   <MultiSelect
                     :model-value="detectionZones[selectedZone]?.labels"

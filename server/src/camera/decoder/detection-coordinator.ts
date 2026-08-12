@@ -721,6 +721,13 @@ export class DetectionCoordinator {
     return result;
   }
 
+  private filterAllowedObjectLabels<T extends { label: string }>(detections: T[]): T[] {
+    const allowed = this.config.detectionSettings.object.labels;
+    if (!allowed || allowed.length === 0 || detections.length === 0) return detections;
+    const set = new Set<string>(allowed.map((label) => label.toLowerCase()));
+    return detections.filter((detection) => set.has(detection.label.toLowerCase()));
+  }
+
   private applyExternalDetectionFilters(sensorType: SensorType, properties: Record<string, unknown>): Record<string, unknown> {
     const raw = properties.detections;
     if (!Array.isArray(raw) || raw.length === 0) return properties;
@@ -737,6 +744,8 @@ export class DetectionCoordinator {
         filtered = this.pipeline.runZoneFilterWithLabel(detections as LicensePlateDetection[], 'vehicle');
         break;
       case SensorType.Object:
+        filtered = this.pipeline.runZoneFilter(this.filterAllowedObjectLabels(detections as Detection[]));
+        break;
       case SensorType.Classifier:
       case SensorType.Motion:
         filtered = this.pipeline.runZoneFilter(detections as Detection[]);
@@ -1289,7 +1298,7 @@ export class DetectionCoordinator {
           // run the pipeline even on empty frames so Norfair advances its
           // Kalman state; the pose delta keeps predictions stable across pans
           const poseDelta = this.ptzAutotracker.consumePoseDelta();
-          const detected = FrameScaler.undoLetterbox(ensureDetectionBoxes(result.detections), objectFrame.geometry);
+          const detected = this.filterAllowedObjectLabels(FrameScaler.undoLetterbox(ensureDetectionBoxes(result.detections), objectFrame.geometry));
           const pipelineResult = this.pipeline.process(detected, poseDelta);
           // the tick that opens a span analysed the low stream (the switch lands
           // next tick), its picture work is worth a one-off HQ decode
@@ -1774,7 +1783,7 @@ export class DetectionCoordinator {
       this.perf.inferMs += Date.now() - inferStart;
       this.perf.inferCount++;
       const reportedLabels = new Set(reported.map((d) => d.label.toLowerCase()));
-      const boxed = FrameScaler.undoLetterbox(ensureDetectionBoxes(result?.detections ?? []), scaled.geometry);
+      const boxed = this.filterAllowedObjectLabels(FrameScaler.undoLetterbox(ensureDetectionBoxes(result?.detections ?? []), scaled.geometry));
       const found = boxed.filter((d) => reportedLabels.size === 0 || reportedLabels.has(d.label.toLowerCase()));
       if (found.length === 0) return { detections: reported, assisted: false };
       this.perf.objects += found.length;

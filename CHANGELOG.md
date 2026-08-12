@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.1.7]
+
+### Added
+
+- **Cameras can limit which object types get detected.** A new label picker in the camera's object detection settings drops unwanted types entirely, on the frame worker as well as for camera-reported objects. Empty means all.
+
+### Changed
+
+- **A zone now only applies to the labels selected on it.** Labels you deselect pass that zone unfiltered instead of being blocked across the whole image. This fixes zones silently disabling other detections: an exclude zone no longer kills the remaining labels everywhere, package detection survives having zones, and camera-side motion sensors work again next to an object-only zone. To drop an object type completely, use the new label picker in the camera settings.
+
 ## [2.1.6]
 
 ### Added
