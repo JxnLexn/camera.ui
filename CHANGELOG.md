@@ -6,6 +6,8 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
+- **Pushes play video now.** Turn on "Video in Push" for a camera and its pushes carry a short clip of the recording instead of just a picture: the iPhone plays it right in the notification, the in-app notification opens with a player, Android keeps the picture and jumps into the clip on tap. An episode push plays the whole story, switching cameras exactly like the episode player; the episode settings pick when (off, following the camera settings, or always). The clip streams from your own server and stays end-to-end encrypted like the rest of the push, the cloud never sees a frame. Uses the lowest recorded quality, off by default. Needs the camera-ui-nvr plugin update and the app update.
+
 - **The cameras page is there for every user.** Users get the camera list with a tap straight to each camera, on the phone as the fifth tab. Discovery, adding and camera settings stay with admins.
 
 ### Changed
