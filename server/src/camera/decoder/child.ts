@@ -29,6 +29,7 @@ const ignorableLogMessages = [
   'First slice in a frame missing',
   'non-existing SPS',
   'non-existing PPS',
+  'Failed to send close message', // Windows tls
 ];
 
 @RPCClass
