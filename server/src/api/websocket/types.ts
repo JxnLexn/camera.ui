@@ -11,6 +11,23 @@ export interface SocketNspMap {
 
 export type ProcessType = 'system' | 'core' | 'frameworker' | 'plugin';
 
+export interface WorkerPerfStats {
+  lowFps: number;
+  mainFps: number;
+  mainStreamEnabled: boolean;
+  frameAnalysis: boolean;
+  activePercent: number;
+  decodeMs: number;
+  scaleMs: number;
+  jpegMs: number;
+  inferMs: number;
+  secondaryMs: number;
+  objects: number;
+  faces: number;
+  plates: number;
+  switches: number;
+}
+
 export interface ProcessInfo {
   name: string;
   pid?: number;
@@ -18,6 +35,7 @@ export interface ProcessInfo {
   memLoad: string;
   type: ProcessType;
   timestamp: number;
+  perf?: WorkerPerfStats;
 }
 
 export interface ServerProcessInfo {

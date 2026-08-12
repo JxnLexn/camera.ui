@@ -8,6 +8,7 @@ interface TableHeaderBase {
   field: string | ((item: any) => string);
   name?: ColumnProps['header'];
   altName?: ColumnProps['header'];
+  headerTooltip?: string;
   props?: HTMLAttributes;
   columnProps?: ColumnProps;
 }
@@ -50,6 +51,7 @@ export interface TableHeaderCategory extends TableHeaderBase {
   asChip?: boolean;
   chipProps?: ChipProps;
   suffix?: string;
+  tooltip?: (item: any) => string | undefined;
 }
 
 export type TableHeader = TableHeaderCategory | TableHeaderAction | TableHeaderChart | TableHeaderIndicator;

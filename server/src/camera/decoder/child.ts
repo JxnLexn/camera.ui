@@ -16,7 +16,7 @@ import type { PrivateChannel, RPCClient } from '@camera.ui/rpc';
 import type { CameraDetectionSettings, CameraFrameWorkerSettings, CameraUiSettings, DetectionLine, DetectionZone, PtzAutotrackSettings } from '@camera.ui/sdk';
 import type { CoreManagerNamespaces, FrameWorkerNamespaces } from '../../rpc/namespaces.js';
 import type { DetectionCoordinatorConfig } from './detection-coordinator.js';
-import type { WorkerToMainMessage } from './types.js';
+import type { FrameWorkerPerfSnapshot, WorkerToMainMessage } from './types.js';
 
 const ignorableLogMessages = [
   'vt decoder cb: output image buffer is null',
@@ -149,6 +149,11 @@ export class FrameWorkerChild {
   public updateCameraName(name: string): void {
     this.logger.suffix = name;
     process.title = `camera.ui - Frame Worker [${name}]${REMOTE_SUFFIX}`;
+  }
+
+  @RPCMethod
+  public getPerfSnapshot(): FrameWorkerPerfSnapshot | null {
+    return this.detectionCoordinator?.getPerfSnapshot() ?? null;
   }
 
   private async onStart(): Promise<void> {

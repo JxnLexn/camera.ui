@@ -5,10 +5,11 @@ import { container } from 'tsyringe';
 import type { Namespace, Server, Socket } from 'socket.io';
 import type { Systeminformation } from 'systeminformation';
 import type { CameraUiAPI } from '../../../api.js';
+import type { FrameWorkerPerfSnapshot } from '../../../camera/decoder/types.js';
 import type { Go2Rtc } from '../../../go2rtc/index.js';
 import type { PluginManager } from '../../../plugins/index.js';
 import type { NATS } from '../../../rpc/server.js';
-import type { AllProcesses, ProcessInfo, ProcessType, ServerProcesses, SocketNsp, WorkerProcesses } from '../types.js';
+import type { AllProcesses, ProcessInfo, ProcessType, ServerProcesses, SocketNsp, WorkerPerfStats, WorkerProcesses } from '../types.js';
 
 export class MetricsNamespace {
   public nsp: Namespace;
@@ -38,6 +39,8 @@ export class MetricsNamespace {
     system: null,
     processes: null,
   };
+
+  private workerPerf: Record<string, WorkerPerfStats> = {};
 
   constructor(io: Server) {
     this.api = container.resolve<CameraUiAPI>('api');
@@ -70,11 +73,15 @@ export class MetricsNamespace {
 
   private setupIntervals(): void {
     setInterval(async () => {
+      await this.refreshWorkerPerf();
+
       let processData = this.realtimeData.processes;
       let systemData = this.realtimeData.system;
 
       if (!processData || !systemData) {
         [processData, systemData] = await Promise.all([this.collectProcessData(), this.getSystemLoad()]);
+      } else {
+        processData = this.withWorkerPerf(processData);
       }
 
       this.updateHistory(processData, systemData);
@@ -99,7 +106,55 @@ export class MetricsNamespace {
     this.collectInitialData();
   }
 
+  private async refreshWorkerPerf(): Promise<void> {
+    const controllers = this.api.getCameras();
+    const next: Record<string, WorkerPerfStats> = {};
+
+    await Promise.all(
+      controllers.map(async (controller) => {
+        const snapshot = await controller.frameWorker.getPerfSnapshot();
+        if (snapshot && snapshot.elapsedMs > 0) {
+          next[controller.frameWorker.name] = this.derivePerfStats(snapshot);
+        }
+      }),
+    );
+
+    this.workerPerf = next;
+  }
+
+  private derivePerfStats(snapshot: FrameWorkerPerfSnapshot): WorkerPerfStats {
+    const seconds = snapshot.elapsedMs / 1000;
+    const perUnit = (total: number, count: number) => (count > 0 ? Math.round((total / count) * 10) / 10 : 0);
+    const perSecond = (count: number) => Math.round((count / seconds) * 10) / 10;
+    const activeSeconds = snapshot.ticks > 0 ? seconds * (snapshot.activeTicks / snapshot.ticks) : 0;
+
+    return {
+      lowFps: perSecond(snapshot.ticks),
+      mainFps: activeSeconds > 0 ? Math.round((snapshot.mainFrames / activeSeconds) * 10) / 10 : 0,
+      mainStreamEnabled: snapshot.mainStreamEnabled,
+      frameAnalysis: snapshot.frameAnalysis,
+      activePercent: snapshot.ticks > 0 ? Math.round((snapshot.activeTicks / snapshot.ticks) * 100) : 0,
+      decodeMs: perUnit(snapshot.decodeMs, snapshot.mainFrames),
+      scaleMs: perUnit(snapshot.scaleMs, snapshot.ticks),
+      jpegMs: perUnit(snapshot.jpegMs, snapshot.activeTicks),
+      inferMs: perUnit(snapshot.inferMs, snapshot.inferCount),
+      secondaryMs: perUnit(snapshot.secondaryMs, snapshot.activeTicks),
+      objects: snapshot.objects,
+      faces: snapshot.faces,
+      plates: snapshot.plates,
+      switches: snapshot.switches,
+    };
+  }
+
+  private withWorkerPerf(processData: AllProcesses): AllProcesses {
+    const workers = Object.fromEntries(
+      Object.entries(processData.workers).map(([name, info]) => [name, this.workerPerf[name] ? { ...info, perf: this.workerPerf[name] } : info]),
+    );
+    return { ...processData, workers };
+  }
+
   private async collectInitialData(): Promise<void> {
+    await this.refreshWorkerPerf();
     const [processData, systemData] = await Promise.all([this.collectProcessData(), this.getSystemLoad()]);
 
     this.updateHistory(processData, systemData);
@@ -142,7 +197,11 @@ export class MetricsNamespace {
       cameraControllers
         .map((controller) => {
           const proc = processList.find((p) => p.pid === controller.frameWorker.getPID());
-          return proc ? [controller.frameWorker.name, createProcessInfo(proc, controller.frameWorker.name, 'frameworker')] : null;
+          if (!proc) return null;
+          const name = controller.frameWorker.name;
+          const info = createProcessInfo(proc, name, 'frameworker');
+          if (this.workerPerf[name]) info.perf = this.workerPerf[name];
+          return [name, info];
         })
         .filter((entry): entry is [string, ProcessInfo] => entry !== null),
     );

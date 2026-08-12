@@ -7,7 +7,7 @@ import { normalizeZone } from '../utils/filter.js';
 import { AudioDetectionLoop } from './audio-loop.js';
 import { CascadeManager } from './cascade-manager.js';
 import { detectionRecord } from './debug/detection-record.js';
-import { PerfTracker } from './debug/perf-tracker.js';
+import { PerfTracker } from './perf-tracker.js';
 import { DetectionPipeline } from './detection-pipeline.js';
 import { DwellManager } from './dwell-manager.js';
 import { DetectionEventManager, MOMENT_RANK_ATTRIBUTE, MOMENT_RANK_OBJECT } from './event-manager.js';
@@ -58,7 +58,7 @@ import type { LetterboxGeometry } from './frame-scaler.js';
 import type { CropWindow, MomentFormatName, MomentTarget } from './moment-crop.js';
 import type { RegisteredPlugin } from './plugin-registry.js';
 import type { FrameSourceConfig } from './sources/frame-source.js';
-import type { CoordinatorSourceUrl } from './types.js';
+import type { CoordinatorSourceUrl, FrameWorkerPerfSnapshot } from './types.js';
 
 export interface DetectionCoordinatorConfig {
   cameraId: string;
@@ -302,6 +302,10 @@ export class DetectionCoordinator {
 
   public get detectionSettings(): CameraDetectionSettings {
     return this.config.detectionSettings;
+  }
+
+  public getPerfSnapshot(): FrameWorkerPerfSnapshot {
+    return { ...this.perf.snapshot(), mainStreamEnabled: this.mainStreamAvailable, frameAnalysis: this.plugins.shouldVideoBeActive() };
   }
 
   public updateZones(zones: DetectionZone[]): void {
@@ -1081,7 +1085,8 @@ export class DetectionCoordinator {
           }
 
           this.updateStreamState();
-          if (this.mainStreamActive) this.perf.activeTicks++;
+          // activity, not stream choice: cameras without main-stream analysis still count as active
+          if (this.worldSpans.size > 0 || this.eventManager.hasActiveSegment()) this.perf.activeTicks++;
           else this.perf.idleTicks++;
           this.perf.report(this.logger);
 
@@ -1223,6 +1228,7 @@ export class DetectionCoordinator {
           const motionInferStart = Date.now();
           const result = await motionPlugin.proxy.detectMotion(motionFrame);
           this.perf.inferMs += Date.now() - motionInferStart;
+          this.perf.inferCount++;
           if (!this.loopRunning) return;
           if (ptzSuppressed) {
             // fed for the background model only, results discarded: frame-diff
@@ -1275,6 +1281,7 @@ export class DetectionCoordinator {
             `Object detection timed out after ${DETECT_TIMEOUT_MS}ms`,
           );
           this.perf.inferMs += Date.now() - inferStart;
+          this.perf.inferCount++;
           if (!this.loopRunning) return;
 
           this.trackDetectionCadence();
@@ -1762,11 +1769,15 @@ export class DetectionCoordinator {
     if (!scaled) return { detections: reported, assisted: false };
 
     try {
+      const inferStart = Date.now();
       const result = await PromiseTimeout(assist.proxy.detectObjects(scaled.model), DETECT_TIMEOUT_MS, undefined, `Object assist timed out after ${DETECT_TIMEOUT_MS}ms`);
+      this.perf.inferMs += Date.now() - inferStart;
+      this.perf.inferCount++;
       const reportedLabels = new Set(reported.map((d) => d.label.toLowerCase()));
       const boxed = FrameScaler.undoLetterbox(ensureDetectionBoxes(result?.detections ?? []), scaled.geometry);
       const found = boxed.filter((d) => reportedLabels.size === 0 || reportedLabels.has(d.label.toLowerCase()));
       if (found.length === 0) return { detections: reported, assisted: false };
+      this.perf.objects += found.length;
       return { detections: found, assisted: true };
     } catch (error) {
       if (isNoRespondersError(error)) return { detections: reported, assisted: false };

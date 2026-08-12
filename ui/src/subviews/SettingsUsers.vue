@@ -86,6 +86,61 @@
           </template>
         </Card>
       </div>
+
+      <div>
+        <span class="card-title">{{ $t('views.settings.logged_in_users') }}</span>
+        <Card class="cui-card">
+          <template #content>
+            <CuiDataTable :value="sessions" :loading="sessionsLoading" :pt="tablePtOptions" striped-rows scrollable>
+              <template #loading>
+                <ProgressSpinner class="w-[30px] h-[30px] m-0" stroke-width="5" />
+              </template>
+
+              <Column field="status" :header="''" style="width: 3rem">
+                <template #body="{ data }">
+                  <div class="flex items-center justify-center">
+                    <Badge
+                      v-tooltip="{ value: data.is_current ? $t('components.user_table.you') : undefined }"
+                      :style="{ background: data.is_current ? 'var(--primary-500)' : 'transparent' }"
+                    />
+                  </div>
+                </template>
+              </Column>
+              <Column field="device.name" :header="$t('components.user_table.title_device')">
+                <template #body="{ data }">
+                  <span class="font-medium block max-w-[200px] truncate">{{ data.device.name }}</span>
+                </template>
+              </Column>
+              <Column field="device.ip" :header="$t('components.user_table.title_address')">
+                <template #body="{ data }">
+                  {{ data.device.ip ?? '-' }}
+                </template>
+              </Column>
+              <Column field="device.kind" :header="$t('components.user_table.title_kind')" />
+              <Column field="action" class="text-right">
+                <template #body="{ data }">
+                  <Button
+                    v-tooltip="{ value: $t('views.settings.active_sessions.revoke') }"
+                    severity="danger"
+                    text
+                    rounded
+                    :loading="revokeLoading"
+                    class="cui-icon-md"
+                    @click="revokeSession({ id: data.id })"
+                  >
+                    <template #icon>
+                      <i-mdi:logout width="100%" height="100%" />
+                    </template>
+                  </Button>
+                </template>
+              </Column>
+              <template #empty>
+                <span class="text-muted text-sm">{{ $t('views.settings.no_sessions') }}</span>
+              </template>
+            </CuiDataTable>
+          </template>
+        </Card>
+      </div>
     </div>
 
     <CuiMenu
@@ -107,6 +162,7 @@ import { FilterMatchMode } from '@primevue/core/api';
 import TrashIcon from '~icons/mdi/delete';
 import EditIcon from '~icons/mdi/account-edit';
 
+import { AuthQuery } from '@/api/routes/auth.js';
 import { UsersQuery } from '@/api/routes/users.js';
 import UserFormDialog from '@/components/CuiDialog/templates/UserForm/UserForm.vue';
 import CuiMenu from '@/components/CuiMenu/CuiMenu.vue';
@@ -117,6 +173,7 @@ import type { PassThrough } from '@primevue/core';
 import type { DBUser, PaginationQuery } from '@shared/types';
 import type { DataTableFilterMeta, DataTablePassThroughOptions } from 'primevue';
 
+const authQuery = new AuthQuery();
 const usersQuery = new UsersQuery();
 
 const dialog = useCuiDialog();
@@ -124,9 +181,12 @@ const { mdBreakpoint } = useSharedCuiBreakpoint();
 const { t } = useI18n();
 
 const pagination = ref<PaginationQuery>({ pageSize: 15, page: 1 });
+const sessionsPagination = ref<PaginationQuery>({ page: 1, pageSize: -1 });
 
 const { data: users, isBusy: usersLoading } = usersQuery.getUsersQuery(pagination);
 const { mutate: removeUser, isPending: removeLoading } = usersQuery.removeUserQuery();
+const { data: userSessions, isBusy: tokensLoading } = authQuery.listAllSessionsQuery(sessionsPagination);
+const { mutate: revokeSession, isPending: revokeLoading } = authQuery.revokeSessionQuery();
 
 const tablePtOptions: PassThrough<DataTablePassThroughOptions> = {
   bodyRow: {
@@ -145,6 +205,9 @@ const filters = ref<DataTableFilterMeta>({
 const menuRef = useTemplateRef<InstanceType<typeof CuiMenu>>('menuRef');
 
 const isLoading = computed(() => usersLoading.value || removeLoading.value);
+
+const sessions = computed(() => userSessions.value ?? []);
+const sessionsLoading = computed(() => Boolean(tokensLoading.value));
 
 const items = computed<MenuItem[]>(() => {
   return [

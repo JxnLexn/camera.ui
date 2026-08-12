@@ -45,8 +45,8 @@ import RecordingsIcon from '~icons/mingcute/photo-album-line';
 import SettingsSystemIconActive from '~icons/mingcute/settings-2-fill';
 import SettingsSystemIcon from '~icons/mingcute/settings-2-line';
 import MenuIcon from '~icons/proicons/grid-dots';
-import AdminpanelIconActive from '~icons/solar/graph-bold';
-import AdminpanelIcon from '~icons/solar/graph-outline';
+import MetricsIconActive from '~icons/solar/graph-bold';
+import MetricsIcon from '~icons/solar/graph-outline';
 import PluginsIcon from '~icons/tabler/puzzle';
 import PluginsIconActive from '~icons/tabler/puzzle-filled';
 
@@ -66,7 +66,7 @@ const Recordings = () => import('@/views/Recordings.vue');
 const Faces = () => import('@/views/Faces.vue');
 const Plugins = () => import('@/views/Plugins.vue');
 const Plugin = () => import('@/views/Plugin.vue');
-const Adminpanel = () => import('@/views/Adminpanel.vue');
+const Metrics = () => import('@/views/Metrics.vue');
 const Config = () => import('@/views/Config.vue');
 const Logs = () => import('@/views/Logs.vue');
 const Terminal = () => import('@/views/Terminal.vue');
@@ -476,11 +476,11 @@ export const routes: RouteRecordRaw[] = [
     },
   },
   {
-    name: 'Adminpanel',
-    path: '/admin',
-    component: Adminpanel,
+    name: 'Metrics',
+    path: '/metrics',
+    component: Metrics,
     meta: {
-      name: 'adminpanel',
+      name: 'metrics',
       auth: {
         requiresAuth: true,
         role: 'admin',
@@ -499,17 +499,21 @@ export const routes: RouteRecordRaw[] = [
         position: 'bottom',
         group: 'system',
         icon: {
-          default: AdminpanelIcon,
-          active: AdminpanelIconActive,
+          default: MetricsIcon,
+          active: MetricsIconActive,
         },
       },
       menu: {
         icon: {
-          default: AdminpanelIcon,
-          active: AdminpanelIconActive,
+          default: MetricsIcon,
+          active: MetricsIconActive,
         },
       },
     },
+  },
+  {
+    path: '/admin',
+    redirect: '/metrics',
   },
   {
     name: 'Config',
@@ -1134,7 +1138,7 @@ const landingPages = [
   '/terminal',
   '/instances',
   '/workers',
-  '/admin',
+  '/metrics',
 ];
 
 function serverRunsInElectron(): boolean {
@@ -1174,7 +1178,7 @@ function getTransitionInfo(path: string): { group: string; key: string; ignore?:
   if (p.startsWith('/plugins/')) return { group: 'menu', key: 'plugin-detail', depth: 2 };
   if (p === '/settings') return { group: 'menu', key: 'settings', depth: 1 };
   if (p.startsWith('/settings/')) return { group: 'menu', key: 'settings-detail', depth: 2 };
-  if (p === '/admin') return { group: 'menu', key: 'admin', depth: 1 };
+  if (p === '/metrics') return { group: 'menu', key: 'metrics', depth: 1 };
   if (p === '/config') return { group: 'menu', key: 'config', depth: 1 };
   if (p === '/console') return { group: 'menu', key: 'console', depth: 1 };
   if (p === '/terminal') return { group: 'menu', key: 'terminal', depth: 1 };

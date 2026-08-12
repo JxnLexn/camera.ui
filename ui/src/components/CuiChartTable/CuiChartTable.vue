@@ -17,7 +17,12 @@
             <thead>
               <tr>
                 <th v-for="(header, i) in headers" :key="i" :class="header.columnProps?.headerClass" class="p-2 h-7 min-h-7 max-h-7 text-sm">
-                  {{ header.name ?? '' }}
+                  <div class="flex items-center gap-1">
+                    <span>{{ header.name ?? '' }}</span>
+                    <span v-if="header.headerTooltip" v-tooltip="{ value: header.headerTooltip }" class="inline-flex shrink-0">
+                      <i-mdi:information-outline class="w-3.5 h-3.5 text-muted-color" />
+                    </span>
+                  </div>
                 </th>
                 <th ref="endMarker" class="w-0 p-0 m-0" />
               </tr>
@@ -35,7 +40,7 @@
                     <Badge v-tooltip="{ value: header.tooltip?.(data) }" :style="{ background: header.color?.(data) ?? 'gray' }" />
                   </div>
 
-                  <div v-else-if="isHeaderCategory(header)" v-bind="header.props">
+                  <div v-else-if="isHeaderCategory(header)" v-tooltip="{ value: header.tooltip?.(data) }" v-bind="header.props">
                     <Chip v-if="header.asChip" v-bind="header.chipProps">
                       <span>{{ header.altName ? header.altName : typeof header.field === 'string' ? data[header.field] : header.field(data) }}</span>
                       <span v-if="header.suffix">{{ header.suffix }}</span>

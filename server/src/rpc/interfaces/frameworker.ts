@@ -1,5 +1,6 @@
 import type { CameraDetectionSettings, CameraFrameWorkerSettings, CameraUiSettings, DetectionLine, DetectionZone, PtzAutotrackSettings } from '@camera.ui/sdk';
 import type { DetectionCoordinatorConfig } from '../../camera/decoder/detection-coordinator.js';
+import type { FrameWorkerPerfSnapshot } from '../../camera/decoder/types.js';
 
 export interface FrameWorkerChildInterface {
   initialize(config: DetectionCoordinatorConfig): Promise<void>;
@@ -11,4 +12,5 @@ export interface FrameWorkerChildInterface {
   updateInterfaceSettings(settings: CameraUiSettings): void;
   updateCameraName(name: string): void;
   updateNvrRpc(namespace?: string): void;
+  getPerfSnapshot(): FrameWorkerPerfSnapshot | null;
 }

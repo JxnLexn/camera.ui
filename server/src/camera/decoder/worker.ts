@@ -33,7 +33,7 @@ import type { ConfigService } from '../../services/config/index.js';
 import type { LogManager } from '../../services/logger/logManager.js';
 import type { WorkerManager } from '../../workers/manager.js';
 import type { CameraController } from '../controller.js';
-import type { CoordinatorSourceUrl, WorkerToMainMessage } from './types.js';
+import type { CoordinatorSourceUrl, FrameWorkerPerfSnapshot, WorkerToMainMessage } from './types.js';
 
 const REMOTE_START_TIMEOUT_MS = 30_000;
 
@@ -175,6 +175,18 @@ export class FrameWorker extends Subscribed {
 
   public getPID(): number {
     return this.process?.pid ?? -1;
+  }
+
+  public async getPerfSnapshot(): Promise<FrameWorkerPerfSnapshot | null> {
+    if (this.status !== PLUGIN_STATUS.STARTED) {
+      return null;
+    }
+
+    try {
+      return await this.frameWorkerChildProxy.getPerfSnapshot();
+    } catch {
+      return null;
+    }
   }
 
   private setupEventListeners(): void {

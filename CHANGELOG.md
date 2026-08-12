@@ -10,6 +10,10 @@ All notable changes to this project will be documented in this file.
 
 ### Changed
 
+- **The Adminpanel became Metrics.** Three tabs now: Overview keeps the system and process tables, Cameras shows what each camera is actually doing (decoded FPS, analyses per second, how often something is going on, inference time and the detections of the last minute), Storage holds the storage ring and the per-camera usage that used to live in the recordings settings. The recordings settings keep license and configuration only.
+
+- **The logged-in users table moved to Settings, Users.** User management and the active sessions with their sign-out button now live in one place.
+
 - **Workers say when they need an update.** An outdated worker shows the same dot on the Workers entry that the server and plugins already use.
 
 - **One push instead of a push flood with Moments on.** A camera with AI Moments no longer stacks the detection alert, the name update, the picture update and the AI summary; the AI description itself is now the camera's push. The timing sits in the camera's GenAI tab: one push per moment (default), or one per event. If the AI does not answer in time, the normal detection push arrives instead. Doorbell and alarms stay instant, and cameras without Moments keep their pushes as before. Needs the camera-ui-nvr plugin update.

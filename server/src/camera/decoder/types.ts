@@ -27,3 +27,24 @@ export interface WorkerToMainMessage {
   message: 'started';
   data: Record<string, any>;
 }
+
+export interface FrameWorkerPerfSnapshot {
+  elapsedMs: number;
+  mainStreamEnabled: boolean;
+  frameAnalysis: boolean;
+  ticks: number;
+  loopMs: number;
+  idleTicks: number;
+  activeTicks: number;
+  mainFrames: number;
+  switches: number;
+  decodeMs: number;
+  scaleMs: number;
+  jpegMs: number;
+  inferMs: number;
+  inferCount: number;
+  secondaryMs: number;
+  objects: number;
+  faces: number;
+  plates: number;
+}
