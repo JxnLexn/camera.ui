@@ -64,10 +64,10 @@
 </template>
 
 <script setup lang="ts">
-import { usePTZControl } from '@camera.ui/browser';
-import { PTZCapability, PTZProperty } from '@camera.ui/sdk';
+import { PTZProperty } from '@camera.ui/sdk';
 
 import { CUI_PTZ_CONTROL_DEFAULTS } from './types.js';
+import { useCameraPtz } from './useCameraPtz.js';
 
 import type { PTZDirection } from '@camera.ui/sdk';
 import type { CuiPTZControlEmits, CuiPTZControlProps, PTZPosition, ZoomLevel } from './types.js';
@@ -79,7 +79,7 @@ const emit = defineEmits<CuiPTZControlEmits>();
 const { cameraDevice, size } = toRefs(props);
 
 const log = useLogger();
-const { sensor: ptzSensor } = usePTZControl(cameraDevice);
+const { sensor: ptzSensor, hasZoom, hasPanTilt } = useCameraPtz(cameraDevice);
 
 const commandDebounceTime = 100; // ms - adjust based on expected network latency
 const significantChangeThreshold = 0.05; // Minimum change required to send a new command
@@ -126,14 +126,6 @@ const isControlActive = computed(() => isPanTiltActive.value || isZoomActive.val
 
 const maxZoomOffset = computed(() => (size.value === 'small' ? 45 : 60));
 const knobOffset = computed(() => (size.value === 'small' ? 10 : 15));
-const isLoading = computed(() => isCommandInProgress.value);
-
-const hasPan = computed(() => ptzSensor.value?.hasCapability(PTZCapability.Pan) ?? false);
-const hasTilt = computed(() => ptzSensor.value?.hasCapability(PTZCapability.Tilt) ?? false);
-const hasZoom = computed(() => ptzSensor.value?.hasCapability(PTZCapability.Zoom) ?? false);
-const hasPresets = computed(() => ptzSensor.value?.hasCapability(PTZCapability.Presets) ?? false);
-const hasHome = computed(() => ptzSensor.value?.hasCapability(PTZCapability.Home) ?? false);
-const hasPanTilt = computed(() => hasPan.value || hasTilt.value);
 
 function roundToTwoDecimals(value: number): number {
   return Math.round(value * 100) / 100;
@@ -492,23 +484,6 @@ function handlePointerUp(): void {
   stopMovement();
 }
 
-async function goToPreset(preset: string): Promise<void> {
-  try {
-    await ptzSensor.value?.setProperty(PTZProperty.TargetPreset, preset);
-  } catch (error) {
-    log.error('PTZ go to preset failed:', error);
-  }
-}
-
-async function goToHome(): Promise<void> {
-  try {
-    // Go to home by setting position to origin
-    await ptzSensor.value?.setProperty(PTZProperty.Position, { pan: 0, tilt: 0, zoom: 0 });
-  } catch (error) {
-    log.error('PTZ go home failed:', error);
-  }
-}
-
 onMounted(() => {
   window.addEventListener('mousemove', handleMouseMove);
   window.addEventListener('mouseup', handlePointerUp);
@@ -524,17 +499,5 @@ onUnmounted(() => {
 
   stopContinuousMovement();
   executeStop();
-});
-
-defineExpose({
-  goToPreset,
-  goToHome,
-  isLoading,
-  hasPan,
-  hasTilt,
-  hasZoom,
-  hasPresets,
-  hasHome,
-  hasPanTilt,
 });
 </script>

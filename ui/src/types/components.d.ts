@@ -292,6 +292,7 @@ declare module 'vue' {
     'IMage:microphoneMuteFill': typeof import('~icons/mage/microphone-mute-fill')['default']
     'IMajesticons:open': typeof import('~icons/majesticons/open')['default']
     'IMaterialSymbols:automation': typeof import('~icons/material-symbols/automation')['default']
+    'IMaterialSymbols:bookmarksRounded': typeof import('~icons/material-symbols/bookmarks-rounded')['default']
     'IMaterialSymbols:cameraRounded': typeof import('~icons/material-symbols/camera-rounded')['default']
     'IMaterialSymbols:check': typeof import('~icons/material-symbols/check')['default']
     'IMaterialSymbols:cloud': typeof import('~icons/material-symbols/cloud')['default']

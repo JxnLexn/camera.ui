@@ -1253,6 +1253,7 @@ export default {
       options: 'Options',
       ptz: 'PTZ',
       ptz_go_to_home: 'Go to home',
+      ptz_presets: 'Presets',
       rewind: 'Rewind 30s',
       reconnecting: 'Reconnecting...',
       refresh_snapshot: 'Refresh snapshot',

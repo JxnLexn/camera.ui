@@ -85,8 +85,64 @@
               class="absolute top-0 left-0 right-0 z-7"
               :style="{ bottom: showControl ? '48px' : '0px', transition: 'bottom 0.2s ease' }"
             >
-              <CuiPTZControl ref="ptzRef" :camera-device />
+              <CuiPTZControl :camera-device />
             </div>
+          </TransitionGroup>
+
+          <TransitionGroup tag="div" name="overlay-actions" class="absolute top-[10px] right-4 z-9 flex items-center gap-2">
+            <div v-if="showPtzToolbar" key="ptz" class="flex items-center gap-1 rounded-full bg-black/40 p-1">
+              <Button
+                v-if="hasPtzHome"
+                v-tooltip.bottom="{ value: t('components.player.ptz_go_to_home') }"
+                class="dark-mode cui-icon-lg hover:bg-black/40 active:bg-black/60"
+                rounded
+                text
+                severity="contrast"
+                :disabled="isLoading"
+                @click="goToPtzHome"
+              >
+                <template #icon>
+                  <i-material-symbols:home-rounded width="100%" height="100%" />
+                </template>
+              </Button>
+
+              <Button
+                v-if="hasPtzPresets"
+                v-tooltip.bottom="{ value: t('components.player.ptz_presets') }"
+                class="dark-mode cui-icon-lg hover:bg-black/40 active:bg-black/60"
+                rounded
+                text
+                severity="contrast"
+                :disabled="isLoading"
+                @click="ptzPresetMenuRef?.toggleMenu"
+              >
+                <template #icon>
+                  <i-material-symbols:bookmarks-rounded width="100%" height="100%" />
+                </template>
+              </Button>
+
+              <Button
+                v-tooltip.bottom="{ value: t('components.player.ptz') }"
+                class="dark-mode cui-icon-lg hover:bg-black/40 active:bg-black/60"
+                :class="{ 'bg-black/60': ptzState }"
+                rounded
+                text
+                severity="contrast"
+                :disabled="isLoading || timelineState"
+                @click="togglePtz"
+              >
+                <template #icon>
+                  <i-grommet-icons:pan width="100%" height="100%" />
+                </template>
+              </Button>
+            </div>
+
+            <i-material-symbols:info-outline
+              v-if="codecDegradedTooltip && !inStandby"
+              key="codec-degraded"
+              v-tooltip.bottom="{ value: codecDegradedTooltip }"
+              class="w-5 h-5 shrink-0 text-red-500/70 drop-shadow-md"
+            />
           </TransitionGroup>
 
           <Transition
@@ -238,23 +294,16 @@
           </VueZoomable>
 
           <div
-            v-if="!inStandby && (showCameraName || liveIndicatorOverlay || codecDegradedTooltip)"
+            v-if="!inStandby && (showCameraName || liveIndicatorOverlay)"
             class="absolute top-0 w-full p-4 flex items-center gap-2 pointer-events-none"
             :class="isDisabled ? 'z-9' : 'z-6'"
           >
             <div
               v-if="liveIndicatorOverlay"
-              class="w-[10px] h-[10px] rounded-full shadow-md"
+              class="w-[10px] h-[10px] rounded-full shadow-md shrink-0"
               :class="isDisabled ? 'bg-gray-500' : nvrPlaybackVisible ? 'bg-sky-500' : streamFinishedLoading ? 'bg-red-500' : 'bg-gray-500'"
             />
-            <div class="ml-auto flex items-center gap-2 min-w-0">
-              <span v-if="showCameraName" class="text-sm font-semibold p-2 bg-black/60 rounded-xl text-white truncate">{{ cameraName }}</span>
-              <i-material-symbols:info-outline
-                v-if="codecDegradedTooltip"
-                v-tooltip.bottom="{ value: codecDegradedTooltip }"
-                class="w-5 h-5 text-red-500/70 drop-shadow-md pointer-events-auto"
-              />
-            </div>
+            <span v-if="showCameraName" class="text-sm font-semibold p-2 bg-black/60 rounded-xl text-white truncate max-w-[60%]">{{ cameraName }}</span>
           </div>
 
           <Transition name="fade-2">
@@ -544,33 +593,6 @@
                     <i-fluent:pulse-24-filled v-else class="w-[18px] h-[18px] shrink-0" />
                     <span>{{ getCurrentActivityMode() }}</span>
                   </button>
-
-                  <button
-                    v-if="subcontrol && subcontrolPtzButton && hasPtz && controlBarLayout.ptz.inMenu"
-                    :disabled="isLoading || timelineState || nvrPlaybackVisible"
-                    class="more-menu-item"
-                    :class="{ 'more-menu-item-active': ptzState }"
-                    @click="
-                      togglePtz();
-                      morePopoverRef?.hide();
-                    "
-                  >
-                    <i-grommet-icons:pan class="w-[18px] h-[18px] shrink-0" />
-                    <span>{{ $t('components.player.ptz') }}</span>
-                  </button>
-
-                  <button
-                    v-if="ptzState && hasPtz && ptzRef?.hasHome"
-                    :disabled="isLoading || ptzRef?.isLoading || nvrPlaybackVisible"
-                    class="more-menu-item"
-                    @click="
-                      ptzRef?.goToHome();
-                      morePopoverRef?.hide();
-                    "
-                  >
-                    <i-material-symbols:home-rounded class="w-[18px] h-[18px] shrink-0" />
-                    <span>{{ $t('components.player.ptz_go_to_home') }}</span>
-                  </button>
                 </div>
               </Popover>
             </div>
@@ -764,6 +786,21 @@
         },
       }"
     ></CuiMenu>
+
+    <CuiMenu
+      ref="ptzPresetMenuRef"
+      :items="ptzPresetMenuItems"
+      @show="controlBarPopoverOpen = true"
+      @hide="controlBarPopoverOpen = false"
+      :popover="{
+        appendTo: popoverAppendTarget,
+        pt: {
+          content: {
+            class: 'p-0! rounded-xl! overflow-hidden!',
+          },
+        },
+      }"
+    ></CuiMenu>
   </div>
 </template>
 
@@ -788,6 +825,7 @@ import { enterNativePip, nativePipActive, registerAutoPipCandidate, unregisterAu
 import { randomLetter } from '@/common/utils.js';
 import ShareForm from '@/components/CuiDialog/templates/ShareForm/ShareForm.vue';
 import { GridSearchKey } from '@/components/CuiGridSearch/types.js';
+import { useCameraPtz } from '@/components/CuiPTZControl/useCameraPtz.js';
 import { isCapacitor } from '@/connection/runtime.js';
 import { maskPrivacyZones } from '@/utils/privacyMask.js';
 import { CAMERA_CARD_DEFAULTS } from './types.js';
@@ -796,7 +834,6 @@ import type CuiBBoxPlayground from '@/components/CuiBBoxPlayground/CuiBBoxPlaygr
 import type { ShareFormProps } from '@/components/CuiDialog/templates/ShareForm/types.js';
 import type CuiMenu from '@/components/CuiMenu/CuiMenu.vue';
 import type { MenuItem } from '@/components/CuiMenu/types.js';
-import type CuiPTZControl from '@/components/CuiPTZControl/CuiPTZControl.vue';
 import type { CameraActivityMode, VideoStreamingMode } from '@camera.ui/browser';
 import type { NvrPlayback } from '@camera.ui/nvr';
 import type { Detection, DetectionLabel, FaceDetection, StreamingRole, TrackedDetection } from '@camera.ui/sdk';
@@ -895,8 +932,8 @@ const showDescription = ref(false);
 
 const streamMenuRef = useTemplateRef<InstanceType<typeof CuiMenu>>('streamMenuRef');
 const castMenuRef = useTemplateRef<InstanceType<typeof CuiMenu>>('castMenuRef');
+const ptzPresetMenuRef = useTemplateRef<InstanceType<typeof CuiMenu>>('ptzPresetMenuRef');
 const detectionCanvasRef = useTemplateRef<InstanceType<typeof CuiBBoxPlayground>>('detectionCanvasRef');
-const ptzRef = useTemplateRef<InstanceType<typeof CuiPTZControl>>('ptzRef');
 const playerContainerRef = useTemplateRef('playerContainerRef');
 const nativePipMode = ref(false);
 const arBoxRef = useTemplateRef<HTMLElement>('arBoxRef');
@@ -1060,6 +1097,8 @@ const playing = computed(() => !cameraStream.paused.value);
 const isPip = computed(() => cameraStream.isPip.value);
 
 const hasPtz = computed(() => (cameraDevice.value?.hasPtz.value ?? false) && hasPermission(undefined, 'admin'));
+const { hasHome: hasPtzHome, hasPresets: hasPtzPresets, presets: ptzPresets, goToHome: goToPtzHome, goToPreset: goToPtzPreset } = useCameraPtz(cameraDevice);
+const ptzPresetMenuItems = computed<MenuItem[]>(() => ptzPresets.value.map((preset) => ({ key: preset, label: preset, onClick: () => goToPtzPreset(preset) })));
 const hasMotionDetector = computed(() => cameraDevice.value?.hasMotionSensor.value ?? false);
 const hasObjectDetector = computed(() => cameraDevice.value?.hasObjectSensor.value ?? false);
 
@@ -1112,6 +1151,9 @@ const showPlayPauseIcon = computed(() => {
   return playing.value;
 });
 const showPtz = computed(() => ptzState.value && isFullPlayer.value && hasPtz.value);
+const showPtzToolbar = computed(
+  () => showControl.value && hasPtz.value && subcontrol.value && subcontrolPtzButton.value && isFullPlayer.value && !timelineState.value && !nvrPlaybackVisible.value,
+);
 const showDetectionIndicator = computed(() => detectionIndicatorOverlay.value && hasActiveDetection.value);
 
 const arParsed = computed(() => {
@@ -1313,7 +1355,6 @@ const controlBarLayout = computed(() => {
     quality: { inline: false, inMenu: true },
     streamingMode: { inline: false, inMenu: true },
     activityMode: { inline: false, inMenu: true },
-    ptz: { inline: false, inMenu: true },
   };
 });
 
@@ -1329,8 +1370,7 @@ const hasMoreMenuItems = computed(() => {
     (l.pip.inMenu && controlPipButton.value) ||
     (l.quality.inMenu && subcontrol.value && subcontrolQualityButton.value) ||
     (l.streamingMode.inMenu && subcontrol.value && subcontrolStreamingModeButton.value) ||
-    (l.activityMode.inMenu && subcontrol.value && subcontrolActivityModeButton.value) ||
-    (l.ptz.inMenu && subcontrol.value && subcontrolPtzButton.value && hasPtz.value)
+    (l.activityMode.inMenu && subcontrol.value && subcontrolActivityModeButton.value)
   );
 });
 
@@ -2394,6 +2434,22 @@ html.cui-native-pip #video-container.native-pip .ar-box {
 </style>
 
 <style scoped>
+.overlay-actions-move,
+.overlay-actions-enter-active,
+.overlay-actions-leave-active {
+  transition: all 0.2s ease;
+}
+
+.overlay-actions-enter-from,
+.overlay-actions-leave-to {
+  opacity: 0;
+  transform: translateX(8px);
+}
+
+.overlay-actions-leave-active {
+  position: absolute;
+}
+
 .control-bar-gradient {
   position: absolute;
   bottom: 0;

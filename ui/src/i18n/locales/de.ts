@@ -1267,6 +1267,7 @@ export default {
       options: 'Optionen',
       ptz: 'PTZ',
       ptz_go_to_home: 'Zurück zur Startposition',
+      ptz_presets: 'Positionen',
       rewind: '30s zurück',
       reconnecting: 'Wiederverbinden...',
       refresh_snapshot: 'Snapshot aktualisieren',
