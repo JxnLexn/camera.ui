@@ -212,7 +212,7 @@ function startPreview(): void {
   isPreviewActive.value = true;
   const from = props.segment?.firstSeen ?? props.event.startTime;
   const to = props.segment?.lastSeen ?? props.event.endTime;
-  preview.onHoverStart(canvas, props.event.cameraId, props.event.id, from, to);
+  preview.onHoverStart(canvas, props.event.cameraId, props.event.id, from, to, props.camera?.zones?.privacy);
 }
 
 function handleMouseEnter(): void {

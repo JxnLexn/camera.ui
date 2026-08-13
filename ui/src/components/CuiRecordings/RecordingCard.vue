@@ -338,7 +338,7 @@ function startPreview(): void {
   const canvas = previewCanvasRef.value;
   if (!canvas) return;
   isPreviewActive.value = true;
-  preview.onHoverStart(canvas, props.event.cameraId, props.event.id, props.event.startTime, props.event.endTime);
+  preview.onHoverStart(canvas, props.event.cameraId, props.event.id, props.event.startTime, props.event.endTime, props.camera?.zones?.privacy);
 }
 
 function handleMouseEnter(): void {

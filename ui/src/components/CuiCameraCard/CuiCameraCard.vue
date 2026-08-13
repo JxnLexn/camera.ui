@@ -789,6 +789,7 @@ import { randomLetter } from '@/common/utils.js';
 import ShareForm from '@/components/CuiDialog/templates/ShareForm/ShareForm.vue';
 import { GridSearchKey } from '@/components/CuiGridSearch/types.js';
 import { isCapacitor } from '@/connection/runtime.js';
+import { maskPrivacyZones } from '@/utils/privacyMask.js';
 import { CAMERA_CARD_DEFAULTS } from './types.js';
 
 import type CuiBBoxPlayground from '@/components/CuiBBoxPlayground/CuiBBoxPlayground.vue';
@@ -1764,7 +1765,10 @@ function resumeStream() {
 async function captureScreenshot() {
   const prefix = cameraName.value.replace(/ /g, '_').toLowerCase();
   if (nvrPlaybackVisible.value) {
-    const blob = await nvr.value?.captureSnapshot();
+    const captured = await nvr.value?.captureSnapshot();
+    if (!captured) return;
+    // the canvas holds the raw video, the overlay is only painted on screen
+    const blob = await maskPrivacyZones(captured, cameraPrivacyZones.value);
     if (!blob) return;
     const shownAt = nvr.value?.currentTimestamp.value;
     const stamp = shownAt ? new Date(shownAt / 1000) : new Date();
@@ -1774,7 +1778,9 @@ async function captureScreenshot() {
 
   const dataURL = cameraStream.captureScreenshot();
   if (!dataURL) return;
-  await download({ dataUrl: dataURL, filename: `${prefix}_${new Date().toISOString()}.png`, mimeType: 'image/png' });
+  const blob = await maskPrivacyZones(dataURL, cameraPrivacyZones.value);
+  if (!blob) return;
+  await download({ blob, filename: `${prefix}_${new Date().toISOString()}.png`, mimeType: 'image/png' });
 }
 
 function clearCanvas() {
