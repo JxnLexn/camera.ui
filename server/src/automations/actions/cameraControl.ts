@@ -8,6 +8,19 @@ const camerasService = (): CamerasService => (_camerasService ??= new CamerasSer
 
 const UNSAFE_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
 
+function parsePropertyValue(value: string): unknown {
+  const trimmed = value.trim();
+  if (trimmed.startsWith('[')) {
+    try {
+      const parsed: unknown = JSON.parse(trimmed);
+      if (Array.isArray(parsed)) return parsed;
+    } catch {
+      // not a list, fall through to the scalar coercion
+    }
+  }
+  return parseValue(value);
+}
+
 function buildPatch(properties: { property: string; value: string }[], resolve: (s: string) => string): Record<string, unknown> {
   const patch: Record<string, unknown> = {};
 
@@ -22,7 +35,7 @@ function buildPatch(properties: { property: string; value: string }[], resolve: 
       current = current[parts[i]];
     }
 
-    current[parts[parts.length - 1]] = parseValue(resolved);
+    current[parts[parts.length - 1]] = parsePropertyValue(resolved);
   }
 
   return patch;

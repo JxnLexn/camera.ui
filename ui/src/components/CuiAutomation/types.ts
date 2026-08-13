@@ -1,3 +1,5 @@
+import { OBJECT_DETECTION_LABELS } from '@camera.ui/sdk';
+
 import type { DBAutomation } from '@shared/types';
 import type { Edge, Node } from '@vue-flow/core';
 
@@ -420,13 +422,16 @@ export interface ConfigActionCameraControlProps {
 export interface CameraControlPropertyDefinition {
   key: string;
   labelKey: string;
-  inputType: 'boolean' | 'number' | 'select';
+  inputType: 'boolean' | 'number' | 'select' | 'multiselect';
   min?: number;
   max?: number;
   step?: number;
   options?: Array<{ label: string; value: string }>;
+  // multiselect values are stored JSON-encoded, the action decodes them again
   defaultValue: string;
 }
+
+const OBJECT_LABEL_OPTIONS = OBJECT_DETECTION_LABELS.map((label) => ({ label, value: label }));
 
 export const CAMERA_CONTROL_PROPERTY_DEFINITIONS: CameraControlPropertyDefinition[] = [
   { key: 'detectionSettings.snooze', labelKey: 'components.automation_nodes.camera_prop_snooze', inputType: 'boolean', defaultValue: 'false' },
@@ -452,7 +457,35 @@ export const CAMERA_CONTROL_PROPERTY_DEFINITIONS: CameraControlPropertyDefinitio
     step: 1,
     defaultValue: '10',
   },
+  {
+    key: 'recordingSettings.sources',
+    labelKey: 'components.automation_nodes.camera_prop_recording_sources',
+    inputType: 'multiselect',
+    options: [
+      { label: 'High', value: 'high' },
+      { label: 'Mid', value: 'mid' },
+      { label: 'Low', value: 'low' },
+    ],
+    defaultValue: '["high","mid","low"]',
+  },
   { key: 'ptzAutotrack.enabled', labelKey: 'components.automation_nodes.camera_prop_ptz_autotrack', inputType: 'boolean', defaultValue: 'false' },
+  { key: 'ptzAutotrack.returnToHome', labelKey: 'components.automation_nodes.camera_prop_ptz_return_home', inputType: 'boolean', defaultValue: 'false' },
+  {
+    key: 'ptzAutotrack.targetLabels',
+    labelKey: 'components.automation_nodes.camera_prop_ptz_target_labels',
+    inputType: 'multiselect',
+    options: OBJECT_LABEL_OPTIONS,
+    defaultValue: '["person"]',
+  },
+  {
+    key: 'ptzAutotrack.minConfidence',
+    labelKey: 'components.automation_nodes.camera_prop_ptz_min_confidence',
+    inputType: 'number',
+    min: 0.3,
+    max: 1,
+    step: 0.05,
+    defaultValue: '0.5',
+  },
   {
     key: 'detectionSettings.object.confidence',
     labelKey: 'components.automation_nodes.camera_prop_object_confidence',
@@ -493,6 +526,14 @@ export const CAMERA_CONTROL_PROPERTY_DEFINITIONS: CameraControlPropertyDefinitio
     defaultValue: '0.7',
   },
   { key: 'detectionSettings.object.suppressStatic', labelKey: 'components.automation_nodes.camera_prop_suppress_static', inputType: 'boolean', defaultValue: 'true' },
+  { key: 'detectionSettings.object.timeout', labelKey: 'components.automation_nodes.camera_prop_object_timeout', inputType: 'number', min: 10, defaultValue: '15' },
+  {
+    key: 'detectionSettings.object.labels',
+    labelKey: 'components.automation_nodes.camera_prop_object_labels',
+    inputType: 'multiselect',
+    options: OBJECT_LABEL_OPTIONS,
+    defaultValue: '[]',
+  },
   {
     key: 'detectionSettings.face.confidence',
     labelKey: 'components.automation_nodes.camera_prop_face_confidence',

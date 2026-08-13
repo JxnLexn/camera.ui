@@ -40,6 +40,16 @@
           class="w-full"
           @update:model-value="setPropertyValue(def.key, $event)"
         />
+        <MultiSelect
+          v-else-if="def.inputType === 'multiselect'"
+          :model-value="getListValue(def.key)"
+          :options="def.options"
+          option-label="label"
+          option-value="value"
+          :show-toggle-all="false"
+          class="w-full"
+          @update:model-value="setPropertyValue(def.key, JSON.stringify($event))"
+        />
         <InputNumber
           v-else-if="def.inputType === 'number'"
           :model-value="Number(getPropertyValue(def.key)) || def.min"
@@ -76,6 +86,15 @@ function isEnabled(key: string): boolean {
 
 function getPropertyValue(key: string): string {
   return props.data.properties.find((p) => p.property === key)?.value ?? '';
+}
+
+function getListValue(key: string): string[] {
+  try {
+    const parsed: unknown = JSON.parse(getPropertyValue(key) || '[]');
+    return Array.isArray(parsed) ? (parsed as string[]) : [];
+  } catch {
+    return [];
+  }
 }
 
 function toggleProperty(key: string, enabled: unknown): void {
