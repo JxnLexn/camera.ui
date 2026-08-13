@@ -957,6 +957,9 @@ export default {
         ptz_autotrack_pan_rate: 'Calibrates how far each move step travels for your camera. Lower it if the camera stops short of the target, raise it if it overshoots.',
         ptz_autotrack_return_home: 'Move the camera back to its home position when no target is detected for a while.',
         ptz_autotrack_home_wait: 'How long to wait without a target before returning to the home position.',
+        ptz_autotrack_min_target_size: 'Ignore objects smaller than this share of the picture height. They are usually too far away to follow. 0 turns the limit off.',
+        ptz_autotrack_max_target_size: 'Stop following once an object fills more than this share of the picture height. That close the picture says little, so the camera holds still until the object backs off. 0 turns the limit off.',
+        ptz_autotrack_active_hours: 'Only follow during these hours, for example at night. Outside them the camera stays where it is.',
         decoder_hardware:
           'Hardware used to decode this camera for detection. Auto picks the best available. Applies on the machine that decodes this camera (server or its worker).',
         decoder_device:
@@ -1048,6 +1051,10 @@ export default {
         ptz_autotrack_pan_rate: 'Pan-Rate Calibration',
         ptz_autotrack_return_home: 'Return to home position',
         ptz_autotrack_home_wait: 'Wait before returning',
+        ptz_autotrack_min_target_size: 'Smallest object',
+        ptz_autotrack_max_target_size: 'Largest object',
+        ptz_autotrack_active_hours: 'Only during these hours',
+        until: 'until',
         disconnected: 'Disconnected',
         domain: 'Domain',
         enabled: 'Enabled',

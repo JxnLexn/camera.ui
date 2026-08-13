@@ -115,6 +115,8 @@ async function onSave() {
       panRate: 0.85,
       returnToHome: false,
       homeWaitMs: 10000,
+      minTargetSize: 0,
+      maxTargetSize: 0,
     },
     recordingSettings: {
       enabled: true,

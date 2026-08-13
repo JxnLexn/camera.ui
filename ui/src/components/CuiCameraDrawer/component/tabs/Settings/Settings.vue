@@ -1130,6 +1130,92 @@
               />
               <Message severity="secondary" variant="simple" size="small" class="cui-input-hint">{{ $t('components.form.hint.ptz_autotrack_home_wait') }}</Message>
             </Field>
+
+            <Field
+              v-slot="{ errors }"
+              :model-value="cameraForm.ptzAutotrack?.minTargetSize"
+              name="ptzAutotrack.minTargetSize"
+              as="div"
+              class="flex flex-col field-gap"
+            >
+              <label class="cui-label">{{ $t('components.form.label.ptz_autotrack_min_target_size') }}</label>
+              <InputNumber
+                :model-value="Math.round((cameraForm.ptzAutotrack?.minTargetSize ?? 0) * 100)"
+                :min="0"
+                :max="50"
+                :step="1"
+                suffix=" %"
+                :invalid="errors.length > 0"
+                :loading="isLoading"
+                class="w-full"
+                @value-change="
+                  (e) => {
+                    if (cameraForm.ptzAutotrack && e != null) cameraForm.ptzAutotrack.minTargetSize = e / 100;
+                  }
+                "
+              />
+              <Message severity="secondary" variant="simple" size="small" class="cui-input-hint">{{
+                $t('components.form.hint.ptz_autotrack_min_target_size')
+              }}</Message>
+            </Field>
+
+            <Field
+              v-slot="{ errors }"
+              :model-value="cameraForm.ptzAutotrack?.maxTargetSize"
+              name="ptzAutotrack.maxTargetSize"
+              as="div"
+              class="flex flex-col field-gap"
+            >
+              <label class="cui-label">{{ $t('components.form.label.ptz_autotrack_max_target_size') }}</label>
+              <InputNumber
+                :model-value="Math.round((cameraForm.ptzAutotrack?.maxTargetSize ?? 0) * 100)"
+                :min="0"
+                :max="100"
+                :step="1"
+                suffix=" %"
+                :invalid="errors.length > 0"
+                :loading="isLoading"
+                class="w-full"
+                @value-change="
+                  (e) => {
+                    if (cameraForm.ptzAutotrack && e != null) cameraForm.ptzAutotrack.maxTargetSize = e / 100;
+                  }
+                "
+              />
+              <Message severity="secondary" variant="simple" size="small" class="cui-input-hint">{{
+                $t('components.form.hint.ptz_autotrack_max_target_size')
+              }}</Message>
+            </Field>
+
+            <Field :model-value="ptzActiveHoursEnabled" name="ptzAutotrack.activeHours" as="div" class="flex flex-col field-gap">
+              <div class="flex flex-row items-center gap-3">
+                <div class="flex flex-col">
+                  <label class="cui-label-switch">{{ $t('components.form.label.ptz_autotrack_active_hours') }}</label>
+                  <Message severity="secondary" variant="simple" size="small" class="cui-input-switch-hint">{{
+                    $t('components.form.hint.ptz_autotrack_active_hours')
+                  }}</Message>
+                </div>
+                <ToggleSwitch :model-value="ptzActiveHoursEnabled" :loading="isLoading" class="ml-auto shrink-0" @value-change="togglePtzActiveHours" />
+              </div>
+
+              <div v-if="ptzActiveHoursEnabled" class="flex flex-row items-center gap-2">
+                <DatePicker
+                  :model-value="ptzActiveHoursTime('from')"
+                  time-only
+                  fluid
+                  :loading="isLoading"
+                  @update:model-value="(e) => setPtzActiveHours('from', e as Date | null)"
+                />
+                <span class="cui-input-hint shrink-0">{{ $t('components.form.label.until') }}</span>
+                <DatePicker
+                  :model-value="ptzActiveHoursTime('to')"
+                  time-only
+                  fluid
+                  :loading="isLoading"
+                  @update:model-value="(e) => setPtzActiveHours('to', e as Date | null)"
+                />
+              </div>
+            </Field>
           </template>
         </div>
       </AccordionContent>
@@ -1565,6 +1651,31 @@ const ptzAutotrackLabels = computed(() => [
   { label: t('components.automation_nodes.label_animal'), value: 'animal' },
   { label: t('components.automation_nodes.label_package'), value: 'package' },
 ]);
+
+const ptzActiveHoursEnabled = computed(() => Boolean(cameraForm.value.ptzAutotrack?.activeHours));
+
+function ptzActiveHoursTime(key: 'from' | 'to'): Date | null {
+  const value = cameraForm.value.ptzAutotrack?.activeHours?.[key];
+  if (!value) return null;
+  const [hours, minutes] = value.split(':').map(Number);
+  const date = new Date();
+  date.setHours(hours, minutes, 0, 0);
+  return date;
+}
+
+function togglePtzActiveHours(enabled: boolean): void {
+  const autotrack = cameraForm.value.ptzAutotrack;
+  if (!autotrack) return;
+  autotrack.activeHours = enabled ? { from: '22:00', to: '06:00', timezone: Intl.DateTimeFormat().resolvedOptions().timeZone } : undefined;
+}
+
+function setPtzActiveHours(key: 'from' | 'to', date: Date | null): void {
+  const hours = cameraForm.value.ptzAutotrack?.activeHours;
+  if (!hours || !date) return;
+  hours[key] = `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
+  // the window is read in the timezone it was set in, so keep it current
+  hours.timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+}
 
 const triggerableSensors = computed(() => allSensors.value.filter((s) => TRIGGERABLE_TYPES.has(s.type)).map((s) => ({ label: s.displayName.value, value: s.id })));
 

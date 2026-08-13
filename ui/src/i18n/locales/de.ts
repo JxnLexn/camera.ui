@@ -970,6 +970,9 @@ export default {
           'Kalibriert, wie weit ein Bewegungsschritt bei deiner Kamera schwenkt. Kleiner, wenn die Kamera vor dem Ziel stoppt, größer, wenn sie überschießt.',
         ptz_autotrack_return_home: 'Kamera zur Home-Position zurückfahren, wenn länger kein Ziel erkannt wird.',
         ptz_autotrack_home_wait: 'Wartezeit ohne Ziel, bevor die Kamera zur Home-Position zurückfährt.',
+        ptz_autotrack_min_target_size: 'Objekte, die weniger als diesen Anteil der Bildhöhe einnehmen, werden ignoriert. Sie sind meist zu weit weg. 0 schaltet die Grenze aus.',
+        ptz_autotrack_max_target_size: 'Nicht mehr folgen, sobald ein Objekt mehr als diesen Anteil der Bildhöhe einnimmt. So nah sagt das Bild wenig, die Kamera bleibt stehen, bis das Objekt sich entfernt. 0 schaltet die Grenze aus.',
+        ptz_autotrack_active_hours: 'Nur in diesen Stunden folgen, zum Beispiel nachts. Außerhalb bleibt die Kamera, wo sie ist.',
         decoder_hardware:
           'Hardware, mit der diese Kamera für die Erkennung decodiert wird. Auto wählt die beste verfügbare. Gilt auf der Maschine, die diese Kamera decodiert (Server oder zugewiesener Worker).',
         decoder_device:
@@ -1062,6 +1065,10 @@ export default {
         ptz_autotrack_pan_rate: 'Schwenkraten-Kalibrierung',
         ptz_autotrack_return_home: 'Zur Home-Position zurückkehren',
         ptz_autotrack_home_wait: 'Wartezeit vor Rückkehr',
+        ptz_autotrack_min_target_size: 'Kleinstes Objekt',
+        ptz_autotrack_max_target_size: 'Größtes Objekt',
+        ptz_autotrack_active_hours: 'Nur in diesen Stunden',
+        until: 'bis',
         disconnected: 'Getrennt',
         domain: 'Domain',
         enabled: 'Aktiviert',

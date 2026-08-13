@@ -5,7 +5,7 @@ import { PAN_TO_IMAGE_RATIO } from '../detection-pipeline.js';
 
 import type { Logger } from '@camera.ui/common/logger';
 import type { Promisify, RPCClient } from '@camera.ui/rpc';
-import type { Detection, PtzAutotrackSettings, PTZPosition, PTZRelativeMove, SensorLike, TrackedDetection } from '@camera.ui/sdk';
+import type { Detection, PtzAutotrackSettings, PTZPosition, PTZRelativeMove, SensorLike, TimeWindow, TrackedDetection } from '@camera.ui/sdk';
 import type { PropertyChangedEvent } from '@camera.ui/sdk/internal';
 
 export interface PtzPoseDelta {
@@ -21,6 +21,8 @@ const MAX_PULSE_MS = 1000;
 const MIN_COMMAND_INTERVAL_MS = 200;
 const STATIONARY_SPEED_THRESHOLD = 0.006;
 const MAX_LEAD_DISPLACEMENT = 0.45;
+const AIM_CONFIRM_FRAMES = 3;
+const AIM_IMMEDIATE_ERROR = 0.25;
 
 const POSE_EPSILON = 0.002;
 const AIM_SETTLE_MS = 600;
@@ -40,6 +42,32 @@ type AutotrackState = 'idle' | 'active' | 'lost';
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
+}
+
+function minutesOfDay(time: string): number | null {
+  const match = /^(\d{1,2}):(\d{2})$/.exec(time.trim());
+  if (!match) return null;
+  const hours = Number(match[1]);
+  const minutes = Number(match[2]);
+  if (hours > 23 || minutes > 59) return null;
+  return hours * 60 + minutes;
+}
+
+function withinWindow(window: TimeWindow | undefined, at: number): boolean {
+  if (!window?.from || !window?.to) return true;
+
+  const from = minutesOfDay(window.from);
+  const to = minutesOfDay(window.to);
+  if (from === null || to === null || from === to) return true;
+
+  try {
+    const local = new Date(new Date(at).toLocaleString('en-US', { timeZone: window.timezone }));
+    const minutes = local.getHours() * 60 + local.getMinutes();
+    // a window that ends before it starts runs across midnight
+    return from < to ? minutes >= from && minutes < to : minutes >= from || minutes < to;
+  } catch {
+    return true;
+  }
 }
 
 export interface PtzSensorInfo {
@@ -75,6 +103,8 @@ export class PtzAutotracker {
   private externalControlUntil = 0;
   private lastStrategy?: MoveStrategy;
   private currentPose: { pan: number; tilt: number; zoom: number } = { pan: 0, tilt: 0, zoom: 0 };
+
+  private aimStreak = { x: { dir: 0, frames: 0 }, y: { dir: 0, frames: 0 } };
 
   private lastMove?: { pose: { pan: number; tilt: number }; panDir: number; tiltDir: number };
   private pinnedPan?: { dir: number; pose: number };
@@ -144,6 +174,11 @@ export class PtzAutotracker {
 
     const now = Date.now();
 
+    if (!withinWindow(settings.activeHours, now)) {
+      this.leaveActiveHours(ptz, settings);
+      return;
+    }
+
     // frames right after a stop were captured mid-move, aiming on them
     // overshoots; shorter than the motion settle, a post-stop frame suffices
     if (this.isPtzMoving) {
@@ -162,7 +197,7 @@ export class PtzAutotracker {
 
     switch (this.state) {
       case 'idle':
-        this.stepIdle(targets);
+        this.stepIdle(targets, settings);
         return;
       case 'active':
         this.stepActive(ptz, targets, settings, now);
@@ -177,6 +212,7 @@ export class PtzAutotracker {
     const settings = this.settings;
     if (!settings?.enabled) return;
     if (!this.sensorInfo) return;
+    if (!withinWindow(settings.activeHours, Date.now())) return;
 
     let present = false;
     for (const d of detections) {
@@ -206,12 +242,14 @@ export class PtzAutotracker {
     };
   }
 
-  private pickLargestFresh(targets: readonly TrackedDetection[]): TrackedDetection | undefined {
+  private pickLargestFresh(targets: readonly TrackedDetection[], minSize = 0): TrackedDetection | undefined {
     let best: TrackedDetection | undefined;
     let bestArea = -1;
     for (const t of targets) {
       if (typeof t.trackId !== 'number') continue;
       if (t.trackLost) continue;
+      // too small to be worth turning the camera for, and usually noise
+      if (minSize > 0 && t.box.height < minSize) continue;
       const area = t.box.width * t.box.height;
       if (area > bestArea) {
         best = t;
@@ -227,8 +265,8 @@ export class PtzAutotracker {
     this.state = 'active';
   }
 
-  private stepIdle(targets: readonly TrackedDetection[]): void {
-    const best = this.pickLargestFresh(targets);
+  private stepIdle(targets: readonly TrackedDetection[], settings: PtzAutotrackSettings): void {
+    const best = this.pickLargestFresh(targets, settings.minTargetSize ?? 0);
     if (!best) return;
     this.deps.logger.trace(`[autotracker] following ${best.label}#${best.trackId}`);
     this.follow(best);
@@ -256,8 +294,13 @@ export class PtzAutotracker {
     const fps = this.deps.getFps?.() ?? 10;
     const blindFrames = (leadMs / 1000) * fps;
     const velocity = target.trackVelocity;
-    const leadX = clamp((velocity?.x ?? 0) * blindFrames, -MAX_LEAD_DISPLACEMENT, MAX_LEAD_DISPLACEMENT);
-    const leadY = clamp((velocity?.y ?? 0) * blindFrames, -MAX_LEAD_DISPLACEMENT, MAX_LEAD_DISPLACEMENT);
+    // the estimate never quite reaches zero when someone stops, and 18 blind
+    // frames turn that leftover into a phantom half a frame wide, so fade the
+    // prediction out with the speed instead of trusting it at face value
+    const trackSpeed = target.trackSpeed ?? 0;
+    const leadScale = clamp((trackSpeed - STATIONARY_SPEED_THRESHOLD) / STATIONARY_SPEED_THRESHOLD, 0, 1);
+    const leadX = clamp((velocity?.x ?? 0) * blindFrames * leadScale, -MAX_LEAD_DISPLACEMENT, MAX_LEAD_DISPLACEMENT);
+    const leadY = clamp((velocity?.y ?? 0) * blindFrames * leadScale, -MAX_LEAD_DISPLACEMENT, MAX_LEAD_DISPLACEMENT);
 
     let errX = cx + leadX - 0.5;
     let errY = cy + leadY - 0.5;
@@ -279,17 +322,23 @@ export class PtzAutotracker {
     const outsideDeadZone = Math.abs(errX) > deadZone || Math.abs(errY) > deadZone;
     if (!outsideDeadZone) {
       this.targetCentered = true;
+      this.resetAimStreak();
       return;
     }
 
-    // jitter gate only for targets already centered once: a still person
-    // off-center must stay approachable, large errors bypass a low velocity
-    const trackSpeed = target.trackSpeed ?? 0;
-    const errMag = Math.max(Math.abs(errX), Math.abs(errY));
-    const largeError = errMag > deadZone * 2;
-    if (this.targetCentered && !largeError && trackSpeed < STATIONARY_SPEED_THRESHOLD) {
+    // too close to read anything off the picture: hold the pose, keep the
+    // track, and pick it up again when the target backs off
+    const maxSize = settings.maxTargetSize ?? 0;
+    if (maxSize > 0 && target.box.height >= maxSize) {
+      this.resetAimStreak();
       return;
     }
+
+    // an off-centre target the camera never centred is approached right away;
+    // once centred, only a displacement that survives a few frames counts
+    const confirmedX = this.confirmAxis('x', errX, deadZone);
+    const confirmedY = this.confirmAxis('y', errY, deadZone);
+    if (this.targetCentered && !confirmedX && !confirmedY) return;
 
     if (now - this.lastCommandAt < MIN_COMMAND_INTERVAL_MS) return;
 
@@ -300,8 +349,8 @@ export class PtzAutotracker {
     }
 
     // command space for the displacement strategies: pan +right, tilt +up
-    const cmdPan = Math.abs(errX) <= deadZone ? 0 : errX;
-    const cmdTilt = Math.abs(errY) <= deadZone ? 0 : -errY;
+    const cmdPan = confirmedX ? errX : 0;
+    const cmdTilt = confirmedY ? -errY : 0;
 
     if (strategy === 'relative') {
       // err is already in frame fractions, the firmware drives the exact distance
@@ -344,8 +393,8 @@ export class PtzAutotracker {
     // MIN_SPEED floor overshot during the shared pulse and drove a staircase
     const speedGain = settings.trackingSpeed ?? DEFAULT_SPEED_GAIN;
     const panRate = settings.panRate ?? DEFAULT_PAN_RATE;
-    const absX = Math.abs(errX) <= deadZone ? 0 : Math.abs(errX);
-    const absY = Math.abs(errY) <= deadZone ? 0 : Math.abs(errY);
+    const absX = confirmedX ? Math.abs(errX) : 0;
+    const absY = confirmedY ? Math.abs(errY) : 0;
     const domErr = Math.max(absX, absY);
     const domSpeed = Math.min(MAX_SPEED, Math.max(MIN_SPEED, domErr * speedGain));
 
@@ -371,6 +420,35 @@ export class PtzAutotracker {
       if (!this.sensorInfo) return;
       this.sendVelocity(this.sensorInfo, { panSpeed: 0, tiltSpeed: 0, zoomSpeed: 0 });
     }, pulseMs);
+  }
+
+  private confirmAxis(axis: 'x' | 'y', err: number, deadZone: number): boolean {
+    const streak = this.aimStreak[axis];
+    if (Math.abs(err) <= deadZone) {
+      streak.dir = 0;
+      streak.frames = 0;
+      return false;
+    }
+    if (Math.abs(err) >= AIM_IMMEDIATE_ERROR) return true;
+
+    const dir = Math.sign(err);
+    streak.frames = streak.dir === dir ? streak.frames + 1 : 1;
+    streak.dir = dir;
+    return !this.targetCentered || streak.frames >= AIM_CONFIRM_FRAMES;
+  }
+
+  private resetAimStreak(): void {
+    this.aimStreak.x = { dir: 0, frames: 0 };
+    this.aimStreak.y = { dir: 0, frames: 0 };
+  }
+
+  private leaveActiveHours(ptz: PtzSensorInfo, settings: PtzAutotrackSettings): void {
+    if (this.state === 'idle') return;
+    this.deps.logger.trace('[autotracker] outside the active hours, resting');
+    this.reset();
+    if (settings.returnToHome && ptz.capabilities.includes(PTZCapability.Home)) {
+      this.sendPosition(ptz, { pan: 0, tilt: 0, zoom: 0 });
+    }
   }
 
   private clearStopTimer(): void {
@@ -465,7 +543,7 @@ export class PtzAutotracker {
 
     // same person under a new id after detector churn, or a new person:
     // beats staring at an empty spot until the home timeout
-    const successor = this.pickLargestFresh(targets);
+    const successor = this.pickLargestFresh(targets, settings.minTargetSize ?? 0);
     if (successor) {
       this.deps.logger.trace(`[autotracker] reacquired ${successor.label}#${successor.trackId} (was #${this.activeTrackId})`);
       this.follow(successor);
@@ -549,6 +627,7 @@ export class PtzAutotracker {
     this.lastMove = undefined;
     this.pinnedPan = undefined;
     this.pinnedTilt = undefined;
+    this.resetAimStreak();
     this.clearStopTimer();
     this.clearMoveWatchdog();
   }

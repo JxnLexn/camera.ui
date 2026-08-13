@@ -138,6 +138,12 @@ export const detectionSettingsSchema = zod.object({
   snooze: zod.boolean().default(false),
 });
 
+export const timeWindowSchema = zod.object({
+  from: zod.string().regex(/^\d{1,2}:\d{2}$/, 'Use HH:mm'),
+  to: zod.string().regex(/^\d{1,2}:\d{2}$/, 'Use HH:mm'),
+  timezone: zod.string().trim().min(1, 'Timezone is required'),
+});
+
 export const DEFAULT_PTZ_AUTOTRACK_SETTINGS = {
   enabled: false,
   targetLabels: ['person'],
@@ -148,6 +154,8 @@ export const DEFAULT_PTZ_AUTOTRACK_SETTINGS = {
   panRate: 0.85,
   returnToHome: false,
   homeWaitMs: 10000,
+  minTargetSize: 0,
+  maxTargetSize: 0,
 };
 
 export const ptzAutotrackSettingsSchema = zod.object({
@@ -160,6 +168,9 @@ export const ptzAutotrackSettingsSchema = zod.object({
   panRate: zod.number().min(0.1, 'Minimum 0.1').max(3, 'Maximum 3').default(0.85),
   returnToHome: zod.boolean().default(false),
   homeWaitMs: zod.number().min(1000, 'Minimum 1000 ms').max(60000, 'Maximum 60000 ms').default(10000),
+  minTargetSize: zod.number().min(0, 'Minimum 0').max(0.5, 'Maximum 0.5').default(0),
+  maxTargetSize: zod.number().min(0, 'Minimum 0').max(1, 'Maximum 1').default(0),
+  activeHours: timeWindowSchema.optional(),
 });
 
 export const inputRoleSchema = zod.union([zod.literal('high-resolution'), zod.literal('mid-resolution'), zod.literal('low-resolution'), zod.literal('snapshot')]);
