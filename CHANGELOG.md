@@ -2,6 +2,42 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.1.8]
+
+### Added
+
+- **Privacy zones hide what you don't want to see.** Draw an area in the new Privacy tab and camera.ui covers it in black, in live view, in playback and in every picture it produces. Per zone you pick whether detections inside still count. The recording itself, RTSP and HomeKit still show the area.
+
+- **The zone editor has one tab per purpose.** Motion, Objects, Alerts, Privacy and Line crossing, each with only the settings that kind needs. Existing zones are split up automatically.
+
+- **The camera action in automations reaches more settings.** New: which streams it records, the object timeout, and for PTZ autotrack the tracked object types, the return to home and the minimum confidence. So "record just the main stream while the disk is full" is an automation now.
+
+- **PTZ autotracking can be told how close and when to follow.** Two size limits stop the camera from chasing specks in the distance or someone standing right at the lens, where the picture says nothing anyway. An optional time window runs it only between two times, for example at night.
+
+- **Automations can mute a single camera's notifications.** The notification action now applies to everyone, one camera or one user. Muting a camera stops its push while every other camera keeps notifying, and its events still show up in the app and on the timeline. Handy for silencing the street camera during the day and turning it back on at night.
+
+### Changed
+
+- **Object and alert types are picked in the zone editor now.** The Objects tab says what a camera detects and where, the Alerts tab what may notify you and from where. The lists in the camera settings and in the recording settings are gone, and a new zone covers the whole image. A camera without an alert zone notifies for everything it detects, so look at that tab if yours got chattier. Needs the camera-ui-nvr plugin update.
+
+- **PTZ has its own controls on the camera, including presets.** Top right of the player there is now a bar with the home position, the positions saved on the camera and the switch for the pan/tilt/zoom controls. It appears on hover like the rest of the player controls and replaces the PTZ entries in the three dot menu.
+
+- **The navigation keeps its logo and your profile in place.** Only the list of entries in between scrolls now, so the way out is always where you left it. Same in edit mode, where reset and done stay at the bottom, and dragging an entry towards the top or bottom of a long list now scrolls along.
+
+- **Sensors show the id they carry in the system they come from.** Two sensors with the same name are hard to tell apart, so the sensor list, the table and the edit dialog now show the source id underneath, for Home Assistant entities that is the entity id. The search finds sensors by it too.
+
+### Fixed
+
+- **The PTZ camera stops rocking back and forth when someone stands still.** A standing person makes the detection box breathe, and the camera chased every twitch, up and down or left and right. It now only turns for an offset that holds across several frames, and the motion prediction fades out as the target slows down.
+
+- **An object zone without a single selected label no longer blocks everything.** Clearing the labels used to drop every detection on the camera. The zone now applies to all types instead.
+
+- **Cameras that report a detection without a position get through their zones.** A camera that only says "person" gives no location, so a zone set to "object fully inside" always dropped it. Those reports skip the zone check now.
+
+- **Desktop app: the last entry in the settings navigation is fully reachable again.** The list stopped a bit short, so "System" at the bottom stayed half cut off. The filter sidebar in the recordings had the same problem.
+
+- **Desktop app: the edit button in the navigation works again.** Clicking it, or the camera.ui name next to it, moved the window instead of opening the edit mode.
+
 ## [2.1.7]
 
 ### Added
