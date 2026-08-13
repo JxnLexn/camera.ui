@@ -176,7 +176,7 @@ export const NODE_DEFINITIONS: NodeDefinition[] = [
     descriptionKey: 'components.automation_nodes.action_notification_control_desc',
     icon: NotificationControlIcon,
     color: '#3b82f6',
-    defaults: { type: 'action-notification-control', mode: 'disable', scope: 'global', userId: '' },
+    defaults: { type: 'action-notification-control', mode: 'disable', scope: 'global', userId: '', cameraId: '' },
   },
   {
     type: 'action-http',

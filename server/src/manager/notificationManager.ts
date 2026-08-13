@@ -247,6 +247,7 @@ export class NotificationManager {
     // Per-user filtering (settings / source / quiet-hours / history) is
     // genuinely per recipient; delivery is batched per notifier afterwards.
     const globalSuppressed = this.isGloballySuppressed();
+    const cameraSuppressed = this.isCameraSuppressed(resolved.data?.cameraId);
     const eligibleUserIds: string[] = [];
     for (const userId of userIds) {
       const settings = await this.notificationsService.getSettings(userId);
@@ -259,8 +260,9 @@ export class NotificationManager {
       await this.appendHistory(userId, resolved);
 
       // Suppress external delivery (except critical bypass): automation mute
-      // (global / per-user, set by action-notification-control) and quiet-hours.
-      if (resolved.severity !== Severity.Critical && (globalSuppressed || settings.suppressed || this.inQuietHours(settings))) continue;
+      // (global / per-camera / per-user, set by action-notification-control)
+      // and quiet-hours.
+      if (resolved.severity !== Severity.Critical && (globalSuppressed || cameraSuppressed || settings.suppressed || this.inQuietHours(settings))) continue;
 
       eligibleUserIds.push(userId);
     }
@@ -304,6 +306,21 @@ export class NotificationManager {
 
   public async setUserSuppressed(userId: string, suppressed: boolean): Promise<void> {
     await this.notificationsService.patchSettings(userId, { suppressed });
+  }
+
+  public isCameraSuppressed(cameraId: string | undefined): boolean {
+    if (!cameraId) return false;
+    return this.dbs.settingsDB.get('settings')?.notificationsMutedCameras?.includes(cameraId) === true;
+  }
+
+  public async setCameraSuppressed(cameraId: string, suppressed: boolean): Promise<void> {
+    await this.dbs.commit(this.dbs.settingsDB, 'settings', (current) => {
+      if (!current) return undefined;
+      const muted = new Set(current.notificationsMutedCameras ?? []);
+      if (suppressed) muted.add(cameraId);
+      else muted.delete(cameraId);
+      return { ...current, notificationsMutedCameras: [...muted] };
+    });
   }
 
   public async registerDevice(pluginName: string, ownerUserId: string, input: Record<string, unknown>): Promise<NotifierDevice> {

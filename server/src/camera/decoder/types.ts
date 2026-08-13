@@ -10,6 +10,10 @@ export function ensureDetectionBoxes<T extends { box?: BoundingBox }>(detections
   return detections.map((detection) => (detection.box ? (detection as T & { box: BoundingBox }) : { ...detection, box: { ...FULL_FRAME_BOX } }));
 }
 
+export function isFullFrameBox(box: BoundingBox): boolean {
+  return box.x <= 0 && box.y <= 0 && box.width >= 1 && box.height >= 1;
+}
+
 export interface CoordinatorSourceUrl {
   role: StreamingRole;
   url: string;

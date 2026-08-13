@@ -22,7 +22,7 @@ import { PtzAutotracker } from './ptz/autotracker.js';
 import { ReconnectBackoff } from './reconnect-backoff.js';
 import { SecondaryStage } from './secondary-stage.js';
 import { FrameSource } from './sources/frame-source.js';
-import { DETECT_TIMEOUT_MS, ensureDetectionBoxes, MOTION_WIDTH_MAP } from './types.js';
+import { DETECT_TIMEOUT_MS, ensureDetectionBoxes, isFullFrameBox, MOTION_WIDTH_MAP } from './types.js';
 
 import type { Logger } from '@camera.ui/common/logger';
 import type { RPCClient } from '@camera.ui/rpc';
@@ -743,11 +743,10 @@ export class DetectionCoordinator {
 
     // the zone filter and the rust merge assume a box on every detection
     const detections = ensureDetectionBoxes(raw as { box?: BoundingBox }[]);
-    // a camera that reports a label without a box gives no position, a zone
-    // cannot judge it and the object assist has not run yet
-    const hasBox = (index: number): boolean => Boolean((raw[index] as { box?: BoundingBox }).box);
-    const positioned = detections.filter((_, index) => hasBox(index));
-    let boxless = detections.filter((_, index) => !hasBox(index)) as Detection[];
+    // a camera that reports a label without coordinates gives no position, a
+    // zone cannot judge it and the object assist has not run yet
+    const positioned = detections.filter((detection) => !isFullFrameBox(detection.box));
+    let boxless = detections.filter((detection) => isFullFrameBox(detection.box)) as Detection[];
 
     let filtered: Detection[];
     let boxlessLabel: DetectionLabel | undefined;

@@ -5,9 +5,19 @@ import type { ActionContext } from './types.js';
 
 export async function actionNotificationControl(ctx: ActionContext, data: Record<string, unknown>): Promise<void> {
   const suppressed = data.mode !== 'enable';
-  const scope = data.scope === 'user' ? 'user' : 'global';
+  const scope = data.scope === 'user' || data.scope === 'camera' ? data.scope : 'global';
 
   const notificationManager = container.resolve<ProxyServer>('proxy').notificationManager;
+
+  if (scope === 'camera') {
+    const cameraId = ctx.resolve((data.cameraId as string) ?? '').trim();
+    if (!cameraId) {
+      ctx.logger.warn(`[automation:${ctx.flowName}] action-notification-control skipped — no camera selected`);
+      return;
+    }
+    await notificationManager.setCameraSuppressed(cameraId, suppressed);
+    return;
+  }
 
   if (scope === 'user') {
     const userId = ctx.resolve((data.userId as string) ?? '').trim();

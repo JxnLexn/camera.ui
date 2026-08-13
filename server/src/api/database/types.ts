@@ -66,6 +66,7 @@ export interface DBSettings {
   workerPairings?: DBWorkerPairing[];
   backupScheduler?: DBBackupSchedulerSettings;
   notificationsSuppressed?: boolean;
+  notificationsMutedCameras?: string[];
 }
 
 export interface DBKnownWorker {

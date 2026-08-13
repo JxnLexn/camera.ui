@@ -126,8 +126,9 @@ export interface ActionNotificationData {
 export interface ActionNotificationControlData {
   type: 'action-notification-control';
   mode: 'enable' | 'disable';
-  scope: 'global' | 'user';
+  scope: 'global' | 'camera' | 'user';
   userId?: string;
+  cameraId?: string;
 }
 
 export interface ActionHttpData extends RepeatSettings {
