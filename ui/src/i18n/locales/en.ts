@@ -1501,6 +1501,7 @@ export default {
       config_deleted: 'Configuration deleted successfully',
       config_go2rtc_deleted: 'Go2RTC configuration deleted successfully',
       config_go2rtc_updated: 'Go2RTC configuration updated successfully',
+      config_invalid: 'Check the highlighted fields, nothing was saved',
       config_updated: 'Configuration updated successfully',
       copied: 'Copied',
       copy_failed: 'Copy failed',

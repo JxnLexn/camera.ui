@@ -1,6 +1,6 @@
 <template>
   <div>
-    <Form ref="formRef" :validation-schema="validationSchema" @submit="onFormSubmit">
+    <Form ref="formRef" :validation-schema="validationSchema" @submit="onFormSubmit" @invalid-submit="onInvalidSubmit">
       <div v-if="groupTabs.length && groupsAsCards" class="flex flex-col gap-6">
         <div v-for="group in groupTabs" :key="group">
           <span class="card-title">{{ group }}</span>
@@ -141,7 +141,7 @@ import { Form } from 'vee-validate';
 import { deepToRaw } from '@/common/utils.js';
 
 import type { JsonSchema, PluginConfig } from '@camera.ui/sdk';
-import type { FormValidationResult, GenericObject } from 'vee-validate';
+import type { FormValidationResult, GenericObject, InvalidSubmissionContext } from 'vee-validate';
 import type { CuiSchemaEmits, CuiSchemaProps } from './types.js';
 
 const props = withDefaults(defineProps<CuiSchemaProps>(), {
@@ -156,6 +156,8 @@ const emit = defineEmits<CuiSchemaEmits>();
 const { schemaForm, loading, saveButton, saveButtonLabel, showButton, disableButton, saveButtonColor, groupsAsCards } = toRefs(props);
 
 const log = useLogger();
+const toast = useCuiToast();
+const { t } = useI18n();
 
 const formRef = useTemplateRef<InstanceType<typeof Form>>('formRef');
 const selectedGroup = ref('');
@@ -259,6 +261,12 @@ async function onSubmit(state: { key: string }): Promise<void> {
     submitFail.value = true;
     log.error('result', result);
   }
+}
+
+function onInvalidSubmit({ errors }: InvalidSubmissionContext): void {
+  submitFail.value = true;
+  log.error('Form validation failed:', errors);
+  toast.add({ severity: 'error', detail: t('components.toast.config_invalid'), life: 5000 });
 }
 
 async function onFormSubmit(): Promise<void> {

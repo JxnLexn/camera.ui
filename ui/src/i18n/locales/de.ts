@@ -1516,6 +1516,7 @@ export default {
       config_deleted: 'Konfiguration erfolgreich gelöscht',
       config_go2rtc_deleted: 'Go2RTC-Konfiguration erfolgreich gelöscht',
       config_go2rtc_updated: 'Go2RTC-Konfiguration erfolgreich aktualisiert',
+      config_invalid: 'Prüfe die markierten Felder, gespeichert wurde nichts',
       config_updated: 'Konfiguration erfolgreich aktualisiert',
       copied: 'Kopiert',
       copy_failed: 'Kopieren fehlgeschlagen',

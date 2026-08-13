@@ -488,7 +488,7 @@ export function generateZodSchemaField(schema: JsonSchema): zod.ZodTypeAny {
           return schema.required ? arraySchema : arraySchema.optional();
         } else {
           const enumSchema = zod.enum(schema.enum as [string, ...string[]]);
-          return schema.required ? enumSchema : enumSchema.optional();
+          return schema.required ? enumSchema : zod.union([zod.literal(''), enumSchema]).optional();
         }
       }
 
