@@ -229,7 +229,10 @@ export class DetectionPipeline {
   }
 
   public process(rawDetections: Detection[], poseDelta?: { panDelta: number; tiltDelta: number }): PipelineResult {
-    const flat = rawDetections.length === 0 ? [] : this.runNmsAndMergeFlat(rawDetections);
+    // the label whitelist is ours, not rust's: a zone only constrains the
+    // labels it lists, so a label no zone lists would otherwise pass anywhere
+    const allowed = this.allowedByWhitelist(rawDetections);
+    const flat = allowed.length === 0 ? [] : this.runNmsAndMergeFlat(allowed);
     const cameraMotion = poseDelta ? { x: -poseDelta.panDelta * PAN_TO_IMAGE_RATIO, y: poseDelta.tiltDelta * PAN_TO_IMAGE_RATIO } : undefined;
     const tMs = Date.now();
     const result = this.world.ingest(tMs, flat, cameraMotion);
