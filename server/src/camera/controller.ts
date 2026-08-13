@@ -10,6 +10,7 @@ import { buildSnapshotUrl, buildTargetUrl, createSourceName } from '../utils/cam
 import { getSourceCodecInfo, setSourceCodecInfo } from './codecCache.js';
 import { FrameWorker } from './decoder/worker.js';
 import { CameraDevice } from './index.js';
+import { SnapshotPrivacy } from './privacy/snapshot.js';
 import { SensorController } from './sensors/controller.js';
 import { Fmp4Session } from './streaming/fmp4-session.js';
 import { RtpSession } from './streaming/rtp-session.js';
@@ -71,9 +72,13 @@ export class CameraController extends CameraDevice implements CameraDeviceInterf
   private closeProxy?: () => Promise<void>;
   private detectionEventUnsub?: () => void;
   private autoRefreshInterval?: NodeJS.Timeout;
+  private snapshotPrivacy: SnapshotPrivacy;
 
   constructor(camera: Camera, logger: Logger) {
     super(camera, logger);
+
+    this.snapshotPrivacy = new SnapshotPrivacy(logger);
+    this.snapshotPrivacy.update(camera.zones);
 
     this.api = container.resolve<CameraUiAPI>('api');
     this.go2rtcApi = container.resolve<Go2RtcApi>('go2rtcApi');
@@ -220,15 +225,24 @@ export class CameraController extends CameraDevice implements CameraDeviceInterf
       throw new Error('Source not found');
     }
 
+    const storeSnapshot = async (s: CameraDeviceSource, data: ArrayBuffer): Promise<ArrayBuffer | undefined> => {
+      const masked = await this.snapshotPrivacy.apply(data);
+      if (masked && masked.byteLength > 0) {
+        this.snapshotCache.set(s._id, { data: masked, fetchedAt: Date.now() });
+      }
+
+      return masked;
+    };
+
     const fetchSnapshotFromSource = async (s: CameraDeviceSource): Promise<ArrayBuffer | undefined> => {
       try {
         const sourceName = createSourceName(this.name, s.name);
         const snapshot = await this.go2rtcApi.snapshotRoute.jpeg({ src: sourceName, ...(forceNew ? { gop: 0 as const } : {}) });
-        if (snapshot.byteLength > 0) {
-          this.snapshotCache.set(s._id, { data: snapshot, fetchedAt: Date.now() });
+        if (snapshot.byteLength === 0) {
+          return snapshot;
         }
 
-        return snapshot;
+        return await storeSnapshot(s, snapshot);
       } catch (error) {
         if (error.name === 'AbortError' || error.message?.includes('aborted')) {
           this.logger.debug('Snapshot request timed out for', this.name);
@@ -242,8 +256,7 @@ export class CameraController extends CameraDevice implements CameraDeviceInterf
       try {
         const pluginSnapshot = await this.cameraDeviceProxy?.snapshot?.(s._id, forceNew);
         if (pluginSnapshot && pluginSnapshot.byteLength > 0) {
-          this.snapshotCache.set(s._id, { data: pluginSnapshot, fetchedAt: Date.now() });
-          return pluginSnapshot;
+          return await storeSnapshot(s, pluginSnapshot);
         }
       } catch {
         // Ignore plugin errors; fall back to go2rtc.
@@ -389,6 +402,7 @@ export class CameraController extends CameraDevice implements CameraDeviceInterf
   public async cleanup(): Promise<void> {
     this.stopAutoRefresh();
     this.detectionEventUnsub?.();
+    this.snapshotPrivacy.dispose();
     await this.frameWorker.close();
     await this.sensorController.destroy();
     this.removeAllListeners();
@@ -632,9 +646,7 @@ export class CameraController extends CameraDevice implements CameraDeviceInterf
             'detectionSettings',
             'ptzAutotrack',
             'recordingSettings',
-            'detectionZones',
-            'alertZones',
-            'detectionLines',
+            'zones',
             'frameWorkerSettings',
             'interfaceSettings',
           ] as const;
@@ -646,6 +658,11 @@ export class CameraController extends CameraDevice implements CameraDeviceInterf
           }
         } catch {
           // ignore
+        }
+
+        if (!isEqual(oldCamera.zones?.privacy, newCamera.zones?.privacy, true) || oldCamera.zones?.privacyFallback !== newCamera.zones?.privacyFallback) {
+          this.snapshotPrivacy.update(newCamera.zones);
+          this.snapshotCache.clear();
         }
 
         if (oldCamera.name !== newCamera.name) {

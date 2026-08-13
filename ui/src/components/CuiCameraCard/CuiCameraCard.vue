@@ -162,6 +162,8 @@
 
                 <CuiPolygon v-if="zoneState && !inStandby && !isDisabled" :camera-zones :camera-lines />
 
+                <CuiPolygon v-if="privacyOverlay && cameraPrivacyZones.length && !inStandby" :camera-zones="[]" :privacy-zones="cameraPrivacyZones" />
+
                 <CuiGridSearch
                   v-if="gridSearch?.active.value && !isDisabled"
                   :model-value="gridSearch.regions.value"
@@ -842,6 +844,7 @@ const {
   liveIndicatorOverlay,
   detectionIndicatorOverlay,
   boundingBoxOverlay,
+  privacyOverlay,
   control,
   controlFastForwardButton,
   controlFsButton,
@@ -1059,8 +1062,9 @@ const hasPtz = computed(() => (cameraDevice.value?.hasPtz.value ?? false) && has
 const hasMotionDetector = computed(() => cameraDevice.value?.hasMotionSensor.value ?? false);
 const hasObjectDetector = computed(() => cameraDevice.value?.hasObjectSensor.value ?? false);
 
-const cameraZones = computed(() => cameraDevice.value?.camera.value?.detectionZones ?? []);
-const cameraLines = computed(() => cameraDevice.value?.camera.value?.detectionLines ?? []);
+const cameraZones = computed(() => cameraDevice.value?.camera.value?.zones?.object ?? []);
+const cameraLines = computed(() => cameraDevice.value?.camera.value?.zones?.lines ?? []);
+const cameraPrivacyZones = computed(() => cameraDevice.value?.camera.value?.zones?.privacy ?? []);
 
 const isExpanded = computed(() => props.expanded ?? internalExpanded.value);
 const bboxClasses = computed<DetectionLabel[]>(() => (bboxEnabled.value ? [] : ['__none__' as DetectionLabel]));
@@ -2078,7 +2082,7 @@ watch(activityMode, (mode) => {
 watch(
   () => motionSensor.value?.properties.detections,
   (detections) => {
-    if (cameraObj.value?.detectionZones.length === 0) return;
+    if (cameraObj.value?.zones?.object.length === 0) return;
     const detectionsArray = (detections ?? []) as FaceDetection[];
     handleActivity(detectionsArray);
     handleDetectionIndicator(detectionsArray);
@@ -2090,7 +2094,7 @@ watch(
 watch(
   () => objectSensor.value?.properties.detections,
   (detections) => {
-    if (cameraObj.value?.detectionZones.length === 0) return;
+    if (cameraObj.value?.zones?.object.length === 0) return;
     const detectionsArray = (detections ?? []) as TrackedDetection[];
     handleActivity(detectionsArray);
     handleDetectionIndicator(detectionsArray);

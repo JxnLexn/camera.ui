@@ -2,7 +2,7 @@ import { i18n } from '@/i18n/index.js';
 import { axiosInstance as api } from '..';
 
 import type { CreateCameraInput, PatchCameraInput, PreviewCameraInput } from '@/schemas/cameras.schema.js';
-import type { AlertZone, DetectionLine, DetectionZone, FormSubmitResponse, ProbeConfig, SensorType } from '@camera.ui/sdk';
+import type { CameraZones, FormSubmitResponse, ProbeConfig, SensorType } from '@camera.ui/sdk';
 import type {
   BulkPatchCamerasInput,
   BulkResult,
@@ -251,28 +251,8 @@ export async function deactivateCameraExtensionFn({ cameraname, pluginname }: { 
   return response.data;
 }
 
-export async function getZonesFn({ cameraname, signal }: { cameraname: string; signal: AbortSignal }): Promise<DetectionZone[] | undefined> {
-  const response: AxiosResponse<DetectionZone[]> = await api.get(`/cameras/${cameraname}/zones`, { signal });
-  return response.data;
-}
-
-export async function patchZonesFn({ cameraname, zoneData }: { cameraname: string; zoneData: DetectionZone[] }): Promise<DBCamera> {
-  const response: AxiosResponse<DBCamera> = await api.patch(`/cameras/${cameraname}/zones`, zoneData);
-  return response.data;
-}
-
-export async function patchAlertZonesFn({ cameraname, zoneData }: { cameraname: string; zoneData: AlertZone[] }): Promise<DBCamera> {
-  const response: AxiosResponse<DBCamera> = await api.patch(`/cameras/${cameraname}/alert-zones`, zoneData);
-  return response.data;
-}
-
-export async function getLinesFn({ cameraname, signal }: { cameraname: string; signal: AbortSignal }): Promise<DetectionLine[] | undefined> {
-  const response: AxiosResponse<DetectionLine[]> = await api.get(`/cameras/${cameraname}/lines`, { signal });
-  return response.data;
-}
-
-export async function patchLinesFn({ cameraname, lineData }: { cameraname: string; lineData: DetectionLine[] }): Promise<DBCamera> {
-  const response: AxiosResponse<DBCamera> = await api.patch(`/cameras/${cameraname}/lines`, lineData);
+export async function patchZoneConfigFn({ cameraname, zones }: { cameraname: string; zones: CameraZones }): Promise<DBCamera> {
+  const response: AxiosResponse<DBCamera> = await api.patch(`/cameras/${cameraname}/zone-config`, zones);
   return response.data;
 }
 
@@ -310,10 +290,6 @@ export class CamerasQuery {
     },
     {
       name: 'getCameraExtensionConfigQuery',
-      enabled: true,
-    },
-    {
-      name: 'getZonesQuery',
       enabled: true,
     },
     {
@@ -644,44 +620,12 @@ export class CamerasQuery {
     });
   }
 
-  public getZonesQuery(cameraname: string | Ref<string> | ComputedRef<string>) {
-    return useQueryEnhanced({
-      queryKey: ['cameras', cameraname, 'zones'],
-      queryFn: ({ signal }) =>
-        getZonesFn({
-          cameraname: unref(cameraname),
-          signal,
-        }),
-      enabled: () => this.queryActivator.value.some((query) => query.name === 'getZonesQuery' && query.enabled),
-    });
-  }
-
-  public patchZonesQuery() {
+  public patchZoneConfigQuery() {
     return useMutation({
-      mutationFn: patchZonesFn,
+      mutationFn: patchZoneConfigFn,
       onSuccess: async (_data, variables) => {
         await this._queryClient.refetchQueries({ queryKey: ['cameras', variables.cameraname], exact: true });
         this.toast.add({ severity: 'success', detail: this.t('components.toast.zone_updated'), life: 3000 });
-      },
-    });
-  }
-
-  public patchAlertZonesQuery() {
-    return useMutation({
-      mutationFn: patchAlertZonesFn,
-      onSuccess: async (_data, variables) => {
-        await this._queryClient.refetchQueries({ queryKey: ['cameras', variables.cameraname], exact: true });
-        this.toast.add({ severity: 'success', detail: this.t('components.toast.zone_updated'), life: 3000 });
-      },
-    });
-  }
-
-  public patchLinesQuery() {
-    return useMutation({
-      mutationFn: patchLinesFn,
-      onSuccess: async (_data, variables) => {
-        await this._queryClient.refetchQueries({ queryKey: ['cameras', variables.cameraname], exact: true });
-        this.toast.add({ severity: 'success', detail: this.t('components.toast.line_updated'), life: 3000 });
       },
     });
   }

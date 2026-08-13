@@ -60,6 +60,7 @@ export interface CuiCameraCardProps {
   modeOverlay?: boolean;
   detectionIndicatorOverlay?: boolean;
   boundingBoxOverlay?: boolean;
+  privacyOverlay?: boolean;
   showShortcuts?: boolean;
 
   // Toolbar Configuration
@@ -109,6 +110,7 @@ export const CAMERA_CARD_DEFAULTS: InferDefaults<CuiCameraCardProps> = {
   liveIndicatorOverlay: false,
   detectionIndicatorOverlay: false,
   boundingBoxOverlay: true,
+  privacyOverlay: true,
   showShortcuts: false,
 
   toolbar: true,

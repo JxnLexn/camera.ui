@@ -74,9 +74,7 @@ async function onSave() {
     ...cameraData,
     type: cameraData.type,
     isCloud: false,
-    detectionZones: [],
-    alertZones: [],
-    detectionLines: [],
+    zones: { privacyFallback: 'send', motion: [], object: [], privacy: [], alert: [], lines: [] },
     detectionSettings: {
       motion: {
         resolution: 'medium',

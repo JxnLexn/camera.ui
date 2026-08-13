@@ -1,34 +1,13 @@
 import { uuidv4 } from '@camera.ui/common/utils';
 import * as zod from 'zod';
 
+import { normalizeZones } from '../../camera/zones.js';
+
 import type { CameraAspectRatio, DetectionLabel, VideoStreamingMode } from '@camera.ui/sdk';
 
 export function hasCloudProtocol(urls: string[]): boolean {
   const cloudProtocols = ['kasa://', 'nest:', 'ring:', 'tapo://'];
   return urls.some((url) => cloudProtocols.some((protocol) => url.startsWith(protocol)));
-}
-
-const ZONE_COLORS = ['#df2a4c', '#2a7fdf', '#2adf7f', '#df7f2a', '#7f2adf', '#2adfdf', '#df2adf', '#7fdf2a'];
-
-function getRandomZoneColor(): string {
-  return ZONE_COLORS[Math.floor(Math.random() * ZONE_COLORS.length)];
-}
-
-function createDefaultDetectionZone() {
-  return {
-    name: 'Default Zone',
-    points: [
-      [0, 0],
-      [100, 0],
-      [100, 100],
-      [0, 100],
-    ] as [number, number][],
-    type: 'intersect' as const,
-    filter: 'include' as const,
-    labels: ['motion', 'person', 'vehicle', 'animal'] as DetectionLabel[],
-    isPrivacyMask: false,
-    color: getRandomZoneColor(),
-  };
 }
 
 export const recordingSettingsSchema = zod
@@ -51,19 +30,37 @@ export const detectionLabelSchema = zod.string().trim().min(1, 'Detection label 
 
 export const pointsSchema = zod.tuple([zod.number(), zod.number()]);
 
-export const detectionZoneSchema = zod
+const zoneColorSchema = zod
+  .string()
+  .trim()
+  .regex(/^#([0-9A-Fa-f]{3}){1,2}$/, 'Must be a valid hex color (e.g. #FF0000 or #F00)')
+  .default('#df2a4c');
+
+export const motionZoneSchema = zod
   .object({
     name: zod.string().trim().min(1, 'Zone Name is required'),
     points: pointsSchema.array().min(3, 'At least 3 points are required'),
-    type: zod.union([zod.literal('intersect'), zod.literal('contain')]),
-    filter: zod.union([zod.literal('include'), zod.literal('exclude')]),
+    filter: zod.union([zod.literal('include'), zod.literal('exclude')]).default('include'),
+    color: zoneColorSchema,
+  })
+  .array();
+
+export const objectZoneSchema = zod
+  .object({
+    name: zod.string().trim().min(1, 'Zone Name is required'),
+    points: pointsSchema.array().min(3, 'At least 3 points are required'),
+    type: zod.union([zod.literal('intersect'), zod.literal('contain')]).default('intersect'),
+    filter: zod.union([zod.literal('include'), zod.literal('exclude')]).default('include'),
     labels: detectionLabelSchema.array(),
-    isPrivacyMask: zod.boolean(),
-    color: zod
-      .string()
-      .trim()
-      .regex(/^#([0-9A-Fa-f]{3}){1,2}$/, 'Must be a valid hex color (e.g. #FF0000 or #F00)')
-      .default('#df2a4c'),
+    color: zoneColorSchema,
+  })
+  .array();
+
+export const privacyZoneSchema = zod
+  .object({
+    name: zod.string().trim().min(1, 'Zone Name is required'),
+    points: pointsSchema.array().min(3, 'At least 3 points are required'),
+    dropDetections: zod.boolean().default(true),
   })
   .array();
 
@@ -94,6 +91,17 @@ export const detectionLineSchema = zod
       .default('#df2a4c'),
   })
   .array();
+
+export const zoneConfigSchema = zod
+  .object({
+    privacyFallback: zod.union([zod.literal('send'), zod.literal('drop')]).default('send'),
+    motion: motionZoneSchema.default([]),
+    object: objectZoneSchema.default([]),
+    privacy: privacyZoneSchema.default([]),
+    alert: alertZoneSchema.default([]),
+    lines: detectionLineSchema.default([]),
+  })
+  .strict();
 
 export const detectionSettingsSchema = zod.object({
   motion: zod.object({
@@ -445,9 +453,7 @@ export const createCameraBaseSchema = zod
       streamingSource: 'high-resolution',
       aspectRatio: '16:9',
     }),
-    detectionZones: detectionZoneSchema.default([]),
-    alertZones: alertZoneSchema.default([]),
-    detectionLines: detectionLineSchema.default([]),
+    zones: zoneConfigSchema.default(normalizeZones()),
     detectionSettings: detectionSettingsSchema.default({
       motion: {
         resolution: 'low',
@@ -489,19 +495,15 @@ export const createCameraBaseSchema = zod
 export const createCameraSchema = createCameraBaseSchema.transform((data) => {
   const allUrls = data.sources.flatMap((source) => source.urls);
 
-  const detectionZones = data.detectionZones.length === 0 ? [createDefaultDetectionZone()] : data.detectionZones;
-
   if (data.isCloud || hasCloudProtocol(allUrls)) {
     return {
       ...data,
       isCloud: true,
-      detectionZones,
     };
   }
 
   return {
     ...data,
-    detectionZones,
   };
 });
 
@@ -544,8 +546,7 @@ export const patchCameraSchema = zod
     plugins: pluginInfo.array().optional(),
     assignments: assignmentsSchema.partial().optional(),
     interfaceSettings: interfaceSettingsSchema.partial().optional(),
-    detectionZones: detectionZoneSchema.optional(),
-    detectionLines: detectionLineSchema.optional(),
+    zones: zoneConfigSchema.optional(),
     detectionSettings: detectionSettingsSchema.partial().optional(),
     ptzAutotrack: ptzAutotrackSettingsSchema.partial().optional(),
     recordingSettings: recordingSettingsSchema.partial().optional(),

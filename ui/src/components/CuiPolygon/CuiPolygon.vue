@@ -1,5 +1,5 @@
 <template>
-  <svg ref="zoneRef" width="100%" height="100%" class="zones-container polygon-container min-w-0">
+  <svg ref="zoneRef" width="100%" height="100%" class="zones-container polygon-container min-w-0" :class="{ 'no-fade': privacyOnly }">
     <defs>
       <marker
         v-for="(line, i) in cameraLines ?? []"
@@ -33,14 +33,19 @@
       v-for="(zone, i) in cameraZones"
       :key="`zone-${i}`"
       :d="convertToSvgPath(zone.points.map((coord: [number, number]) => coord))"
-      :class="{
-        dash: zone.type === 'intersect' && !zone.isPrivacyMask,
-      }"
+      :class="{ dash: zone.type === 'intersect' }"
       :style="{
-        fill: zone.isPrivacyMask ? 'rgba(16, 16, 16, 0.9)' : zone.filter === 'exclude' ? 'transparent' : `${zone.color}4D`,
-        stroke: zone.isPrivacyMask ? '#333333' : zone.color,
+        fill: zone.filter === 'exclude' ? 'transparent' : `${zone.color}4D`,
+        stroke: zone.color,
         'stroke-width': '2',
       }"
+    />
+
+    <path
+      v-for="(zone, i) in privacyZones ?? []"
+      :key="`privacy-${i}`"
+      :d="convertToSvgPath(zone.points.map((coord: [number, number]) => coord))"
+      style="fill: #000; stroke: #000; stroke-width: 2"
     />
 
     <template v-for="(line, i) in cameraLines ?? []" :key="`line-${i}`">
@@ -80,6 +85,8 @@ import type { CuiPolygonProps } from './types.js';
 const props = defineProps<CuiPolygonProps>();
 
 const { cameraZones } = toRefs(props);
+
+const privacyOnly = computed(() => !props.cameraZones.length && !props.cameraLines?.length && Boolean(props.privacyZones?.length));
 
 const zoneRef = useTemplateRef<SVGSVGElement>('zoneRef');
 const zoneElement = useElementSize(zoneRef);
@@ -178,6 +185,10 @@ function lineSvg(line: DetectionLine) {
   height: 100%;
   pointer-events: none;
   opacity: 0.7;
+}
+
+.zones-container.no-fade {
+  opacity: 1;
 }
 </style>
 

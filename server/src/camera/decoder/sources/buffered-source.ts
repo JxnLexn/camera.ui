@@ -8,11 +8,13 @@ import type { Logger } from '@camera.ui/common/logger';
 import type { FrameWorkerDecoderSettings } from '@camera.ui/sdk';
 import type { HardwareContext } from 'node-av/api';
 import type { Frame, Packet, Stream } from 'node-av/lib';
+import type { PrivacyMask } from '../../privacy/mask.js';
 import type { AnalysisSource, FrameSnap } from './analysis-source.js';
 
 export interface BufferedSourceConfig {
   url: string;
   decoder?: FrameWorkerDecoderSettings;
+  privacy?: PrivacyMask;
 }
 
 interface BufferedPacket {
@@ -209,7 +211,7 @@ export class BufferedSource implements AnalysisSource {
     this.videoStream = videoStream;
 
     this.hwContext ??= createHardwareContext(this.config.decoder, this.logger);
-    this.frameScaler ??= new FrameScaler(this.hwContext, this.logger);
+    this.frameScaler ??= new FrameScaler(this.hwContext, this.logger, this.config.privacy);
 
     this.waitingForKeyframe = true;
     this.connected = true;

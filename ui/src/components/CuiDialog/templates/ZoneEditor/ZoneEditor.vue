@@ -7,8 +7,8 @@
         <div
           class="w-full flex justify-center gap-3"
           :class="{
-            'flex-row items-stretch': containerSize.width.value > 740,
-            'flex-col': containerSize.width.value <= 740,
+            'flex-row items-stretch': containerSize.width.value > 900,
+            'flex-col': containerSize.width.value <= 900,
           }"
         >
           <div class="relative w-full flex flex-col items-center justify-center">
@@ -34,44 +34,14 @@
 
                       <div class="clipboard">
                         <svg width="100%" height="100%" class="polygon-container">
-                          <template v-if="activeTab === 'zones'">
+                          <template v-if="activeTab !== 'lines'">
                             <path
-                              v-for="(zone, i) in detectionZones"
-                              :key="`zone-${i}`"
+                              v-for="(zone, i) in polygons"
+                              :key="`poly-${i}`"
                               :d="convertToSvgPath(zone.points)"
                               class="cursor-pointer"
-                              :class="{
-                                dash: zone.type === 'intersect' && !zone.isPrivacyMask,
-                                selected: selectedZone === i,
-                              }"
-                              :style="{
-                                fill: zone.isPrivacyMask ? 'rgba(16, 16, 16, 0.9)' : zone.filter === 'exclude' ? 'transparent' : `${zone.color}4D`,
-                                stroke: zone.isPrivacyMask ? '#333333' : zone.color,
-                                'stroke-width': '2',
-                              }"
-                              @click="selectZone(i)"
-                              @dblclick="() => (zone.isPrivacyMask = !zone.isPrivacyMask)"
-                              @mousedown="startDragPolygon($event, i)"
-                              @mousemove="onDragPolygon"
-                              @mouseup="endDragPolygon"
-                              @touchstart="startDragPolygon($event, i)"
-                              @touchmove="onDragPolygon"
-                              @touchend="endDragPolygon"
-                            />
-                          </template>
-
-                          <template v-if="activeTab === 'alerts'">
-                            <path
-                              v-for="(zone, i) in alertZones"
-                              :key="`alert-${i}`"
-                              :d="convertToSvgPath(zone.points)"
-                              class="cursor-pointer dash"
-                              :class="{ selected: selectedZone === i }"
-                              :style="{
-                                fill: `${zone.color}4D`,
-                                stroke: zone.color,
-                                'stroke-width': '2',
-                              }"
+                              :class="{ dash: polygonDashed, selected: selectedZone === i }"
+                              :style="polygonStyle(zone)"
                               @click="selectZone(i)"
                               @mousedown="startDragPolygon($event, i)"
                               @mousemove="onDragPolygon"
@@ -202,6 +172,7 @@
                 :toolbar="false"
                 :control="false"
                 :subcontrol="false"
+                :privacy-overlay="false"
                 flat-card
                 class="w-full h-full border-[1px] border-color-inner"
                 card-background-color="#000"
@@ -212,10 +183,11 @@
           <div
             class="w-full flex flex-col gap-6 zone-buttons items-center self-stretch"
             :class="{
-              '!gap-3': containerSize.width.value > 740,
+              '!gap-3': containerSize.width.value > 900,
             }"
             :style="{
-              'max-width': containerSize.width.value > 740 ? '300px' : undefined,
+              flex: containerSize.width.value > 900 ? '0 0 440px' : undefined,
+              'max-width': containerSize.width.value > 900 ? '440px' : undefined,
             }"
           >
             <SelectButton
@@ -227,12 +199,12 @@
               class="w-full"
               :pt="{
                 root: { class: 'flex w-full' },
-                pcToggleButton: { root: { class: 'flex-1 !text-sm' } },
+                pcToggleButton: { root: { class: 'flex-1 !text-xs !px-1 whitespace-nowrap' } },
               }"
             />
 
             <template v-if="activeTab === 'lines'">
-              <p class="cui-input-hint w-full">{{ $t('components.zone_editor.lines_hint') }}</p>
+              <p class="cui-input-hint w-full self-stretch text-pretty">{{ $t('components.zone_editor.lines_hint') }}</p>
 
               <div class="flex flex-col field-gap w-full">
                 <label :for="`line[${selectedLine}].name`" class="cui-label">{{ $t('components.form.label.name') }}</label>
@@ -266,7 +238,7 @@
                 <InputGroup>
                   <MultiSelect
                     :model-value="detectionLines[selectedLine]?.labels"
-                    :options="lineLabelOptions"
+                    :options="spatialLabelOptions"
                     :loading="isLoading"
                     :max-selected-labels="2"
                     :show-toggle-all="false"
@@ -279,6 +251,25 @@
                     @value-change="
                       (e) => {
                         if (detectionLines[selectedLine]) detectionLines[selectedLine].labels = e;
+                      }
+                    "
+                  />
+                </InputGroup>
+              </div>
+
+              <div class="flex flex-col field-gap w-full">
+                <label :for="`line[${selectedLine}].direction`" class="cui-label">{{ $t('components.zone_editor.line_direction') }}</label>
+                <InputGroup>
+                  <Select
+                    :model-value="detectionLines[selectedLine]?.direction ?? 'both'"
+                    :options="lineDirectionOptions"
+                    :loading="isLoading"
+                    :disabled="selectedLine < 0"
+                    option-label="label"
+                    option-value="value"
+                    @value-change="
+                      (e) => {
+                        if (detectionLines[selectedLine]) detectionLines[selectedLine].direction = e;
                       }
                     "
                   />
@@ -326,209 +317,23 @@
                   </template>
                 </Button>
               </div>
-
-              <div class="flex flex-row h-[50px] rounded-full overflow-hidden justify-self-center max-w-max border-[1px] border-color-inner">
-                <Button
-                  v-tooltip.top="{
-                    value: detectionLines[selectedLine]?.direction === 'both' ? 'A ↔ B' : detectionLines[selectedLine]?.direction === 'a-to-b' ? 'A → B' : 'B → A',
-                  }"
-                  :loading="isLoading"
-                  :disabled="selectedLine < 0"
-                  severity="secondary"
-                  class="!rounded-none !h-full w-[80px] text-sm"
-                  @click="cycleLineDirection"
-                >
-                  {{ detectionLines[selectedLine]?.direction === 'both' ? 'A ↔ B' : detectionLines[selectedLine]?.direction === 'a-to-b' ? 'A → B' : 'B → A' }}
-                </Button>
-              </div>
             </template>
 
-            <template v-if="activeTab === 'alerts'">
-              <p class="cui-input-hint w-full">{{ $t('components.zone_editor.alert_zones_hint') }}</p>
-
-              <div class="flex flex-col field-gap w-full">
-                <label :for="`alert[${selectedZone}].name`" class="cui-label">{{ $t('components.form.label.name') }}</label>
-                <InputGroup>
-                  <InputText
-                    :model-value="alertZones[selectedZone]?.name"
-                    :invalid="!!selectedZoneNameError"
-                    :loading="isLoading"
-                    :disabled="selectedZone < 0"
-                    type="text"
-                    @value-change="
-                      (e) => {
-                        if (alertZones[selectedZone]) alertZones[selectedZone].name = e ?? '';
-                      }
-                    "
-                  />
-                </InputGroup>
-
-                <Transition name="fade">
-                  <span v-if="selectedZoneNameError" class="cui-input-error">{{ selectedZoneNameError }}</span>
-                </Transition>
-              </div>
-
-              <div class="flex flex-col field-gap w-full">
-                <label :for="`alert[${selectedZone}].labels`" class="cui-label inline-flex items-center gap-1">
-                  {{ $t('components.form.label.labels') }}
-                  <span v-tooltip="{ value: $t('components.zone_editor.alert_labels_info') }" class="inline-flex shrink-0">
-                    <i-mdi:information-outline class="w-3.5 h-3.5 text-muted-color" />
-                  </span>
-                </label>
-                <InputGroup>
-                  <MultiSelect
-                    :model-value="alertZones[selectedZone]?.labels"
-                    :options="alertLabelOptions"
-                    :loading="isLoading"
-                    :disabled="selectedZone < 0"
-                    :max-selected-labels="2"
-                    :show-toggle-all="false"
-                    option-label="label"
-                    option-value="value"
-                    option-group-label="label"
-                    option-group-children="items"
-                    show-clear
-                    type="text"
-                    @value-change="
-                      (e) => {
-                        if (alertZones[selectedZone]) alertZones[selectedZone].labels = e ?? [];
-                      }
-                    "
-                  />
-                </InputGroup>
-              </div>
-
-              <div class="flex flex-col field-gap w-full">
-                <label :for="`alert[${selectedZone}].match`" class="cui-label">{{ $t('components.zone_editor.alert_match') }}</label>
-                <InputGroup>
-                  <Select
-                    :model-value="alertZones[selectedZone]?.match ?? 'contain'"
-                    :options="alertMatchOptions"
-                    :loading="isLoading"
-                    :disabled="selectedZone < 0"
-                    option-label="label"
-                    option-value="value"
-                    @value-change="
-                      (e) => {
-                        if (alertZones[selectedZone]) alertZones[selectedZone].match = e;
-                      }
-                    "
-                  />
-                </InputGroup>
-              </div>
-
-              <div class="flex flex-col field-gap w-full">
-                <label :for="`alert[${selectedZone}].color`" class="cui-label">{{ $t('components.form.label.color') }}</label>
-                <InputGroup>
-                  <InputText :model-value="alertZones[selectedZone]?.color" :loading="isLoading" readonly type="text" />
-                  <InputGroupAddon>
-                    <ColorPicker
-                      :key="selectedZone"
-                      :model-value="alertZones[selectedZone]?.color"
-                      format="hex"
-                      @value-change="(e) => (e && alertZones[selectedZone] ? (alertZones[selectedZone].color = `#${e}`) : null)"
-                    />
-                  </InputGroupAddon>
-                </InputGroup>
-              </div>
-
-              <div class="flex flex-row h-[50px] rounded-full overflow-hidden justify-self-center max-w-max border-[1px] border-color-inner mt-auto">
-                <Button
-                  v-if="!customizing"
-                  v-tooltip.top="{ value: $t('components.form.tooltip.new') }"
-                  :loading="isLoading"
-                  severity="secondary"
-                  class="!rounded-none !h-full w-[60px]"
-                  @click="startCustomizing"
-                >
-                  <template #icon>
-                    <i-mdi:plus width="20px" height="20px" />
-                  </template>
-                </Button>
-
-                <Button
-                  v-else
-                  v-tooltip.top="{ value: $t('components.form.tooltip.finish') }"
-                  :disabled="Boolean(currentZone !== undefined && alertZones[currentZone]?.points?.length < 3)"
-                  :loading="isLoading"
-                  severity="secondary"
-                  class="!rounded-none !h-full w-[60px]"
-                  @click="finishCustomizing(false)"
-                >
-                  <template #icon>
-                    <i-mdi:check width="20px" height="20px" />
-                  </template>
-                </Button>
-
-                <Button
-                  v-tooltip.top="{ value: $t('components.form.tooltip.edit') }"
-                  :loading="isLoading"
-                  :disabled="!alertZones.length || selectedZone < 0 || customizing"
-                  severity="secondary"
-                  class="!rounded-none !h-full w-[60px]"
-                  @click="editZone"
-                >
-                  <template #icon>
-                    <i-mdi:pencil width="20px" height="20px" />
-                  </template>
-                </Button>
-
-                <Button
-                  v-tooltip.top="{ value: $t('components.form.tooltip.delete') }"
-                  :loading="isLoading"
-                  :disabled="!alertZones.length || selectedZone < 0"
-                  severity="secondary"
-                  class="!rounded-none !h-full w-[60px]"
-                  @click="removeZone"
-                >
-                  <template #icon>
-                    <i-mdi:delete width="20px" height="20px" />
-                  </template>
-                </Button>
-
-                <Button
-                  v-tooltip.top="{ value: $t('components.form.tooltip.undo') }"
-                  :loading="isLoading"
-                  :disabled="!alertZones.length"
-                  severity="secondary"
-                  class="!rounded-none !h-full w-[60px]"
-                  @click="undo"
-                >
-                  <template #icon>
-                    <i-mdi:undo width="20px" height="20px" />
-                  </template>
-                </Button>
-
-                <Button
-                  v-tooltip.top="{ value: $t('components.form.tooltip.clear') }"
-                  :loading="isLoading"
-                  :disabled="!alertZones.length"
-                  severity="secondary"
-                  class="!rounded-none !h-full w-[60px]"
-                  @click="clear"
-                >
-                  <template #icon>
-                    <i-mdi:cancel width="20px" height="20px" />
-                  </template>
-                </Button>
-              </div>
-            </template>
-
-            <template v-if="activeTab === 'zones'">
-              <p class="cui-input-hint w-full">{{ $t('components.zone_editor.zones_hint') }}</p>
+            <template v-if="activeTab !== 'lines'">
+              <p class="cui-input-hint w-full self-stretch text-pretty">{{ $t(`components.zone_editor.${activeTab}_hint`) }}</p>
 
               <div class="flex flex-col field-gap w-full">
                 <label :for="`zone[${selectedZone}].name`" class="cui-label">{{ $t('components.form.label.name') }}</label>
                 <InputGroup>
                   <InputText
-                    :model-value="detectionZones[selectedZone]?.name"
+                    :model-value="polygons[selectedZone]?.name"
                     :invalid="!!selectedZoneNameError"
                     :loading="isLoading"
-                    :disabled="selectedZone < 0 || detectionZones[selectedZone]?.isPrivacyMask"
+                    :disabled="selectedZone < 0"
                     type="text"
                     @value-change="
                       (e) => {
-                        if (detectionZones[selectedZone]) detectionZones[selectedZone].name = e ?? '';
+                        if (polygons[selectedZone]) polygons[selectedZone].name = e ?? '';
                       }
                     "
                   />
@@ -539,19 +344,19 @@
                 </Transition>
               </div>
 
-              <div class="flex flex-col field-gap w-full">
+              <div v-if="tabHasLabels" class="flex flex-col field-gap w-full">
                 <label :for="`zone[${selectedZone}].labels`" class="cui-label inline-flex items-center gap-1">
                   {{ $t('components.form.label.labels') }}
-                  <span v-tooltip="{ value: $t('components.zone_editor.labels_info') }" class="inline-flex shrink-0">
+                  <span v-tooltip="{ value: $t(`components.zone_editor.${activeTab}_labels_info`) }" class="inline-flex shrink-0">
                     <i-mdi:information-outline class="w-3.5 h-3.5 text-muted-color" />
                   </span>
                 </label>
                 <InputGroup>
                   <MultiSelect
-                    :model-value="detectionZones[selectedZone]?.labels"
-                    :options="labelOptions"
-                    :disabled="detectionZones[selectedZone]?.isPrivacyMask"
+                    :model-value="labelledZone(selectedZone)?.labels"
+                    :options="spatialLabelOptions"
                     :loading="isLoading"
+                    :disabled="selectedZone < 0"
                     :max-selected-labels="2"
                     :show-toggle-all="false"
                     option-label="label"
@@ -560,29 +365,97 @@
                     option-group-children="items"
                     show-clear
                     type="text"
-                    @value-change="(e) => (detectionZones[selectedZone].labels = e)"
+                    @value-change="
+                      (e) => {
+                        const zone = labelledZone(selectedZone);
+                        if (zone) zone.labels = e ?? [];
+                      }
+                    "
                   />
                 </InputGroup>
               </div>
 
-              <div class="flex flex-col field-gap w-full">
+              <div v-if="activeTab === 'privacy'" class="flex flex-col field-gap w-full">
+                <label :for="`zone[${selectedZone}].dropDetections`" class="cui-label">{{ $t('components.zone_editor.privacy_drop') }}</label>
+                <InputGroup>
+                  <Select
+                    :model-value="privacyZones[selectedZone]?.dropDetections ?? true"
+                    :options="privacyDropOptions"
+                    :loading="isLoading"
+                    :disabled="selectedZone < 0"
+                    option-label="label"
+                    option-value="value"
+                    @value-change="
+                      (e) => {
+                        if (privacyZones[selectedZone]) privacyZones[selectedZone].dropDetections = e;
+                      }
+                    "
+                  />
+                </InputGroup>
+              </div>
+
+              <div v-if="activeTab === 'privacy'" class="flex flex-col field-gap w-full">
+                <label for="privacyFallback" class="cui-label inline-flex items-center gap-1">
+                  {{ $t('components.zone_editor.privacy_fallback') }}
+                  <span v-tooltip="{ value: $t('components.zone_editor.privacy_fallback_info') }" class="inline-flex shrink-0">
+                    <i-mdi:information-outline class="w-3.5 h-3.5 text-muted-color" />
+                  </span>
+                </label>
+                <InputGroup>
+                  <Select v-model="privacyFallback" :options="privacyFallbackOptions" :loading="isLoading" option-label="label" option-value="value" />
+                </InputGroup>
+              </div>
+
+              <div v-if="tabHasFilter" class="flex flex-col field-gap w-full">
+                <label :for="`zone[${selectedZone}].filter`" class="cui-label">{{ $t('components.zone_editor.zone_filter') }}</label>
+                <InputGroup>
+                  <Select
+                    :model-value="filteredZone(selectedZone)?.filter ?? 'include'"
+                    :options="filterOptions"
+                    :loading="isLoading"
+                    :disabled="selectedZone < 0"
+                    option-label="label"
+                    option-value="value"
+                    @value-change="
+                      (e) => {
+                        const zone = filteredZone(selectedZone);
+                        if (zone) zone.filter = e;
+                      }
+                    "
+                  />
+                </InputGroup>
+              </div>
+
+              <div v-if="activeTab === 'object' || activeTab === 'alert'" class="flex flex-col field-gap w-full">
+                <label :for="`zone[${selectedZone}].match`" class="cui-label">{{ $t('components.zone_editor.zone_match') }}</label>
+                <InputGroup>
+                  <Select
+                    :model-value="activeTab === 'alert' ? (alertZones[selectedZone]?.match ?? 'contain') : (objectZones[selectedZone]?.type ?? 'intersect')"
+                    :options="activeTab === 'alert' ? alertMatchOptions : objectMatchOptions"
+                    :loading="isLoading"
+                    :disabled="selectedZone < 0"
+                    option-label="label"
+                    option-value="value"
+                    @value-change="(e) => setMatch(e)"
+                  />
+                </InputGroup>
+              </div>
+
+              <div v-if="activeTab !== 'privacy'" class="flex flex-col field-gap w-full">
                 <label :for="`zone[${selectedZone}].color`" class="cui-label">{{ $t('components.form.label.color') }}</label>
                 <InputGroup>
-                  <InputText
-                    :model-value="detectionZones[selectedZone]?.color"
-                    :disabled="detectionZones[selectedZone]?.isPrivacyMask"
-                    :loading="isLoading"
-                    readonly
-                    type="text"
-                  />
-
+                  <InputText :model-value="colouredZone(selectedZone)?.color" :loading="isLoading" readonly type="text" />
                   <InputGroupAddon>
                     <ColorPicker
-                      :key="selectedZone"
-                      :model-value="detectionZones[selectedZone]?.color"
+                      :key="`${activeTab}-${selectedZone}`"
+                      :model-value="colouredZone(selectedZone)?.color"
                       format="hex"
-                      :disabled="detectionZones[selectedZone]?.isPrivacyMask"
-                      @value-change="(e) => (e ? (detectionZones[selectedZone].color = `#${e}`) : null)"
+                      @value-change="
+                        (e) => {
+                          const zone = colouredZone(selectedZone);
+                          if (e && zone) zone.color = `#${e}`;
+                        }
+                      "
                     />
                   </InputGroupAddon>
                 </InputGroup>
@@ -605,7 +478,7 @@
                 <Button
                   v-else
                   v-tooltip.top="{ value: $t('components.form.tooltip.finish') }"
-                  :disabled="Boolean(currentZone !== undefined && detectionZones[currentZone]?.points?.length < 3)"
+                  :disabled="Boolean(currentZone !== undefined && polygons[currentZone]?.points?.length < 3)"
                   :loading="isLoading"
                   severity="secondary"
                   class="!rounded-none !h-full w-[60px]"
@@ -619,7 +492,7 @@
                 <Button
                   v-tooltip.top="{ value: $t('components.form.tooltip.edit') }"
                   :loading="isLoading"
-                  :disabled="!detectionZones.length || selectedZone < 0 || customizing"
+                  :disabled="!polygons.length || selectedZone < 0 || customizing"
                   severity="secondary"
                   class="!rounded-none !h-full w-[60px]"
                   @click="editZone"
@@ -632,7 +505,7 @@
                 <Button
                   v-tooltip.top="{ value: $t('components.form.tooltip.delete') }"
                   :loading="isLoading"
-                  :disabled="!detectionZones.length || selectedZone < 0"
+                  :disabled="!polygons.length || selectedZone < 0"
                   severity="secondary"
                   class="!rounded-none !h-full w-[60px]"
                   @click="removeZone"
@@ -645,7 +518,7 @@
                 <Button
                   v-tooltip.top="{ value: $t('components.form.tooltip.undo') }"
                   :loading="isLoading"
-                  :disabled="!detectionZones.length"
+                  :disabled="!polygons.length"
                   severity="secondary"
                   class="!rounded-none !h-full w-[60px]"
                   @click="undo"
@@ -658,63 +531,13 @@
                 <Button
                   v-tooltip.top="{ value: $t('components.form.tooltip.clear') }"
                   :loading="isLoading"
-                  :disabled="!detectionZones.length"
+                  :disabled="!polygons.length"
                   severity="secondary"
                   class="!rounded-none !h-full w-[60px]"
                   @click="clear"
                 >
                   <template #icon>
                     <i-mdi:cancel width="20px" height="20px" />
-                  </template>
-                </Button>
-              </div>
-
-              <div class="flex flex-row h-[50px] rounded-full overflow-hidden justify-self-center max-w-max border-[1px] border-color-inner">
-                <Button
-                  v-tooltip.top="{
-                    value: detectionZones[selectedZone]?.isPrivacyMask ? $t('components.form.tooltip.privacy_mask') : $t('components.form.tooltip.public_mask'),
-                  }"
-                  :loading="isLoading"
-                  :disabled="!(detectionZones.length && selectedZone >= 0 && detectionZones[selectedZone])"
-                  severity="secondary"
-                  class="!rounded-none !h-full w-[60px]"
-                  @click="changePrivacy"
-                >
-                  <template #icon>
-                    <i-mdi:cctv-off v-if="detectionZones[selectedZone]?.isPrivacyMask" width="20px" height="20px" />
-                    <i-mdi:cctv v-else width="20px" height="20px" />
-                  </template>
-                </Button>
-
-                <Button
-                  v-tooltip.top="{
-                    value: detectionZones[selectedZone]?.filter === 'include' ? $t('components.form.tooltip.include') : $t('components.form.tooltip.exclude'),
-                  }"
-                  :loading="isLoading"
-                  :disabled="detectionZones[selectedZone]?.isPrivacyMask"
-                  severity="secondary"
-                  class="!rounded-none !h-full w-[60px]"
-                  @click="changeFilter"
-                >
-                  <template #icon>
-                    <i-mdi:rectangle v-if="detectionZones[selectedZone]?.filter === 'include'" width="20px" height="20px" />
-                    <i-mdi:rectangle-outline v-else width="20px" height="20px" />
-                  </template>
-                </Button>
-
-                <Button
-                  v-tooltip.top="{
-                    value: detectionZones[selectedZone]?.type === 'intersect' ? $t('components.form.tooltip.intersect') : $t('components.form.tooltip.contain'),
-                  }"
-                  :loading="isLoading"
-                  :disabled="detectionZones[selectedZone]?.isPrivacyMask"
-                  severity="secondary"
-                  class="!rounded-none !h-full w-[60px]"
-                  @click="changeType"
-                >
-                  <template #icon>
-                    <i-mdi:vector-intersection v-if="detectionZones[selectedZone]?.type === 'intersect'" width="20px" height="20px" />
-                    <i-mdi:checkbox-intermediate v-else width="20px" height="20px" />
                   </template>
                 </Button>
               </div>
@@ -732,11 +555,11 @@ import Draggabilly from 'draggabilly';
 
 import { CamerasQuery } from '@/api/routes/cameras.js';
 import { deepToRaw } from '@/common/utils.js';
-import { cameraCreatePatchAlertZones, cameraCreatePatchLines, cameraCreatePatchZones } from '@/schemas/cameras.schema.js';
-import { NON_SPATIAL_LABELS, NON_TRACKED_LABELS } from './types.js';
+import { cameraCreatePatchLines, cameraCreatePatchObjectZones } from '@/schemas/cameras.schema.js';
+import { NON_TRACKED_LABELS } from './types.js';
 
 import type { DialogRefProps } from '@/composables/useCuiDialog.js';
-import type { AlertZone, DetectionLine, DetectionZone, LineDirection, Point } from '@camera.ui/sdk';
+import type { AlertZone, DetectionLine, LineDirection, MotionZone, ObjectZone, Point, PrivacyFallback, PrivacyZone } from '@camera.ui/sdk';
 import type { ComputedRef } from 'vue';
 import type { CoordsPosition, EditorPolygon, LabelGroup, ZoneEditorProps, ZoneEditorTab } from './types.js';
 
@@ -749,9 +572,7 @@ const { t } = useI18n();
 
 const dialogRefProps = inject<DialogRefProps>('dialogRefProps')!;
 
-const { mutateAsync: patchCameraZones, isPending: patchCameraZonesLoading } = camerasQuery.patchZonesQuery();
-const { mutateAsync: patchCameraAlertZones, isPending: patchCameraAlertZonesLoading } = camerasQuery.patchAlertZonesQuery();
-const { mutateAsync: patchCameraLines, isPending: patchCameraLinesLoading } = camerasQuery.patchLinesQuery();
+const { mutateAsync: patchZoneConfig, isPending: patchZoneConfigLoading } = camerasQuery.patchZoneConfigQuery();
 
 const { cameraName, zones } = toRefs(props);
 const cameraCardRef = useTemplateRef('cameraCardRef');
@@ -759,9 +580,12 @@ const containerRef = useTemplateRef('container');
 const draggablesRef = useTemplateRef<HTMLElement[]>('draggablesRef');
 const outsideRef = useTemplateRef('outsideRef');
 const playgroundContainerRef = useTemplateRef<HTMLElement>('playgroundContainerRef');
-const activeTab = ref<ZoneEditorTab>(props.initialTab ?? 'zones');
+const activeTab = ref<ZoneEditorTab>(props.initialTab ?? 'motion');
 const draggies = shallowRef<Draggabilly[]>([]);
-const detectionZones = ref<DetectionZone[]>([]);
+const motionZones = ref<MotionZone[]>([]);
+const objectZones = ref<ObjectZone[]>([]);
+const privacyZones = ref<PrivacyZone[]>([]);
+const privacyFallback = ref<PrivacyFallback>('send');
 const alertZones = ref<AlertZone[]>([]);
 const detectionLines = ref<DetectionLine[]>([]);
 const customizing = ref(false);
@@ -786,18 +610,50 @@ let draggingLine: { lineIndex: number; pointIndex: number } | null = null;
 const containerSize = useElementSize(containerRef);
 const playgroundSize = useElementSize(playgroundContainerRef);
 
-const zoneNameSchema = cameraCreatePatchZones.element.shape.name;
-const alertZoneNameSchema = cameraCreatePatchAlertZones.element.shape.name;
+const zoneNameSchema = cameraCreatePatchObjectZones.element.shape.name;
 const lineNameSchema = cameraCreatePatchLines.element.shape.name;
 
-const isAlertTab = computed(() => activeTab.value === 'alerts');
-const polygons = computed(() => (isAlertTab.value ? alertZones.value : detectionZones.value)) as ComputedRef<EditorPolygon[]>;
+const polygons = computed(() => {
+  if (activeTab.value === 'motion') return motionZones.value;
+  if (activeTab.value === 'object') return objectZones.value;
+  if (activeTab.value === 'privacy') return privacyZones.value;
+  return alertZones.value;
+}) as ComputedRef<EditorPolygon[]>;
+
+const tabHasLabels = computed(() => activeTab.value === 'object' || activeTab.value === 'alert');
+const tabHasFilter = computed(() => activeTab.value === 'motion' || activeTab.value === 'object');
+const polygonDashed = computed(() => activeTab.value === 'alert' || activeTab.value === 'motion');
+
+function labelledZone(index: number): ObjectZone | AlertZone | undefined {
+  if (activeTab.value === 'object') return objectZones.value[index];
+  if (activeTab.value === 'alert') return alertZones.value[index];
+  return undefined;
+}
+
+function filteredZone(index: number): MotionZone | ObjectZone | undefined {
+  if (activeTab.value === 'motion') return motionZones.value[index];
+  if (activeTab.value === 'object') return objectZones.value[index];
+  return undefined;
+}
+
+function colouredZone(index: number): MotionZone | ObjectZone | AlertZone | undefined {
+  const zone = polygons.value[index];
+  return zone && 'color' in zone ? zone : undefined;
+}
+
+function polygonStyle(zone: EditorPolygon): Record<string, string> {
+  if (!('color' in zone)) {
+    return { fill: '#000', stroke: '#000', 'stroke-width': '2' };
+  }
+  const excluded = 'filter' in zone && zone.filter === 'exclude';
+  return { fill: excluded ? 'transparent' : `${zone.color}4D`, stroke: zone.color, 'stroke-width': '2' };
+}
 
 const selectedZoneNameError = computed(() => {
   if (selectedZone.value < 0) return '';
   const zone = polygons.value[selectedZone.value];
-  if (!zone || ('isPrivacyMask' in zone && zone.isPrivacyMask)) return '';
-  const result = (isAlertTab.value ? alertZoneNameSchema : zoneNameSchema).safeParse(zone.name);
+  if (!zone) return '';
+  const result = zoneNameSchema.safeParse(zone.name);
   return result.success ? '' : (result.error.issues[0]?.message ?? '');
 });
 
@@ -815,13 +671,17 @@ const contentWidth = computed(() => Math.max(0, playgroundSize.width.value - 20)
 const contentHeight = computed(() => Math.max(0, playgroundSize.height.value - 20));
 
 const tabOptions = computed(() => [
-  { label: t('components.zone_editor.tab_zones'), value: 'zones' as const },
-  { label: t('components.zone_editor.tab_alerts'), value: 'alerts' as const },
+  { label: t('components.zone_editor.tab_motion'), value: 'motion' as const },
+  { label: t('components.zone_editor.tab_object'), value: 'object' as const },
+  { label: t('components.zone_editor.tab_alert'), value: 'alert' as const },
+  { label: t('components.zone_editor.tab_privacy'), value: 'privacy' as const },
   { label: t('components.zone_editor.tab_lines'), value: 'lines' as const },
 ]);
 
-const labelOptions = computed<LabelGroup[]>(() => {
-  const filteredLabels = DETECTION_LABELS.filter((label) => !NON_SPATIAL_LABELS.includes(label));
+// motion has its own tab and audio has no geometry, so neither can be picked
+// on a zone or a line
+const spatialLabelOptions = computed<LabelGroup[]>(() => {
+  const filteredLabels = DETECTION_LABELS.filter((label) => !NON_TRACKED_LABELS.includes(label));
 
   if (filteredLabels.length === 0) return [];
 
@@ -834,41 +694,48 @@ const labelOptions = computed<LabelGroup[]>(() => {
 });
 
 const alertMatchOptions = computed(() => [
-  { label: t('components.zone_editor.alert_match_anchor'), value: 'anchor' as const },
-  { label: t('components.zone_editor.alert_match_intersect'), value: 'intersect' as const },
-  { label: t('components.zone_editor.alert_match_contain'), value: 'contain' as const },
+  { label: t('components.zone_editor.match_anchor'), value: 'anchor' as const },
+  { label: t('components.zone_editor.match_intersect'), value: 'intersect' as const },
+  { label: t('components.zone_editor.match_contain'), value: 'contain' as const },
 ]);
 
-// an alert zone gates pushes, and a push needs an object with geometry
-const alertLabelOptions = computed<LabelGroup[]>(() => {
-  const filteredLabels = DETECTION_LABELS.filter((label) => !NON_TRACKED_LABELS.includes(label));
+const objectMatchOptions = computed(() => [
+  { label: t('components.zone_editor.match_intersect'), value: 'intersect' as const },
+  { label: t('components.zone_editor.match_contain'), value: 'contain' as const },
+]);
 
-  if (filteredLabels.length === 0) return [];
+const lineDirectionOptions = computed(() => [
+  { label: `A ↔ B  ${t('components.zone_editor.line_direction_both')}`, value: 'both' as const },
+  { label: 'A → B', value: 'a-to-b' as const },
+  { label: 'B → A', value: 'b-to-a' as const },
+]);
 
-  return [
-    {
-      label: t('components.zone_editor.base_labels'),
-      items: filteredLabels.map((label) => ({ label, value: label })),
-    },
-  ];
-});
+const privacyFallbackOptions = computed(() => [
+  { label: t('components.zone_editor.privacy_fallback_send'), value: 'send' as const },
+  { label: t('components.zone_editor.privacy_fallback_drop'), value: 'drop' as const },
+]);
 
-const lineLabelOptions = computed<LabelGroup[]>(() => {
-  const filteredLabels = DETECTION_LABELS.filter((label) => !NON_TRACKED_LABELS.includes(label));
+const privacyDropOptions = computed(() => [
+  { label: t('components.zone_editor.privacy_drop_on'), value: true },
+  { label: t('components.zone_editor.privacy_drop_off'), value: false },
+]);
 
-  if (filteredLabels.length === 0) return [];
+const filterOptions = computed(() => [
+  { label: t('components.zone_editor.filter_include'), value: 'include' as const },
+  { label: t('components.zone_editor.filter_exclude'), value: 'exclude' as const },
+]);
 
-  return [
-    {
-      label: t('components.zone_editor.base_labels'),
-      items: filteredLabels.map((label) => ({ label, value: label })),
-    },
-  ];
-});
+function setMatch(value: 'anchor' | 'intersect' | 'contain'): void {
+  if (activeTab.value === 'alert') {
+    const zone = alertZones.value[selectedZone.value];
+    if (zone) zone.match = value;
+    return;
+  }
+  const zone = objectZones.value[selectedZone.value];
+  if (zone && value !== 'anchor') zone.type = value;
+}
 
-const isLoading = computed(() =>
-  Boolean(dialogRefProps.loading?.value || patchCameraZonesLoading.value || patchCameraAlertZonesLoading.value || patchCameraLinesLoading.value),
-);
+const isLoading = computed(() => Boolean(dialogRefProps.loading?.value || patchZoneConfigLoading.value));
 
 const playgroundClasses = computed(() => {
   const classes: string[] = [];
@@ -991,30 +858,6 @@ function endDragPolygon(): void {
   }, 100);
 }
 
-function changePrivacy(): void {
-  if (!detectionZones.value.length || selectedZone.value === -1) {
-    return;
-  }
-
-  detectionZones.value[selectedZone.value].isPrivacyMask = !detectionZones.value[selectedZone.value].isPrivacyMask;
-}
-
-function changeFilter(): void {
-  if (!detectionZones.value[selectedZone.value]) {
-    return;
-  }
-
-  detectionZones.value[selectedZone.value].filter = detectionZones.value[selectedZone.value].filter === 'include' ? 'exclude' : 'include';
-}
-
-function changeType(): void {
-  if (!detectionZones.value[selectedZone.value]) {
-    return;
-  }
-
-  detectionZones.value[selectedZone.value].type = detectionZones.value[selectedZone.value].type === 'intersect' ? 'contain' : 'intersect';
-}
-
 function addHandle(e: MouseEvent): void {
   if (!customizing.value || isDragging) {
     return;
@@ -1025,24 +868,16 @@ function addHandle(e: MouseEvent): void {
   const y = Math.min(Math.max(Math.round(((e.offsetY - 10) / contentHeight.value) * 100), 0), 100);
 
   if (currentZone.value === undefined) {
-    if (isAlertTab.value) {
-      alertZones.value.push({
-        name: `alert-${Date.now()}`,
-        points: [],
-        labels: ['person', 'vehicle'],
-        match: 'contain',
-        color: getRandomHexColor(),
-      });
+    const color = getRandomHexColor();
+    const stamp = Date.now();
+    if (activeTab.value === 'motion') {
+      motionZones.value.push({ name: `motion-${stamp}`, points: [], filter: 'include', color });
+    } else if (activeTab.value === 'object') {
+      objectZones.value.push({ name: `object-${stamp}`, points: [], filter: 'include', type: 'intersect', labels: ['person', 'vehicle', 'animal'], color });
+    } else if (activeTab.value === 'privacy') {
+      privacyZones.value.push({ name: `privacy-${stamp}`, points: [], dropDetections: true });
     } else {
-      detectionZones.value.push({
-        name: `zone-${Date.now()}`,
-        points: [],
-        filter: 'include',
-        type: 'intersect',
-        labels: ['motion', 'person', 'vehicle', 'animal'],
-        isPrivacyMask: false,
-        color: getRandomHexColor(),
-      });
+      alertZones.value.push({ name: `alert-${stamp}`, points: [], labels: ['person', 'vehicle'], match: 'contain', color });
     }
 
     currentZone.value = polygons.value.length - 1;
@@ -1355,15 +1190,6 @@ function removeLine(): void {
   selectedLine.value = Math.max(-1, selectedLine.value - 1);
 }
 
-function cycleLineDirection(): void {
-  if (selectedLine.value < 0) return;
-  const line = detectionLines.value[selectedLine.value];
-  if (!line) return;
-  const order: LineDirection[] = ['both', 'a-to-b', 'b-to-a'];
-  const idx = order.indexOf(line.direction);
-  line.direction = order[(idx + 1) % order.length];
-}
-
 function lineSvgEditor(line: DetectionLine) {
   const cw = contentWidth.value;
   const ch = contentHeight.value;
@@ -1440,19 +1266,16 @@ function lineSvgEditor(line: DetectionLine) {
 
 async function onConfirm(): Promise<void | null> {
   try {
-    await patchCameraZones({
+    await patchZoneConfig({
       cameraname: cameraName.value,
-      zoneData: detectionZones.value,
-    });
-
-    await patchCameraAlertZones({
-      cameraname: cameraName.value,
-      zoneData: alertZones.value,
-    });
-
-    await patchCameraLines({
-      cameraname: cameraName.value,
-      lineData: detectionLines.value,
+      zones: {
+        privacyFallback: privacyFallback.value,
+        motion: motionZones.value,
+        object: objectZones.value,
+        privacy: privacyZones.value,
+        alert: alertZones.value,
+        lines: detectionLines.value,
+      },
     });
   } catch (error) {
     toast.add({ severity: 'error', detail: error, life: 3000 });
@@ -1493,25 +1316,13 @@ watch(selectedZone, (newZone, oldZone) => {
 watch(
   zones,
   () => {
-    detectionZones.value = deepToRaw(zones.value);
+    motionZones.value = deepToRaw(zones.value.motion ?? []);
+    objectZones.value = deepToRaw(zones.value.object ?? []);
+    privacyZones.value = deepToRaw(zones.value.privacy ?? []);
+    privacyFallback.value = zones.value.privacyFallback ?? 'send';
+    alertZones.value = deepToRaw(zones.value.alert ?? []);
+    detectionLines.value = deepToRaw(zones.value.lines ?? []);
     updateCoordinatesFromZones();
-  },
-  { deep: true, immediate: true },
-);
-
-watch(
-  () => props.alerts,
-  () => {
-    alertZones.value = deepToRaw(props.alerts ?? []);
-    if (isAlertTab.value) updateCoordinatesFromZones();
-  },
-  { deep: true, immediate: true },
-);
-
-watch(
-  () => props.lines,
-  () => {
-    detectionLines.value = deepToRaw(props.lines);
   },
   { deep: true, immediate: true },
 );

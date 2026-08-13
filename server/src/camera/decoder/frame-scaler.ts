@@ -1,9 +1,11 @@
 import { Scaler } from 'node-av/api';
+import { Frame } from 'node-av/lib';
+
+import { PrivacyMask } from '../privacy/mask.js';
 
 import type { Logger } from '@camera.ui/common/logger';
 import type { Detection, VideoFrameData, VideoInputSpec } from '@camera.ui/sdk';
 import type { HardwareContext, ScalerCrop } from 'node-av/api';
-import type { Frame } from 'node-av/lib';
 import type { CroppedRegion } from '../../rpc/interfaces/detection.js';
 
 type ScaledFormat = 'rgb' | 'nv12' | 'gray';
@@ -58,11 +60,16 @@ export class FrameScaler {
   private readonly MIN_THUMBNAIL_CROP = 64;
 
   private scaler?: Scaler;
+  private privacy: PrivacyMask;
+  private maskedFrame?: { pts: bigint; width: number; height: number; revision: number; frame: Frame };
 
   constructor(
     private hardwareContext?: HardwareContext | null,
     private logger?: Logger,
-  ) {}
+    privacy?: PrivacyMask,
+  ) {
+    this.privacy = privacy ?? new PrivacyMask(logger);
+  }
 
   public async scale(frame: Frame, targetWidth: number, targetHeight: number, format: ScaledFormat = 'rgb'): Promise<ScaledFrame | null> {
     if (targetWidth < 2 || targetHeight < 2) return null;
@@ -159,8 +166,8 @@ export class FrameScaler {
 
       const resize = this.scaledSize(crop.width, crop.height, maxWidth);
       try {
-        const jpeg = await this.getScaler().toJpeg(frame, { crop, resize, quality });
-        results.push({ index, jpeg });
+        const jpeg = await this.encodeJpeg(frame, { crop, resize, quality });
+        if (jpeg) results.push({ index, jpeg });
       } catch (error) {
         this.logger?.debug(`Thumbnail crop failed for ${detection.label}: ${error}`);
       }
@@ -171,7 +178,7 @@ export class FrameScaler {
 
   public async cropWindowToJPEG(frame: Frame, crop: ScalerCrop, width: number, height: number, quality: number): Promise<Buffer | null> {
     try {
-      return await this.getScaler().toJpeg(frame, { crop, resize: { width, height }, quality });
+      return await this.encodeJpeg(frame, { crop, resize: { width, height }, quality });
     } catch (error) {
       this.logger?.debug(`Moment crop failed: ${error}`);
       return null;
@@ -183,7 +190,7 @@ export class FrameScaler {
     const resize = this.scaledSize(frame.width, frame.height, maxWidth);
     if (resize.width < 2 || resize.height < 2) return null;
     try {
-      return await this.getScaler().toJpeg(frame, { resize, quality });
+      return await this.encodeJpeg(frame, { resize, quality });
     } catch (error) {
       this.logger?.debug(`Full-frame JPEG failed: ${error}`);
       return null;
@@ -214,9 +221,56 @@ export class FrameScaler {
     return results;
   }
 
+  private async encodeJpeg(frame: Frame, options: { crop?: ScalerCrop; resize: { width: number; height: number }; quality: number }): Promise<Buffer | null> {
+    if (!this.privacy.active) return this.getScaler().toJpeg(frame, options);
+
+    // a picture that would be black end to end is not worth encoding
+    const region = options.crop ?? { x: 0, y: 0, width: frame.width, height: frame.height };
+    if (this.privacy.covers(region, frame.width, frame.height)) return null;
+
+    if (frame.isSwFrame()) {
+      if (!this.privacy.apply(frame)) return this.unmaskedFallback(frame, options);
+      return this.getScaler().toJpeg(frame, options);
+    }
+
+    const masked = await this.maskedCopy(frame);
+    if (!masked) return this.unmaskedFallback(frame, options);
+    return this.getScaler().toJpeg(masked, options);
+  }
+
+  private async maskedCopy(frame: Frame): Promise<Frame | null> {
+    const cached = this.maskedFrame;
+    if (cached?.pts === frame.pts && cached?.width === frame.width && cached?.height === frame.height && cached?.revision === this.privacy.revision) {
+      return cached.frame;
+    }
+
+    const sw = new Frame();
+    sw.alloc();
+    const ret = await frame.hwframeTransferData(sw);
+    if (ret >= 0) {
+      sw.copyProps(frame);
+      if (sw.timeBase.num === 0 || sw.timeBase.den === 0) sw.timeBase = { num: 1, den: 90_000 };
+    }
+    if (ret < 0 || !this.privacy.apply(sw)) {
+      sw.free();
+      return null;
+    }
+
+    cached?.frame.free();
+    this.maskedFrame = { pts: frame.pts, width: frame.width, height: frame.height, revision: this.privacy.revision, frame: sw };
+    return sw;
+  }
+
+  private async unmaskedFallback(frame: Frame, options: { crop?: ScalerCrop; resize: { width: number; height: number }; quality: number }): Promise<Buffer | null> {
+    if (this.privacy.reportFailure() === 'drop') return null;
+    return this.getScaler().toJpeg(frame, options);
+  }
+
   public clearCache(): void {
     this.scaler?.[Symbol.dispose]();
     this.scaler = undefined;
+    this.maskedFrame?.frame.free();
+    this.maskedFrame = undefined;
   }
 
   public updateHardwareContext(context: HardwareContext | null | undefined): void {

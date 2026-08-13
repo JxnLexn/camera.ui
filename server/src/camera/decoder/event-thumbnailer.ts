@@ -5,6 +5,7 @@ import type { Logger } from '@camera.ui/common/logger';
 import type { FrameWorkerDecoderSettings } from '@camera.ui/sdk';
 import type { Frame } from 'node-av/lib';
 import type { DetectionEventManager } from './event-manager.js';
+import type { PrivacyMask } from '../privacy/mask.js';
 import type { FrameScaler } from './frame-scaler.js';
 import type { FrameSource } from './sources/frame-source.js';
 import type { CoordinatorSourceUrl } from './types.js';
@@ -18,6 +19,7 @@ const HQ_FRAME_MAX_AGE_MS = 500;
 interface EventThumbnailerDeps {
   frameSource: FrameSource;
   frameScaler: FrameScaler;
+  privacy: PrivacyMask;
   eventManager: DetectionEventManager;
   logger: Logger;
   decoder?: FrameWorkerDecoderSettings;
@@ -48,7 +50,7 @@ export class EventThumbnailer {
   ) {
     const hqUrl = resolveHqSourceUrl(availableSources);
     if (hqUrl) {
-      this.hqSource = new BufferedSource({ url: hqUrl, decoder: deps.decoder }, deps.logger);
+      this.hqSource = new BufferedSource({ url: hqUrl, decoder: deps.decoder, privacy: deps.privacy }, deps.logger);
     }
   }
 

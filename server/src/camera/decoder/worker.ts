@@ -12,13 +12,11 @@ import { nodeDecoderPath } from '../../utils/path.js';
 import type { LogEntry } from '@camera.ui/common/logger';
 import type { PrivateChannel, Promisify } from '@camera.ui/rpc';
 import type {
-  AlertZone,
   CameraDetectionSettings,
   CameraFrameWorkerSettings,
   CameraInput,
   CameraUiSettings,
-  DetectionLine,
-  DetectionZone,
+  CameraZones,
   FrameWorkerDecoderSettings,
   PtzAutotrackSettings,
   StreamingRole,
@@ -193,17 +191,7 @@ export class FrameWorker extends Subscribed {
   private setupEventListeners(): void {
     this.addSubscriptions(
       this.camera
-        .onPropertyChange([
-          'name',
-          'sources',
-          'detectionSettings',
-          'ptzAutotrack',
-          'detectionZones',
-          'alertZones',
-          'detectionLines',
-          'frameWorkerSettings',
-          'interfaceSettings',
-        ])
+        .onPropertyChange(['name', 'sources', 'detectionSettings', 'ptzAutotrack', 'zones', 'frameWorkerSettings', 'interfaceSettings'])
         .subscribe(({ property, newData, oldData }) => {
           if (this.status !== PLUGIN_STATUS.STARTED) {
             return;
@@ -259,18 +247,8 @@ export class FrameWorker extends Subscribed {
             return;
           }
 
-          if (property === 'detectionZones') {
-            this.pushChildUpdate('zones', this.frameWorkerChildProxy.updateZones(newData as DetectionZone[]));
-            return;
-          }
-
-          if (property === 'alertZones') {
-            this.pushChildUpdate('alert zones', this.frameWorkerChildProxy.updateAlertZones(newData as AlertZone[]));
-            return;
-          }
-
-          if (property === 'detectionLines') {
-            this.pushChildUpdate('lines', this.frameWorkerChildProxy.updateLines(newData as DetectionLine[]));
+          if (property === 'zones') {
+            this.pushChildUpdate('zones', this.frameWorkerChildProxy.updateZoneConfig(newData as CameraZones));
             return;
           }
 
@@ -458,9 +436,7 @@ export class FrameWorker extends Subscribed {
         audioStreamUrl: audioSource,
         controllerSnapshotSourceId: this.getControllerSnapshotSourceId(),
         availableSources,
-        zones: this.camera.detectionZones,
-        alertZones: this.camera.alertZones,
-        lines: this.camera.detectionLines,
+        zones: this.camera.zones,
         detectionSettings: this.camera.detectionSettings,
         ptzAutotrack: this.camera.ptzAutotrack,
         frameWorkerSettings: this.resolveFrameWorkerSettings(this.camera.frameWorkerSettings),

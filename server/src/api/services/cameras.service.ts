@@ -12,12 +12,10 @@ import { PluginsService } from './plugins.service.js';
 import { UsersService } from './users.service.js';
 
 import type {
-  AlertZone,
   AssignedPlugin,
   Camera,
   CameraInput,
-  DetectionLine,
-  DetectionZone,
+  CameraZones,
   Go2RtcRTSPSource,
   Go2RtcSnapshotSource,
   Go2RtcWSSource,
@@ -107,50 +105,14 @@ export class CamerasService {
     return (await this.activateDefaultExtensions(cameraData)) ?? cameraData;
   }
 
-  public async patchZones(cameraname: string, zoneData: DetectionZone[]): Promise<DBCamera | undefined> {
+  public async patchZoneConfig(cameraname: string, zones: CameraZones): Promise<DBCamera | undefined> {
     const existing = this.findByName(cameraname);
     if (!existing) return undefined;
 
     const camera = await this.dbs.commit(this.dbs.camerasDB, existing._id, (current) => {
       if (!current) return undefined;
 
-      current.detectionZones = zoneData;
-
-      return current;
-    });
-    if (!camera) return undefined;
-
-    this.api.updateCamera(this.transformCamera(camera));
-
-    return camera;
-  }
-
-  public async patchAlertZones(cameraname: string, zoneData: AlertZone[]): Promise<DBCamera | undefined> {
-    const existing = this.findByName(cameraname);
-    if (!existing) return undefined;
-
-    const camera = await this.dbs.commit(this.dbs.camerasDB, existing._id, (current) => {
-      if (!current) return undefined;
-
-      current.alertZones = zoneData;
-
-      return current;
-    });
-    if (!camera) return undefined;
-
-    this.api.updateCamera(this.transformCamera(camera));
-
-    return camera;
-  }
-
-  public async patchLines(cameraname: string, lineData: DetectionLine[]): Promise<DBCamera | undefined> {
-    const existing = this.findByName(cameraname);
-    if (!existing) return undefined;
-
-    const camera = await this.dbs.commit(this.dbs.camerasDB, existing._id, (current) => {
-      if (!current) return undefined;
-
-      current.detectionLines = lineData;
+      current.zones = zones;
 
       return current;
     });

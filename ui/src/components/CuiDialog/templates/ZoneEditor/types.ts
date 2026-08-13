@@ -1,14 +1,12 @@
-import type { AlertZone, DetectionLine, DetectionZone } from '@camera.ui/sdk';
+import type { AlertZone, CameraZones, DetectionLine, MotionZone, ObjectZone, PrivacyZone } from '@camera.ui/sdk';
 
-export type ZoneEditorTab = 'zones' | 'alerts' | 'lines';
+export type ZoneEditorTab = 'motion' | 'object' | 'alert' | 'privacy' | 'lines';
 
-export type EditorPolygon = DetectionZone | AlertZone;
+export type EditorPolygon = MotionZone | ObjectZone | AlertZone | PrivacyZone;
 
 export interface ZoneEditorProps {
   cameraName: string;
-  zones: DetectionZone[];
-  alerts: AlertZone[];
-  lines: DetectionLine[];
+  zones: CameraZones;
   initialTab?: ZoneEditorTab;
   initialSelection?: number;
 }
@@ -29,6 +27,8 @@ export interface LabelGroup {
   label: string;
   items: LabelOption[];
 }
+
+export type { DetectionLine };
 
 export const NON_SPATIAL_LABELS = ['audio'];
 export const NON_TRACKED_LABELS = ['audio', 'motion'];

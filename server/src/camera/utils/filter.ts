@@ -1,6 +1,6 @@
-import type { BoundingBox, DetectionZone, Point } from '@camera.ui/sdk';
+import type { BoundingBox, ObjectZone, Point } from '@camera.ui/sdk';
 
-export interface NormalizedZone extends Omit<DetectionZone, 'points'> {
+export interface NormalizedZone extends Omit<ObjectZone, 'points'> {
   points: Point[];
 }
 
@@ -18,7 +18,7 @@ export function normalizePolygon(polygon: Point[]): Point[] {
   return points;
 }
 
-export function normalizeZone(zone: DetectionZone): NormalizedZone {
+export function normalizeZone(zone: ObjectZone): NormalizedZone {
   return { ...zone, points: normalizePolygon(zone.points) };
 }
 

@@ -2,29 +2,29 @@ import { isEqual, structuredClone, Subscribed } from '@camera.ui/common/utils';
 import { BehaviorSubject, distinctUntilChanged, filter, mergeMap, pairwise, ReplaySubject, share } from '@camera.ui/sdk';
 import { TTLCache } from '@isaacs/ttlcache';
 
+import { normalizeZones } from './zones.js';
+
 import type {
-  AlertZone,
   Camera,
   CameraDetectionSettings,
-  CameraRecordingSettings,
-  PtzAutotrackSettings,
   CameraDevice as CameraDeviceInterface,
   CameraDeviceSource,
   CameraFrameWorkerSettings,
   CameraImplementation,
   CameraInformation,
   CameraPluginInfo,
+  CameraRecordingSettings,
   CameraSource,
   CameraType,
   CameraUiSettings,
+  CameraZones,
   DetectionEvent,
   DetectionEventType,
-  DetectionLine,
-  DetectionZone,
   DeviceStorage,
   JsonSchema,
   LoggerService,
   Observable,
+  PtzAutotrackSettings,
   Sensor,
   SnapshotSettings,
 } from '@camera.ui/sdk';
@@ -118,16 +118,8 @@ export abstract class CameraDevice extends Subscribed implements CameraDeviceInt
     return structuredClone(this.cameraSubject.getValue().snapshotSettings);
   }
 
-  get detectionZones(): DetectionZone[] {
-    return structuredClone(this.cameraSubject.getValue().detectionZones);
-  }
-
-  get alertZones(): AlertZone[] {
-    return structuredClone(this.cameraSubject.getValue().alertZones ?? []);
-  }
-
-  get detectionLines(): DetectionLine[] {
-    return structuredClone(this.cameraSubject.getValue().detectionLines ?? []);
+  get zones(): CameraZones {
+    return normalizeZones(structuredClone(this.cameraSubject.getValue().zones));
   }
 
   get detectionSettings(): CameraDetectionSettings {

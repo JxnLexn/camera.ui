@@ -1,6 +1,7 @@
-import type { DetectionLine, DetectionZone } from '@camera.ui/sdk';
+import type { DetectionLine, ObjectZone, PrivacyZone } from '@camera.ui/sdk';
 
 export interface CuiPolygonProps {
-  cameraZones: DetectionZone[];
+  cameraZones: ObjectZone[];
   cameraLines?: DetectionLine[];
+  privacyZones?: PrivacyZone[];
 }

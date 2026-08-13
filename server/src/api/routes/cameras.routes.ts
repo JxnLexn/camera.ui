@@ -3,24 +3,22 @@ import { onlyAdminCanDoThisAction } from '../middlewares/authPermission.middlewa
 import { validJWTNeeded } from '../middlewares/authValidation.middleware.js';
 import { pages } from '../middlewares/pagination.middleware.js';
 import {
-  alertZoneSchema,
   bulkDeleteCamerasSchema,
   bulkPatchCamerasSchema,
   cameraParamsSchema,
+  cameraPluginParamsSchema,
+  cameraSensorConfigParamsSchema,
   cameraSourceParamsSchema,
   createCameraSchema,
-  detectionLineSchema,
-  detectionZoneSchema,
   extensionTypeQuerySchema,
   patchCameraSchema,
-  cameraPluginParamsSchema,
   previewCameraSchema,
   probeQuerySchema,
   scopedPluginParamsSchema,
   scopedSensorParamsSchema,
-  cameraSensorConfigParamsSchema,
   snapshotQuerySchema,
   streamParamsSchema,
+  zoneConfigSchema,
 } from '../schemas/cameras.schema.js';
 import { paginationQuerySchema } from '../schemas/common.schema.js';
 import { patchStorageSchema, setStorageSchema, submitStorageSchema } from '../schemas/storage.schema.js';
@@ -226,77 +224,15 @@ export const CamerasRoute: FastifyPluginAsync = async (app: FastifyInstance): Pr
   });
 
   app.withTypeProvider<ZodTypeProvider>().route({
-    url: '/:cameraname/zones',
-    method: 'GET',
-    preValidation: [validJWTNeeded, onlyAdminCanDoThisAction],
-    handler: camerasController.getZones.bind(camerasController),
-    schema: {
-      tags: ['Cameras'],
-      summary: 'Get the detection zones for a camera',
-      params: cameraParamsSchema,
-    },
-  });
-
-  app.withTypeProvider<ZodTypeProvider>().route({
-    url: '/:cameraname/zones',
+    url: '/:cameraname/zone-config',
     method: 'PATCH',
     preValidation: [validJWTNeeded, onlyAdminCanDoThisAction],
-    handler: camerasController.patchZones.bind(camerasController),
+    handler: camerasController.patchZoneConfig.bind(camerasController),
     schema: {
       tags: ['Cameras'],
-      summary: 'Update the detection zones for a camera',
+      summary: 'Update motion, object, privacy and alert zones in one call',
       params: cameraParamsSchema,
-      body: detectionZoneSchema,
-    },
-  });
-
-  app.withTypeProvider<ZodTypeProvider>().route({
-    url: '/:cameraname/alert-zones',
-    method: 'GET',
-    preValidation: [validJWTNeeded, onlyAdminCanDoThisAction],
-    handler: camerasController.getAlertZones.bind(camerasController),
-    schema: {
-      tags: ['Cameras'],
-      summary: 'Get the alert zones for a camera',
-      params: cameraParamsSchema,
-    },
-  });
-
-  app.withTypeProvider<ZodTypeProvider>().route({
-    url: '/:cameraname/alert-zones',
-    method: 'PATCH',
-    preValidation: [validJWTNeeded, onlyAdminCanDoThisAction],
-    handler: camerasController.patchAlertZones.bind(camerasController),
-    schema: {
-      tags: ['Cameras'],
-      summary: 'Update the alert zones for a camera',
-      params: cameraParamsSchema,
-      body: alertZoneSchema,
-    },
-  });
-
-  app.withTypeProvider<ZodTypeProvider>().route({
-    url: '/:cameraname/lines',
-    method: 'GET',
-    preValidation: [validJWTNeeded, onlyAdminCanDoThisAction],
-    handler: camerasController.getLines.bind(camerasController),
-    schema: {
-      tags: ['Cameras'],
-      summary: 'Get the detection lines for a camera',
-      params: cameraParamsSchema,
-    },
-  });
-
-  app.withTypeProvider<ZodTypeProvider>().route({
-    url: '/:cameraname/lines',
-    method: 'PATCH',
-    preValidation: [validJWTNeeded, onlyAdminCanDoThisAction],
-    handler: camerasController.patchLines.bind(camerasController),
-    schema: {
-      tags: ['Cameras'],
-      summary: 'Update the detection lines for a camera',
-      params: cameraParamsSchema,
-      body: detectionLineSchema,
+      body: zoneConfigSchema,
     },
   });
 

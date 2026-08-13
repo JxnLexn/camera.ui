@@ -3,7 +3,9 @@ import { isNoRespondersError, RPCClass, RPCMethod } from '@camera.ui/rpc';
 import { SensorType } from '@camera.ui/sdk';
 import { NamespaceManager } from '../../rpc/namespaces.js';
 import { DETECTION_SENSOR_TYPES } from '../../sensors/types.js';
-import { normalizePolygon, normalizeZone } from '../utils/filter.js';
+import { PrivacyMask } from '../privacy/mask.js';
+import { normalizePolygon } from '../utils/filter.js';
+import { normalizeZones } from '../zones.js';
 import { AudioDetectionLoop } from './audio-loop.js';
 import { CascadeManager } from './cascade-manager.js';
 import { detectionRecord } from './debug/detection-record.js';
@@ -26,19 +28,18 @@ import type { Logger } from '@camera.ui/common/logger';
 import type { RPCClient } from '@camera.ui/rpc';
 import type { WorldObject } from '@camera.ui/rust-postprocessor';
 import type {
-  AlertZone,
   AudioResult,
   BoundingBox,
   CameraDetectionSettings,
   CameraFrameWorkerSettings,
   CameraUiSettings,
+  CameraZones,
   ClassifierDetection,
   ClassifierResult,
   ClipEmbedding,
   ClipResult,
   Detection,
-  DetectionLine,
-  DetectionZone,
+  DetectionLabel,
   FaceDetection,
   FaceResult,
   LicensePlateDetection,
@@ -53,7 +54,7 @@ import type { Frame } from 'node-av/lib';
 import type { CoordinatorSensorInfo, DetectionPluginInterface, DetectionResults } from '../../rpc/interfaces/detection.js';
 import type { CameraDeviceInterface } from '../../rpc/interfaces/device.js';
 import type { SensorWriteMessage } from '../../rpc/interfaces/sensor.js';
-import type { LineCrossingEvent, PipelineResult } from './detection-pipeline.js';
+import type { LineCrossingEvent, PipelineResult, ZoneConfig } from './detection-pipeline.js';
 import type { NormalizedDetectionZone, ProcessedDetectionData, TrackedFaceDetection, TrackedLicensePlateDetection } from './event-manager.js';
 import type { LetterboxGeometry } from './frame-scaler.js';
 import type { CropWindow, MomentFormatName, MomentTarget } from './moment-crop.js';
@@ -68,9 +69,7 @@ export interface DetectionCoordinatorConfig {
   audioStreamUrl: string;
   controllerSnapshotSourceId?: string;
   availableSources?: CoordinatorSourceUrl[];
-  zones: DetectionZone[];
-  alertZones?: AlertZone[];
-  lines: DetectionLine[];
+  zones: CameraZones;
   detectionSettings: CameraDetectionSettings;
   ptzAutotrack: PtzAutotrackSettings;
   frameWorkerSettings: CameraFrameWorkerSettings;
@@ -141,6 +140,7 @@ export class DetectionCoordinator {
   private readonly classifierLabels = new Map<string, Set<string>>();
   private readonly feedingSensors = new Map<string, SensorType>();
   private readonly dwell = new DwellManager();
+  private readonly privacy: PrivacyMask;
   private readonly videoBackoff = new ReconnectBackoff();
 
   // debugging
@@ -201,12 +201,15 @@ export class DetectionCoordinator {
     }
 
     this.frameSource = new FrameSource(frameSourceConfig, logger);
-    this.frameScaler = new FrameScaler(null, logger);
-    this.pipeline = new DetectionPipeline(config.zones, config.detectionSettings);
+    this.config.zones = normalizeZones(config.zones);
+    this.privacy = new PrivacyMask(logger);
+    this.privacy.update(this.config.zones);
+    this.frameScaler = new FrameScaler(null, logger, this.privacy);
+    this.pipeline = new DetectionPipeline(this.pipelineZones(), config.detectionSettings);
     this.secondaries = new SecondaryStage(this, this.plugins, this.pipeline, this.frameScaler, this.proxy, logger);
 
-    if (config.lines.length > 0) {
-      this.pipeline.updateLines(config.lines, this.videoAspectRatio);
+    if (config.zones.lines.length > 0) {
+      this.pipeline.updateLines(config.zones.lines, this.videoAspectRatio);
     }
 
     this.eventManager = new DetectionEventManager(config.cameraId, this.proxy, this.logger);
@@ -222,6 +225,7 @@ export class DetectionCoordinator {
       {
         frameSource: this.frameSource,
         frameScaler: this.frameScaler,
+        privacy: this.privacy,
         eventManager: this.eventManager,
         logger,
         decoder: this.config.frameWorkerSettings.decoder,
@@ -310,18 +314,12 @@ export class DetectionCoordinator {
     return { ...this.perf.snapshot(), mainStreamEnabled: this.mainStreamAvailable, frameAnalysis: this.plugins.shouldVideoBeActive() };
   }
 
-  public updateZones(zones: DetectionZone[]): void {
+  public updateZoneConfig(zones: CameraZones): void {
+    zones = normalizeZones(zones);
     this.config.zones = zones;
-    this.pipeline.updateZones(zones);
-  }
-
-  public updateAlertZones(zones: AlertZone[]): void {
-    this.config.alertZones = zones;
-  }
-
-  public updateLines(lines: DetectionLine[]): void {
-    this.config.lines = lines;
-    this.pipeline.updateLines(lines, this.videoAspectRatio);
+    this.pipeline.updateZones(this.pipelineZones());
+    this.privacy.update(zones);
+    this.pipeline.updateLines(zones.lines, this.videoAspectRatio);
   }
 
   public updateDetectionSettings(settings: CameraDetectionSettings): void {
@@ -346,8 +344,8 @@ export class DetectionCoordinator {
 
   public updateInterfaceSettings(settings: CameraUiSettings): void {
     this.config.interfaceSettings = settings;
-    if (this.config.lines.length > 0) {
-      this.pipeline.updateLines(this.config.lines, this.videoAspectRatio);
+    if (this.config.zones.lines.length > 0) {
+      this.pipeline.updateLines(this.config.zones.lines, this.videoAspectRatio);
     }
   }
 
@@ -715,14 +713,17 @@ export class DetectionCoordinator {
     };
   }
 
+  private pipelineZones(): ZoneConfig {
+    return { motion: this.config.zones.motion, object: this.config.zones.object, privacy: this.config.zones.privacy };
+  }
+
   private getNormalizedDetectionZones(): NormalizedDetectionZone[] {
     const result: NormalizedDetectionZone[] = [];
-    for (const zone of this.config.zones ?? []) {
-      if (zone.isPrivacyMask) continue;
+    for (const zone of this.config.zones.object) {
       if (!zone.name) continue;
-      result.push({ name: zone.name, points: normalizeZone(zone).points });
+      result.push({ name: zone.name, points: normalizePolygon(zone.points) });
     }
-    for (const zone of this.config.alertZones ?? []) {
+    for (const zone of this.config.zones.alert) {
       if (!zone.name) continue;
       result.push({ name: zone.name, points: normalizePolygon(zone.points), match: zone.match ?? 'contain' });
     }
@@ -742,30 +743,47 @@ export class DetectionCoordinator {
 
     // the zone filter and the rust merge assume a box on every detection
     const detections = ensureDetectionBoxes(raw as { box?: BoundingBox }[]);
+    // a camera that reports a label without a box gives no position, a zone
+    // cannot judge it and the object assist has not run yet
+    const hasBox = (index: number): boolean => Boolean((raw[index] as { box?: BoundingBox }).box);
+    const positioned = detections.filter((_, index) => hasBox(index));
+    let boxless = detections.filter((_, index) => !hasBox(index)) as Detection[];
 
     let filtered: Detection[];
+    let boxlessLabel: DetectionLabel | undefined;
+
     switch (sensorType) {
       case SensorType.Face:
-        filtered = this.pipeline.runZoneFilterWithLabel(detections as FaceDetection[], 'person');
+        boxlessLabel = 'person';
+        filtered = this.pipeline.runZoneFilterWithLabel(positioned as FaceDetection[], 'person');
         break;
       case SensorType.LicensePlate:
-        filtered = this.pipeline.runZoneFilterWithLabel(detections as LicensePlateDetection[], 'vehicle');
+        boxlessLabel = 'vehicle';
+        filtered = this.pipeline.runZoneFilterWithLabel(positioned as LicensePlateDetection[], 'vehicle');
         break;
       case SensorType.Object:
-        filtered = this.pipeline.runZoneFilter(this.filterAllowedObjectLabels(detections as Detection[]));
+        boxless = this.filterAllowedObjectLabels(boxless);
+        filtered = this.pipeline.runZoneFilter(this.filterAllowedObjectLabels(positioned as Detection[]));
         break;
       case SensorType.Classifier:
       case SensorType.Motion:
-        filtered = this.pipeline.runZoneFilter(detections as Detection[]);
+        filtered = this.pipeline.runZoneFilter(positioned as Detection[]);
         break;
       default:
         return { ...properties, detections }; // audio etc, no zone filter
     }
 
+    const survivors = new Set<unknown>(filtered);
+    for (const detection of boxless) {
+      if (this.pipeline.objectLabelAllowed(boxlessLabel ?? detection.label)) survivors.add(detection);
+    }
+
+    const kept = detections.filter((detection) => survivors.has(detection));
+
     return {
       ...properties,
-      detections: filtered,
-      detected: filtered.length > 0,
+      detections: kept,
+      detected: kept.length > 0,
     };
   }
 

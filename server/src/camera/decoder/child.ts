@@ -13,7 +13,7 @@ import { DetectionCoordinator } from './detection-coordinator.js';
 
 import type { LoggerOptions } from '@camera.ui/common';
 import type { PrivateChannel, RPCClient } from '@camera.ui/rpc';
-import type { AlertZone, CameraDetectionSettings, CameraFrameWorkerSettings, CameraUiSettings, DetectionLine, DetectionZone, PtzAutotrackSettings } from '@camera.ui/sdk';
+import type { CameraDetectionSettings, CameraFrameWorkerSettings, CameraUiSettings, CameraZones, PtzAutotrackSettings } from '@camera.ui/sdk';
 import type { CoreManagerNamespaces, FrameWorkerNamespaces } from '../../rpc/namespaces.js';
 import type { DetectionCoordinatorConfig } from './detection-coordinator.js';
 import type { FrameWorkerPerfSnapshot, WorkerToMainMessage } from './types.js';
@@ -112,18 +112,8 @@ export class FrameWorkerChild {
   }
 
   @RPCMethod
-  public updateZones(zones: DetectionZone[]): void {
-    this.detectionCoordinator?.updateZones(zones);
-  }
-
-  @RPCMethod
-  public updateAlertZones(zones: AlertZone[]): void {
-    this.detectionCoordinator?.updateAlertZones(zones);
-  }
-
-  @RPCMethod
-  public updateLines(lines: DetectionLine[]): void {
-    this.detectionCoordinator?.updateLines(lines);
+  public updateZoneConfig(zones: CameraZones): void {
+    this.detectionCoordinator?.updateZoneConfig(zones);
   }
 
   @RPCMethod

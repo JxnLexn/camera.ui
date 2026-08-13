@@ -18,12 +18,10 @@ import type { ConfigService } from '../../services/config/index.js';
 import type { DBCamera } from '../database/types.js';
 import type {
   AuthLoginRequest,
-  CameraAlertZoneInsertPatchRequest,
-  CameraLineInsertPatchRequest,
+  CameraZoneConfigPatchRequest,
   CameraProbeSourceQueryRequest,
   CameraSnapshotQueryRequest,
   CameraSourceParamsRequest,
-  CameraZoneInsertPatchRequest,
   CamerasExtensionsParamsRequest,
   CamerasExtensionsRequest,
   CamerasInsertRequest,
@@ -86,7 +84,7 @@ export class CamerasController {
     }
   }
 
-  public getZones(req: FastifyRequest<AuthLoginRequest & CamerasParamsRequest>, reply: FastifyReply): FastifyReply {
+  public async patchZoneConfig(req: FastifyRequest<AuthLoginRequest & CamerasParamsRequest & CameraZoneConfigPatchRequest>, reply: FastifyReply): Promise<FastifyReply> {
     try {
       const camera = this.service.findByName(req.params.cameraname) ?? this.service.findById(req.params.cameraname);
 
@@ -97,114 +95,7 @@ export class CamerasController {
         });
       }
 
-      return reply.code(200).send(camera.detectionZones);
-    } catch (error: any) {
-      return reply.code(500).send({
-        statusCode: 500,
-        message: error.message,
-      });
-    }
-  }
-
-  public async patchZones(req: FastifyRequest<AuthLoginRequest & CamerasParamsRequest & CameraZoneInsertPatchRequest>, reply: FastifyReply): Promise<FastifyReply> {
-    try {
-      const camera = this.service.findByName(req.params.cameraname) ?? this.service.findById(req.params.cameraname);
-
-      if (!camera) {
-        return reply.code(404).send({
-          statusCode: 404,
-          message: 'Camera not exists',
-        });
-      }
-
-      const newZone = await this.service.patchZones(req.params.cameraname, req.body);
-
-      return reply.code(200).send(newZone);
-    } catch (error: any) {
-      return reply.code(500).send({
-        statusCode: 500,
-        message: error.message,
-      });
-    }
-  }
-
-  public getAlertZones(req: FastifyRequest<AuthLoginRequest & CamerasParamsRequest>, reply: FastifyReply): FastifyReply {
-    try {
-      const camera = this.service.findByName(req.params.cameraname) ?? this.service.findById(req.params.cameraname);
-
-      if (!camera) {
-        return reply.code(404).send({
-          statusCode: 404,
-          message: 'Camera not exists',
-        });
-      }
-
-      return reply.code(200).send(camera.alertZones ?? []);
-    } catch (error: any) {
-      return reply.code(500).send({
-        statusCode: 500,
-        message: error.message,
-      });
-    }
-  }
-
-  public async patchAlertZones(
-    req: FastifyRequest<AuthLoginRequest & CamerasParamsRequest & CameraAlertZoneInsertPatchRequest>,
-    reply: FastifyReply,
-  ): Promise<FastifyReply> {
-    try {
-      const camera = this.service.findByName(req.params.cameraname) ?? this.service.findById(req.params.cameraname);
-
-      if (!camera) {
-        return reply.code(404).send({
-          statusCode: 404,
-          message: 'Camera not exists',
-        });
-      }
-
-      const newZone = await this.service.patchAlertZones(req.params.cameraname, req.body);
-
-      return reply.code(200).send(newZone);
-    } catch (error: any) {
-      return reply.code(500).send({
-        statusCode: 500,
-        message: error.message,
-      });
-    }
-  }
-
-  public getLines(req: FastifyRequest<AuthLoginRequest & CamerasParamsRequest>, reply: FastifyReply): FastifyReply {
-    try {
-      const camera = this.service.findByName(req.params.cameraname) ?? this.service.findById(req.params.cameraname);
-
-      if (!camera) {
-        return reply.code(404).send({
-          statusCode: 404,
-          message: 'Camera not exists',
-        });
-      }
-
-      return reply.code(200).send(camera.detectionLines ?? []);
-    } catch (error: any) {
-      return reply.code(500).send({
-        statusCode: 500,
-        message: error.message,
-      });
-    }
-  }
-
-  public async patchLines(req: FastifyRequest<AuthLoginRequest & CamerasParamsRequest & CameraLineInsertPatchRequest>, reply: FastifyReply): Promise<FastifyReply> {
-    try {
-      const camera = this.service.findByName(req.params.cameraname) ?? this.service.findById(req.params.cameraname);
-
-      if (!camera) {
-        return reply.code(404).send({
-          statusCode: 404,
-          message: 'Camera not exists',
-        });
-      }
-
-      const updated = await this.service.patchLines(req.params.cameraname, req.body);
+      const updated = await this.service.patchZoneConfig(req.params.cameraname, req.body);
 
       return reply.code(200).send(updated);
     } catch (error: any) {

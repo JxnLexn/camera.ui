@@ -10,7 +10,17 @@ import type {
   WorldEvent,
   WorldObject,
 } from '@camera.ui/rust-postprocessor';
-import type { BoundingBox, CameraDetectionSettings, Detection, DetectionLabel, DetectionLine, DetectionZone, TrackedDetection } from '@camera.ui/sdk';
+import type {
+  BoundingBox,
+  CameraDetectionSettings,
+  Detection,
+  DetectionLabel,
+  DetectionLine,
+  MotionZone,
+  ObjectZone,
+  PrivacyZone,
+  TrackedDetection,
+} from '@camera.ui/sdk';
 
 const NMS_IOU_THRESHOLD = 0.45;
 const NMS_CONFIDENCE_THRESHOLD = 0.25;
@@ -87,14 +97,53 @@ function fromWorldObject(obj: WorldObject): TrackedDetection {
   };
 }
 
-function toRustZones(zones: DetectionZone[]): RustDetectionZone[] {
-  return zones.map((zone) => ({
-    labels: zone.labels,
-    filter: zone.filter as RustDetectionZone['filter'],
-    matchType: zone.type as RustDetectionZone['matchType'],
-    isPrivacyMask: zone.isPrivacyMask,
-    points: zone.points.map(([x, y]) => [x, y]),
-  }));
+function toRustZones(zones: ZoneConfig): RustDetectionZone[] {
+  const out: RustDetectionZone[] = [];
+
+  for (const zone of zones.privacy) {
+    // a zone that only hides the picture keeps the detector watching
+    if (!zone.dropDetections) continue;
+    out.push({
+      labels: [],
+      filter: 'include' as RustDetectionZone['filter'],
+      matchType: 'intersect' as RustDetectionZone['matchType'],
+      isPrivacyMask: true,
+      points: zone.points.map(([x, y]) => [x, y]),
+    });
+  }
+  for (const zone of zones.motion) {
+    out.push({
+      labels: ['motion'],
+      filter: zone.filter as RustDetectionZone['filter'],
+      matchType: 'intersect' as RustDetectionZone['matchType'],
+      isPrivacyMask: false,
+      points: zone.points.map(([x, y]) => [x, y]),
+    });
+  }
+  for (const zone of zones.object) {
+    out.push({
+      labels: zone.labels,
+      filter: zone.filter as RustDetectionZone['filter'],
+      matchType: zone.type as RustDetectionZone['matchType'],
+      isPrivacyMask: false,
+      points: zone.points.map(([x, y]) => [x, y]),
+    });
+  }
+
+  return out;
+}
+
+function objectWhitelist(zones: ObjectZone[]): Set<string> | null {
+  const include = zones.filter((zone) => zone.filter !== 'exclude');
+  if (include.length === 0) return null;
+  // a zone that lists no label constrains where every object counts, not which ones
+  if (include.some((zone) => zone.labels.length === 0)) return null;
+
+  const labels = new Set<string>();
+  for (const zone of include) {
+    for (const label of zone.labels) labels.add(label.toLowerCase());
+  }
+  return labels;
 }
 
 function toRustLines(lines: DetectionLine[]): RustDetectionLine[] {
@@ -127,25 +176,34 @@ function fromRustCrossing(event: RustLineCrossingEvent, lookup: Map<number, Boun
   };
 }
 
+export interface ZoneConfig {
+  motion: MotionZone[];
+  object: ObjectZone[];
+  privacy: PrivacyZone[];
+}
+
 export class DetectionPipeline {
   private aspectRatio = 16 / 9;
   private world: CameraWorld;
   private lines: DetectionLine[] = [];
   private suppressStatic: boolean;
+  private whitelist: Set<string> | null = null;
 
-  constructor(zones: DetectionZone[], settings: CameraDetectionSettings) {
+  constructor(zones: ZoneConfig, settings: CameraDetectionSettings) {
     this.world = new CameraWorld();
     const rustZones = toRustZones(zones);
     this.world.setZones(rustZones);
+    this.whitelist = objectWhitelist(zones.object);
     this.world.setMinConfidence(settings.object.confidence);
     this.suppressStatic = settings.object.suppressStatic ?? true;
     // debugging
     detectionRecord.config({ zones: rustZones, minConfidence: settings.object.confidence });
   }
 
-  public updateZones(zones: DetectionZone[]): void {
+  public updateZones(zones: ZoneConfig): void {
     const rustZones = toRustZones(zones);
     this.world.setZones(rustZones);
+    this.whitelist = objectWhitelist(zones.object);
     // debugging
     detectionRecord.config({ zones: rustZones });
   }
@@ -227,8 +285,9 @@ export class DetectionPipeline {
   }
 
   public runMergeAndZoneFilter(detections: Detection[]): Detection[] {
-    if (detections.length === 0) return [];
-    const flat = detections.map(toRustDetection);
+    const allowed = this.allowedByWhitelist(detections);
+    if (allowed.length === 0) return [];
+    const flat = allowed.map(toRustDetection);
     const merged = rustMerge(flat, MOTION_MERGE_IOU_THRESHOLD, MOTION_MERGE_CLOSE_THRESHOLD);
     if (merged.length === 0) return [];
     const indices = this.world.filterIndices(merged);
@@ -236,14 +295,15 @@ export class DetectionPipeline {
   }
 
   public runZoneFilter(detections: Detection[]): Detection[] {
-    if (detections.length === 0) return [];
-    const flat = detections.map(toRustDetection);
+    const allowed = this.allowedByWhitelist(detections);
+    if (allowed.length === 0) return [];
+    const flat = allowed.map(toRustDetection);
     const indices = this.world.filterIndices(flat);
-    return indices.map((i) => detections[i]);
+    return indices.map((i) => allowed[i]);
   }
 
   public runZoneFilterWithLabel<T extends { box: BoundingBox; confidence: number }>(items: T[], label: DetectionLabel): T[] {
-    if (items.length === 0) return [];
+    if (items.length === 0 || !this.objectLabelAllowed(label)) return [];
     const flat: RustDetection[] = items.map((item) => ({
       x: item.box.x,
       y: item.box.y,
@@ -258,6 +318,17 @@ export class DetectionPipeline {
 
   public retainTracks(trackIds: number[]): number[] {
     return trackIds;
+  }
+
+  public objectLabelAllowed(label: string): boolean {
+    if (this.whitelist === null) return true;
+    const lower = label.toLowerCase();
+    return lower === 'motion' || this.whitelist.has(lower);
+  }
+
+  private allowedByWhitelist<T extends { label: string }>(detections: T[]): T[] {
+    if (detections.length === 0 || this.whitelist === null) return detections;
+    return detections.filter((detection) => this.objectLabelAllowed(detection.label));
   }
 
   private runNmsAndMergeFlat(rawDetections: Detection[]): RustDetection[] {

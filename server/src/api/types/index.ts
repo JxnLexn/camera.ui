@@ -1,7 +1,7 @@
 import { numberFromEnv } from '../utils/utils.js';
 
 import type { UsableNetworkAddress } from '@camera.ui/common/network';
-import type { AlertZone, AssignedPlugin, DetectionLine, DetectionZone, PluginAssignments, PluginContract, ProbeConfig, SchemaConfig, SensorType } from '@camera.ui/sdk';
+import type { AssignedPlugin, CameraZones, PluginAssignments, PluginContract, ProbeConfig, SchemaConfig, SensorType } from '@camera.ui/sdk';
 import type { Readable } from 'node:stream';
 import type { ApplicationResponse, DeviceSourceType } from '../../go2rtc/types.js';
 import type { PLUGIN_STATUS } from '../../plugins/types.js';
@@ -392,16 +392,8 @@ export interface CamerasExtensionsRequest {
   Querystring: { type: SensorType };
 }
 
-export interface CameraZoneInsertPatchRequest {
-  Body: DetectionZone[];
-}
-
-export interface CameraAlertZoneInsertPatchRequest {
-  Body: AlertZone[];
-}
-
-export interface CameraLineInsertPatchRequest {
-  Body: DetectionLine[];
+export interface CameraZoneConfigPatchRequest {
+  Body: CameraZones;
 }
 
 export interface CamerasInsertRequest {

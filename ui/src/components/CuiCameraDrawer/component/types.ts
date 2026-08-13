@@ -23,7 +23,7 @@ export interface CameraOptionsTabEmits {
 }
 
 export interface ZoneEntry {
-  kind: 'zone' | 'alert' | 'line';
+  kind: 'motion' | 'object' | 'alert' | 'privacy' | 'lines';
   index: number;
   name: string;
   color: string;

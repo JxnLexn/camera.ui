@@ -10,7 +10,6 @@ from deepdiff.diff import DeepDiff
 from _camera_ui_tools.camera_ui_common import Subscribed, TaskSet
 from _camera_ui_tools.camera_ui_rpc import CloseHandler, RPCClient
 from _camera_ui_tools.camera_ui_sdk import (
-    AlertZone,
     BehaviorSubject,
     Camera,
     CameraDetectionSettings,
@@ -27,9 +26,8 @@ from _camera_ui_tools.camera_ui_sdk import (
     CameraSource,
     CameraType,
     CameraUiSettings,
+    CameraZones,
     DetectionEventPayload,
-    DetectionLine,
-    DetectionZone,
     Disposable,
     LoggerService,
     Observable,
@@ -261,16 +259,13 @@ class CameraDeviceProxy(Subscribed, CameraDeviceInterface):
         return deepcopy(self._camera_subject.value["snapshotSettings"])
 
     @property
-    def detectionZones(self) -> list[DetectionZone]:
-        return deepcopy(self._camera_subject.value["detectionZones"])
-
-    @property
-    def alertZones(self) -> list[AlertZone]:
-        return deepcopy(self._camera_subject.value.get("alertZones", []))
-
-    @property
-    def detectionLines(self) -> list[DetectionLine]:
-        return deepcopy(self._camera_subject.value["detectionLines"])
+    def zones(self) -> CameraZones:
+        return deepcopy(
+            self._camera_subject.value.get(
+                "zones",
+                CameraZones(motion=[], object=[], privacy=[], alert=[], lines=[]),
+            )
+        )
 
     @property
     def detectionSettings(self) -> CameraDetectionSettings:
