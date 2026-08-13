@@ -1,7 +1,7 @@
 <template>
   <nav
     ref="navbarRef"
-    class="navbar-background fixed transition-[width,left] duration-200 overflow-x-hidden overflow-y-scroll shadow shadow-black/20 overflow-hidden border-[1px] border-base-color rounded-[15px] [clip-path:inset(0_round_15px)] before:content-[''] before:absolute before:top-0 before:left-0 before:right-0 before:h-[20px] before:blur-2xl before:opacity-70 before:bg-primary-500 before:-z-1"
+    class="navbar-background fixed transition-[width,left] duration-200 shadow shadow-black/20 overflow-hidden border-[1px] border-base-color rounded-[15px] [clip-path:inset(0_round_15px)] before:content-[''] before:absolute before:top-0 before:left-0 before:right-0 before:h-[20px] before:blur-2xl before:opacity-70 before:bg-primary-500 before:-z-1 non-draggable-region"
     :class="{
       'shadow-xl': mdBreakpoint && navbarWidth === NAVBAR_SIZE.EXPANDED,
     }"
@@ -13,7 +13,7 @@
       viewTransitionName: 'cui-navbar',
     }"
   >
-    <div class="h-full flex flex-col overflow-y-scroll">
+    <div class="h-full flex flex-col overflow-hidden">
       <div class="w-full flex items-center shrink-0 h-[60px]">
         <RouterLink to="/" class="pl-[13px]">
           <InlineSvg
@@ -22,7 +22,7 @@
             height="32px"
             title="camera.ui"
             aria-label="camera.ui"
-            class="hover:scale-105 active:scale-105 focus:scale-105 transition-all non-draggable-region"
+            class="hover:scale-105 active:scale-105 focus:scale-105 transition-all"
           />
         </RouterLink>
 
@@ -48,7 +48,7 @@
         </div>
       </div>
 
-      <div class="flex flex-col flex-1 my-4 px-1">
+      <div class="flex flex-col flex-1 min-h-0 overflow-y-auto overflow-x-hidden mt-4 px-1 pb-2">
         <template v-if="!navEditMode">
           <div class="flex flex-col space-y-1">
             <template v-for="group in topGroups" :key="group.key">
@@ -208,40 +208,6 @@
                 }"
               />
             </div>
-            <div class="mb-4 mt-2" :class="navbarWidth === NAVBAR_SIZE.EXPANDED ? 'border-t border-[#313131]' : 'w-[22px] mx-auto border-t border-[#313131]'"></div>
-            <div v-if="navbarWidth === NAVBAR_SIZE.MINIFIED" class="w-full h-[50px]">
-              <Button
-                v-tooltip.right="$t('views.menu.logout')"
-                text
-                severity="secondary"
-                class="cui-button navitem-button navitem-inactive w-[50px] h-[50px] flex items-center justify-center dark-mode hover:!text-color active:!text-color focus:!text-color"
-                :style="{
-                  color: '#a4a4a4',
-                }"
-                @click="authStore.logout()"
-              >
-                <template #icon>
-                  <i-tabler:power class="w-[22px] h-[22px]" />
-                </template>
-              </Button>
-            </div>
-
-            <div class="w-full h-[50px] relative">
-              <CuiNavItem
-                avatar="avatar"
-                :label="user?.username ?? 'unknown'"
-                :description="user?.role ?? 'unknown'"
-                :expanded="navbarWidth === NAVBAR_SIZE.EXPANDED"
-                show-logout
-                to="/settings/account"
-                dark-mode
-                :avatar-size="38"
-                class="w-[50px] h-[50px]"
-                :class="{
-                  'w-full': navbarWidth === NAVBAR_SIZE.EXPANDED,
-                }"
-              />
-            </div>
           </div>
         </template>
 
@@ -267,23 +233,58 @@
                 </TransitionGroup>
               </template>
             </div>
-
-            <div class="flex-1 mt-6"></div>
-
-            <div class="flex flex-col gap-2 px-1 pb-2">
-              <Button severity="secondary" :label="$t('components.form.button.reset_defaults')" class="dark-mode w-full h-[40px] !text-sm" @click="resetNavEdit">
-                <template #icon>
-                  <i-mdi:backup-restore class="w-[18px] h-[18px]" />
-                </template>
-              </Button>
-              <Button severity="primary" class="w-full h-[40px]" @click="exitNavEdit">
-                <template #icon>
-                  <i-lucide:check class="w-[20px] h-[20px]" />
-                </template>
-              </Button>
-            </div>
           </div>
         </DndProvider>
+      </div>
+
+      <div v-if="!navEditMode" class="shrink-0 px-1 pb-4">
+        <div class="mb-4 mt-2" :class="navbarWidth === NAVBAR_SIZE.EXPANDED ? 'border-t border-[#313131]' : 'w-[22px] mx-auto border-t border-[#313131]'"></div>
+        <div v-if="navbarWidth === NAVBAR_SIZE.MINIFIED" class="w-full h-[50px]">
+          <Button
+            v-tooltip.right="$t('views.menu.logout')"
+            text
+            severity="secondary"
+            class="cui-button navitem-button navitem-inactive w-[50px] h-[50px] flex items-center justify-center dark-mode hover:!text-color active:!text-color focus:!text-color"
+            :style="{
+              color: '#a4a4a4',
+            }"
+            @click="authStore.logout()"
+          >
+            <template #icon>
+              <i-tabler:power class="w-[22px] h-[22px]" />
+            </template>
+          </Button>
+        </div>
+
+        <div class="w-full h-[50px] relative">
+          <CuiNavItem
+            avatar="avatar"
+            :label="user?.username ?? 'unknown'"
+            :description="user?.role ?? 'unknown'"
+            :expanded="navbarWidth === NAVBAR_SIZE.EXPANDED"
+            show-logout
+            to="/settings/account"
+            dark-mode
+            :avatar-size="38"
+            class="w-[50px] h-[50px]"
+            :class="{
+              'w-full': navbarWidth === NAVBAR_SIZE.EXPANDED,
+            }"
+          />
+        </div>
+      </div>
+
+      <div v-else class="shrink-0 flex flex-col gap-2 px-1 pt-2 pb-2">
+        <Button severity="secondary" :label="$t('components.form.button.reset_defaults')" class="dark-mode w-full h-[40px] !text-sm" @click="resetNavEdit">
+          <template #icon>
+            <i-mdi:backup-restore class="w-[18px] h-[18px]" />
+          </template>
+        </Button>
+        <Button severity="primary" class="w-full h-[40px]" @click="exitNavEdit">
+          <template #icon>
+            <i-lucide:check class="w-[20px] h-[20px]" />
+          </template>
+        </Button>
       </div>
     </div>
   </nav>

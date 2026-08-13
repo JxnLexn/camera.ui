@@ -23,7 +23,6 @@
     "dev:alt": "CAMERA_UI_PORT=5443 CAMERA_UI_UI_PORT=5100 vite",
     "dev:alt2": "CAMERA_UI_PORT=6443 CAMERA_UI_UI_PORT=6100 vite",
     "dev:alt3": "CAMERA_UI_PORT=7443 CAMERA_UI_UI_PORT=7100 vite",
-    "dev:electron": "CAMERA_UI_PORT=3543 CAMERA_UI_UI_PORT=3200 vite",
     "format": "prettier --write src/",
     "install-updates": "npm i --save",
     "lint": "eslint --fix .",

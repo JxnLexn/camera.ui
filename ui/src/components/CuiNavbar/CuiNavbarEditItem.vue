@@ -20,6 +20,8 @@
 <script setup lang="ts">
 import { useDrag, useDrop } from 'vue3-dnd';
 
+import { useDragAutoScroll } from './useDragAutoScroll.js';
+
 import type { CuiNavbarEditItemEmits, CuiNavbarEditItemProps } from './types.js';
 
 const props = defineProps<CuiNavbarEditItemProps>();
@@ -61,6 +63,8 @@ const [, drop] = useDrop(() => ({
 }));
 
 const isDragging = computed(() => collect.value.isDragging);
+
+useDragAutoScroll(elRef, isDragging);
 
 function setRef(el: any) {
   elRef.value = el;

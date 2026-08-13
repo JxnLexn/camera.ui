@@ -636,7 +636,7 @@ export default {
       recording_hint: 'Steuert, ob und wie diese Kamera aufgezeichnet wird. Die Aufnahme übernimmt ein installiertes NVR-Plugin.',
       recording_requires: 'Kein NVR-Plugin zugewiesen. Die Einstellungen greifen, sobald eins installiert ist.',
       zones_hint:
-        'Ohne Zonen löst das gesamte Bild Ereignisse aus. Zonen beschränken Erkennungen auf relevante Bereiche, ignorierte Zonen verwerfen Erkennungen darin und Linien melden Objekte, die sie überqueren.',
+        'Ohne Zonen zählt das gesamte Bild. Bewegungs- und Objektzonen beschränken, wo Erkennungen zählen, Alarmzonen entscheiden, was dich benachrichtigt, Privatzonen verdecken einen Bereich, und Linien melden Objekte, die sie überqueren.',
       snapshot_hint:
         'Schnappschüsse werden für Vorschauen und Benachrichtigungen verwendet. Kürzere Intervalle halten sie aktuell, erhöhen aber die Last auf der Kamera.',
       frame_worker_hint:
@@ -1602,14 +1602,17 @@ export default {
     zone_editor: {
       base_labels: 'Basis',
       motion_hint: 'Bewegungszonen legen fest, wo Bewegung zählt. Ohne eine zählt das ganze Bild.',
-      object_hint: 'Objektzonen sagen, welche Typen wo zählen. Ohne Zone zählt jeder Typ überall. Mit Zone zählt ein Typ nur in einer Zone, die ihn listet, und eine Zone ohne Typen zählt jeden Typ.',
-      alert_hint: 'Alarmzonen entscheiden, was dich benachrichtigt, an Erkennung und Aufnahme ändern sie nichts. Ohne Zone meldet jeder erkannte Typ. Mit Zone melden nur die hier gewählten Typen, und nur aus der Zone heraus.',
+      object_hint:
+        'Objektzonen sagen, welche Typen wo zählen. Ohne Zone zählt jeder Typ überall. Mit Zone zählt ein Typ nur in einer Zone, die ihn listet, und eine Zone ohne Typen zählt jeden Typ.',
+      alert_hint:
+        'Alarmzonen entscheiden, was dich benachrichtigt, an Erkennung und Aufnahme ändern sie nichts. Ohne Zone meldet jeder erkannte Typ. Mit Zone melden nur die hier gewählten Typen, und nur aus der Zone heraus.',
       privacy_hint:
         'Privatzonen sind die Bereiche, die camera.ui verdeckt. Ohne eine wird nichts verdeckt. In einer werden Livebild, Aufnahme und Bilder verdeckt, und Erkennungen verworfen, sofern man sie nicht behält.',
       lines_hint: 'Eine Linie meldet Objekte, die sie in der gewählten Richtung überqueren. Ohne eine wird nichts gemeldet. Eine Linie filtert die Erkennung nie.',
       object_labels_info: 'Nur die gewählten Typen zählen in dieser Zone. Wähle keinen, dann zählt hier jeder Typ.',
       alert_labels_info: 'Die gewählten Typen melden nur, solange sie in dieser Zone sind. Wähle keinen, dann meldet hier jeder Typ.',
-      alert_conflict: "Diese Kamera erkennt {labels} nicht, diese Typen melden also nie. Nimm sie in eine Objektzone auf oder entferne sie hier.",
+      line_labels_info: 'Nur die gewählten Typen lösen diese Linie aus. Wähle keinen, dann löst jeder Typ sie aus.',
+      alert_conflict: 'Diese Kamera erkennt {labels} nicht, diese Typen melden also nie. Nimm sie in eine Objektzone auf oder entferne sie hier.',
       zone_filter: 'Wirkung der Zone',
       filter_include: 'Nur was darin ist, zählt',
       filter_exclude: 'Alles darin wird verworfen',

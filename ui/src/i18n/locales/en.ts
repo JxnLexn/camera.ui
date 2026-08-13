@@ -626,7 +626,7 @@ export default {
       recording_hint: 'Controls if and how this camera is recorded. An installed NVR plugin does the recording.',
       recording_requires: 'No NVR plugin assigned. These settings apply as soon as one is installed.',
       zones_hint:
-        'Without zones, the whole image triggers events. Zones restrict detections to the areas that matter, ignore zones drop detections inside them, and lines report objects crossing them.',
+        'Without zones, the whole image counts. Motion and object zones restrict where detections count, alert zones decide what notifies you, privacy zones cover an area, and lines report objects crossing them.',
       snapshot_hint: 'Snapshots are used for previews and notifications. Shorter intervals keep them fresh but increase load on the camera.',
       frame_worker_hint: 'The frame worker analyzes the video stream for detections. Only change these values if detections are delayed or the system load is too high.',
       zones_empty: 'No zones or lines on this camera yet.',
@@ -1588,14 +1588,17 @@ export default {
     zone_editor: {
       base_labels: 'Base',
       motion_hint: 'Motion zones say where movement counts. Without one, the whole image counts.',
-      object_hint: 'Object zones say which types count where. Without one, every type counts everywhere. With one, a type counts only inside a zone that lists it, and a zone without types counts every type.',
-      alert_hint: 'Alert zones decide what notifies you, they never change detection or recording. Without one, every detected type notifies. With one, only the types selected here notify, and only from inside the zone.',
+      object_hint:
+        'Object zones say which types count where. Without one, every type counts everywhere. With one, a type counts only inside a zone that lists it, and a zone without types counts every type.',
+      alert_hint:
+        'Alert zones decide what notifies you, they never change detection or recording. Without one, every detected type notifies. With one, only the types selected here notify, and only from inside the zone.',
       privacy_hint:
         'Privacy zones are the areas camera.ui covers. Without one, nothing is hidden. Inside one, live view, playback and pictures are covered, and detections are dropped unless you keep them.',
       lines_hint: 'A line reports objects crossing it in the chosen direction. Without one, nothing is reported. A line never filters detection.',
       object_labels_info: 'Only the selected types count inside this zone. Select none and every type counts here.',
       alert_labels_info: 'The selected types only notify while they are inside this zone. Select none and every type notifies from here.',
-      alert_conflict: "This camera does not detect {labels}, so these types never notify. Add them to an object zone or remove them here.",
+      line_labels_info: 'Only the selected types trigger this line. Select none and every type triggers it.',
+      alert_conflict: 'This camera does not detect {labels}, so these types never notify. Add them to an object zone or remove them here.',
       zone_filter: 'Zone mode',
       filter_include: 'Only inside this zone counts',
       filter_exclude: 'Everything inside is dropped',

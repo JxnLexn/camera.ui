@@ -43,6 +43,8 @@ export function useCuiStates() {
 
   const topbarHeight = computed(() => (showTopbar.value ? (routeMeta.minifiedTopbar.value ? 0 : TOPBAR_SIZE.HEIGHT) : 0));
 
+  const topbarOffset = computed(() => (showTopbar.value ? topbarHeight.value + TOPBAR_SIZE.ELECTRON_OFFSET : 0));
+
   const bottombarHeight = computed(() => (showBottombar.value ? BOTTOMBAR_SIZE.HEIGHT : 0));
 
   return {
@@ -52,6 +54,7 @@ export function useCuiStates() {
     showNavbar,
     showTopbar,
     topbarHeight,
+    topbarOffset,
     bottombarHeight,
   };
 }

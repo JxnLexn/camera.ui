@@ -5,7 +5,7 @@
     :style="{
       width: `${sidebarWidth}px`,
       borderRightWidth: isOpen ? '1px' : '0px',
-      paddingBottom: `calc(env(safe-area-inset-top, 0px) + env(safe-area-inset-bottom, 0px) + ${bottombarHeight}px + ${topbarHeight}px)`,
+      paddingBottom: `calc(env(safe-area-inset-top, 0px) + env(safe-area-inset-bottom, 0px) + ${bottombarHeight}px + ${topbarOffset}px)`,
     }"
   >
     <div class="flex flex-col gap-4 p-4" :style="{ width: `${SIDEBAR_WIDTH}px` }">
@@ -279,7 +279,7 @@ const emit = defineEmits<RecordingsFilterSidebarEmits>();
 
 const { t } = useI18n();
 const { xlBreakpoint } = useSharedCuiBreakpoint();
-const { topbarHeight, bottombarHeight } = useSharedCuiStates();
+const { topbarOffset, bottombarHeight } = useSharedCuiStates();
 
 const { icons: DETECTION_ICONS, generic: GENERIC_ICON } = resolveEventIcons();
 // Sensor event icons are already included in DETECTION_ICONS from resolveEventIcons()

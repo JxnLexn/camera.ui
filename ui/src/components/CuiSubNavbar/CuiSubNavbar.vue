@@ -5,7 +5,7 @@
     :style="{
       width: `${subnavbarWidth}px`,
       borderRightWidth: subnavbarState === 'opened' ? '1px' : '0px',
-      paddingBottom: `calc(env(safe-area-inset-top, 0px) + env(safe-area-inset-bottom, 0px) + ${bottombarHeight}px + ${topbarHeight}px)`,
+      paddingBottom: `calc(env(safe-area-inset-top, 0px) + env(safe-area-inset-bottom, 0px) + ${bottombarHeight}px + ${topbarOffset}px)`,
     }"
   >
     <template v-for="section in navSections" :key="section.key">
@@ -43,7 +43,7 @@ import type { SubNavbarState } from './types.js';
 const router = useRouter();
 const { bus } = useCuiBus();
 const { xlBreakpoint, mdBreakpoint } = useSharedCuiBreakpoint();
-const { bottombarHeight, subbarState: subState, navbarState, topbarHeight } = useSharedCuiStates();
+const { bottombarHeight, subbarState: subState, navbarState, topbarOffset } = useSharedCuiStates();
 
 const subnavbarRef = useTemplateRef('subnavbarRef');
 const state = ref<SubNavbarState>('closed');

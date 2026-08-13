@@ -5,10 +5,10 @@
       '!border-none': smBreakpoint,
     }"
     :style="{
-      height: `calc(${topbarHeight}px + env(safe-area-inset-top, 0px) + ${isElectronApp ? '30px' : '0px'})`,
+      height: `calc(${topbarHeight}px + env(safe-area-inset-top, 0px) + ${TOPBAR_SIZE.ELECTRON_OFFSET}px)`,
       viewTransitionName: 'cui-topbar',
       background: smBreakpoint ? 'var(--ground-background)' : undefined,
-      paddingTop: isElectronApp ? `calc(30px + env(safe-area-inset-top, 0px))` : undefined,
+      paddingTop: isElectronApp ? `calc(${TOPBAR_SIZE.ELECTRON_OFFSET}px + env(safe-area-inset-top, 0px))` : undefined,
     }"
   >
     <div v-if="smBreakpoint && !minifiedTopbar" class="flex flex-row items-center flex-1 p-2 gap-1">
@@ -53,6 +53,8 @@
 
 <script setup lang="ts">
 import { isHomeAssistant } from '@/common/base.js';
+
+import { TOPBAR_SIZE } from './types.js';
 
 import type { CuiTopbarProps } from './types.js';
 
