@@ -38,7 +38,7 @@
         >
           <div ref="gridRef" class="grid-stack w-full h-full">
             <div
-              v-for="(card, idx) in cards"
+              v-for="{ card, index: idx } in visibleCards"
               :key="idx"
               class="grid-stack-item"
               :gs-id="String(idx)"
@@ -129,6 +129,10 @@ const currentMode = computed<'normal' | 'edit' | 'rearrange'>(() => {
   return 'normal';
 });
 
+const visibleCards = computed(() =>
+  cards.value.map((card, index) => ({ card, index })).filter(({ card }) => currentMode.value === 'edit' || card.lastDroppedCamera !== undefined),
+);
+
 const expandedIdx = computed(() => fullScreenCard.value ?? collapsingCard.value);
 
 const activeCameraCardProps = computed(() => {
@@ -197,6 +201,7 @@ function emitRearrange(): void {
 }
 
 function onGridChange(): void {
+  if (currentMode.value !== 'rearrange') return;
   emitRearrange();
 }
 
@@ -207,7 +212,7 @@ function initGrid(): void {
 
   const isMobile = smBreakpoint.value;
   const cols = isMobile ? 1 : info.cols;
-  const rows = isMobile ? cards.value.length : info.rows;
+  const rows = isMobile ? visibleCards.value.length : info.rows;
   const wrapper = wrapperRef.value;
   const wrapperW = wrapper?.clientWidth ?? 0;
   const cellH = isMobile ? (wrapperW * 9) / 16 : wrapperW > 0 ? (wrapperW * 9) / 16 / info.rows : 60;
@@ -419,7 +424,7 @@ function fitAspectRatios(): void {
 }
 
 watch(
-  [viewSize, () => cards.value.length, smBreakpoint],
+  [viewSize, () => visibleCards.value.length, smBreakpoint],
   () => {
     destroyGrid();
     nextTick(() => initGrid());
