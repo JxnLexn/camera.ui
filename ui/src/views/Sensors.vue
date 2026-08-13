@@ -79,10 +79,11 @@
                   />
                   <div class="flex flex-col min-w-0 flex-1">
                     <div class="flex items-center gap-2 min-w-0">
-                      <span class="font-bold text-color truncate">{{ row.label }}</span>
+                      <span v-tooltip="row.label" class="font-bold text-color truncate">{{ row.label }}</span>
                       <i-mdi:eye-off-outline v-if="!row.sensor.exposed" v-tooltip="t('views.sensors.not_exposed')" class="w-4 h-4 shrink-0 text-muted" />
                     </div>
                     <span class="text-xs text-muted truncate">{{ row.typeLabel }} · {{ row.pluginLabel }}</span>
+                    <span v-if="row.sensor.nativeId" v-tooltip="row.sensor.nativeId" class="text-xs text-muted truncate font-mono">{{ row.sensor.nativeId }}</span>
                   </div>
                   <Badge
                     v-tooltip="{ value: row.sensor.connected ? t('views.sensors.connected') : t('views.sensors.disconnected') }"
@@ -174,7 +175,7 @@
                 </div>
               </template>
             </Column>
-            <Column field="label" :header="t('views.sensors.name')" sortable header-class="p-2" class="p-2 w-full min-w-[180px] max-w-0">
+            <Column field="label" :header="t('views.sensors.name')" sortable header-class="p-2" class="p-2 w-[40%] min-w-[180px] max-w-0">
               <template #body="{ data }">
                 <div class="flex items-center gap-2 min-w-0" :class="rowClass(data)">
                   <component
@@ -185,15 +186,38 @@
                   />
                   <div class="flex flex-col min-w-0">
                     <div class="flex items-center gap-2 min-w-0">
-                      <span class="font-bold text-color truncate">{{ data.label }}</span>
+                      <span v-tooltip="data.label" class="font-bold text-color truncate">{{ data.label }}</span>
                       <i-mdi:eye-off-outline v-if="!data.sensor.exposed" v-tooltip="t('views.sensors.not_exposed')" class="w-4 h-4 shrink-0 text-muted" />
                     </div>
                     <span v-if="smBreakpoint" class="text-xs text-muted truncate">{{ data.typeLabel }} · {{ data.pluginLabel }}</span>
+                    <span v-if="smBreakpoint && data.nativeLabel" v-tooltip="data.nativeLabel" class="text-xs text-muted truncate font-mono">{{ data.nativeLabel }}</span>
                   </div>
                 </div>
               </template>
             </Column>
-            <Column v-if="!smBreakpoint" field="typeLabel" :header="t('views.sensors.type')" sortable header-class="p-2 whitespace-nowrap" class="p-2 whitespace-nowrap">
+            <Column
+              v-if="!smBreakpoint"
+              field="nativeLabel"
+              :header="t('views.sensors.native_id')"
+              sortable
+              header-class="p-2 whitespace-nowrap cui-col-center"
+              class="p-2 w-[28%] min-w-[160px] max-w-0 text-center"
+            >
+              <template #body="{ data }">
+                <span v-if="data.nativeLabel" v-tooltip="data.nativeLabel" class="text-xs text-muted truncate font-mono block" :class="rowClass(data)">
+                  {{ data.nativeLabel }}
+                </span>
+                <span v-else class="text-xs text-muted">—</span>
+              </template>
+            </Column>
+            <Column
+              v-if="!smBreakpoint"
+              field="typeLabel"
+              :header="t('views.sensors.type')"
+              sortable
+              header-class="p-2 whitespace-nowrap cui-col-center"
+              class="p-2 whitespace-nowrap text-center"
+            >
               <template #body="{ data }">
                 <span class="text-xs text-muted whitespace-nowrap" :class="rowClass(data)">{{ data.typeLabel }}</span>
               </template>
@@ -203,16 +227,22 @@
               field="pluginLabel"
               :header="t('views.sensors.plugin')"
               sortable
-              header-class="p-2 whitespace-nowrap"
-              class="p-2 whitespace-nowrap"
+              header-class="p-2 whitespace-nowrap cui-col-center"
+              class="p-2 whitespace-nowrap text-center"
             >
               <template #body="{ data }">
                 <Chip :label="data.pluginLabel" class="text-xs whitespace-nowrap" :class="rowClass(data)" />
               </template>
             </Column>
-            <Column field="assignedLabel" :header="t('views.sensors.assigned_cameras')" sortable header-class="p-2 whitespace-nowrap" class="p-2 min-w-[140px]">
+            <Column
+              field="assignedLabel"
+              :header="t('views.sensors.assigned_cameras')"
+              sortable
+              header-class="p-2 whitespace-nowrap cui-col-center"
+              class="p-2 min-w-[140px] text-center"
+            >
               <template #body="{ data }">
-                <div class="flex items-center gap-1 min-w-0" :class="rowClass(data)">
+                <div class="flex items-center justify-center gap-1 min-w-0" :class="rowClass(data)">
                   <i-mdi:lock-outline
                     v-if="data.sensor.assignmentLocked"
                     v-tooltip="t('views.sensors.assigned_cameras_locked_hint')"
@@ -395,6 +425,7 @@ interface SensorRow {
   sensor: TransformedSensor;
   label: string;
   typeLabel: string;
+  nativeLabel: string;
   pluginLabel: string;
   assignedLabel: string;
 }
@@ -497,6 +528,7 @@ const rows = computed<SensorRow[]>(() => {
       sensor,
       label: sensor.displayName || sensor.name,
       typeLabel: t(`components.camera_options.sensor_type_${sensor.type}`),
+      nativeLabel: sensor.nativeId ?? '',
       pluginLabel: sensor.virtual ? t('views.sensors.owner_virtual') : sensor.pluginName,
       assignedLabel: sensor.assignedCameraIds
         .map((id) => cameraOptions.value.find((camera) => camera.value === id)?.label)
@@ -504,7 +536,7 @@ const rows = computed<SensorRow[]>(() => {
         .join(', '),
     }))
     .filter((row) => !uiSettings.value.sensors.hideCameraBound || !row.sensor.assignmentLocked)
-    .filter((row) => !query || [row.label, row.typeLabel, row.pluginLabel, row.assignedLabel].some((value) => value.toLowerCase().includes(query)))
+    .filter((row) => !query || [row.label, row.typeLabel, row.nativeLabel, row.pluginLabel, row.assignedLabel].some((value) => value.toLowerCase().includes(query)))
     .sort((a, b) => a.label.localeCompare(b.label));
 });
 
@@ -684,5 +716,9 @@ function confirmDelete(sensor: TransformedSensor) {
 <style scoped>
 :deep(tr) {
   cursor: pointer !important;
+}
+
+:deep(.cui-col-center .p-datatable-column-header-content) {
+  justify-content: center;
 }
 </style>

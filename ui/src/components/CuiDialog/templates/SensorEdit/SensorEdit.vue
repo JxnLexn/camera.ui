@@ -13,6 +13,11 @@
       <InputText id="sensorDisplayName" v-model.trim="displayName" class="w-full" />
     </div>
 
+    <div v-if="sensor.nativeId" class="flex flex-col field-gap">
+      <label for="sensorNativeId" class="cui-label">{{ $t('views.sensors.native_id') }}</label>
+      <InputText id="sensorNativeId" :model-value="sensor.nativeId" readonly class="w-full font-mono text-sm" />
+    </div>
+
     <div class="flex flex-col field-gap">
       <label class="cui-label">{{ $t('views.sensors.assigned_cameras') }}</label>
       <div v-if="sensor.assignmentLocked" class="flex flex-wrap gap-2">
