@@ -1131,13 +1131,7 @@
               <Message severity="secondary" variant="simple" size="small" class="cui-input-hint">{{ $t('components.form.hint.ptz_autotrack_home_wait') }}</Message>
             </Field>
 
-            <Field
-              v-slot="{ errors }"
-              :model-value="cameraForm.ptzAutotrack?.minTargetSize"
-              name="ptzAutotrack.minTargetSize"
-              as="div"
-              class="flex flex-col field-gap"
-            >
+            <Field v-slot="{ errors }" :model-value="cameraForm.ptzAutotrack?.minTargetSize" name="ptzAutotrack.minTargetSize" as="div" class="flex flex-col field-gap">
               <label class="cui-label">{{ $t('components.form.label.ptz_autotrack_min_target_size') }}</label>
               <InputNumber
                 :model-value="Math.round((cameraForm.ptzAutotrack?.minTargetSize ?? 0) * 100)"
@@ -1154,18 +1148,10 @@
                   }
                 "
               />
-              <Message severity="secondary" variant="simple" size="small" class="cui-input-hint">{{
-                $t('components.form.hint.ptz_autotrack_min_target_size')
-              }}</Message>
+              <Message severity="secondary" variant="simple" size="small" class="cui-input-hint">{{ $t('components.form.hint.ptz_autotrack_min_target_size') }}</Message>
             </Field>
 
-            <Field
-              v-slot="{ errors }"
-              :model-value="cameraForm.ptzAutotrack?.maxTargetSize"
-              name="ptzAutotrack.maxTargetSize"
-              as="div"
-              class="flex flex-col field-gap"
-            >
+            <Field v-slot="{ errors }" :model-value="cameraForm.ptzAutotrack?.maxTargetSize" name="ptzAutotrack.maxTargetSize" as="div" class="flex flex-col field-gap">
               <label class="cui-label">{{ $t('components.form.label.ptz_autotrack_max_target_size') }}</label>
               <InputNumber
                 :model-value="Math.round((cameraForm.ptzAutotrack?.maxTargetSize ?? 0) * 100)"
@@ -1182,9 +1168,7 @@
                   }
                 "
               />
-              <Message severity="secondary" variant="simple" size="small" class="cui-input-hint">{{
-                $t('components.form.hint.ptz_autotrack_max_target_size')
-              }}</Message>
+              <Message severity="secondary" variant="simple" size="small" class="cui-input-hint">{{ $t('components.form.hint.ptz_autotrack_max_target_size') }}</Message>
             </Field>
 
             <Field :model-value="ptzActiveHoursEnabled" name="ptzAutotrack.activeHours" as="div" class="flex flex-col field-gap">
