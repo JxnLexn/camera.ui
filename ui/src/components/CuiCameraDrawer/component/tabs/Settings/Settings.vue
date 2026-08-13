@@ -388,33 +388,6 @@
 
           <Field
             v-slot="{ errors }"
-            :model-value="cameraForm.detectionSettings.object.labels ?? []"
-            name="detectionSettings.object.labels"
-            as="div"
-            class="flex flex-col field-gap"
-          >
-            <label for="detectionSettings.object.labels" class="cui-label">{{ $t('components.form.label.object_labels') }}</label>
-            <MultiSelect
-              :model-value="cameraForm.detectionSettings.object.labels ?? []"
-              :invalid="errors.length > 0"
-              :options="objectLabelOptions"
-              :placeholder="$t('components.form.hint.object_labels_placeholder')"
-              class="w-full"
-              :show-toggle-all="false"
-              @update:model-value="(e) => (cameraForm.detectionSettings.object.labels = e)"
-            />
-
-            <Transition name="fade">
-              <ErrorMessage name="detectionSettings.object.labels" class="cui-input-error" />
-            </Transition>
-
-            <Message v-if="!errors.length" severity="secondary" variant="simple" size="small" class="cui-input-hint">
-              {{ $t('components.form.hint.object_labels') }}
-            </Message>
-          </Field>
-
-          <Field
-            v-slot="{ errors }"
             :model-value="cameraForm.detectionSettings.object.confidence"
             name="detectionSettings.object.confidence"
             as="div"
@@ -1445,7 +1418,7 @@
 
 <script setup lang="ts">
 import { useSensors } from '@camera.ui/browser';
-import { OBJECT_DETECTION_LABELS, PluginInterface, SensorType } from '@camera.ui/sdk';
+import { PluginInterface, SensorType } from '@camera.ui/sdk';
 import { ErrorMessage, Field } from 'vee-validate';
 
 import { CamerasQuery } from '@/api/routes/cameras.js';
@@ -1476,8 +1449,6 @@ const TRIGGERABLE_TYPES = new Set(
     .filter(([, meta]) => meta.cascadeTrigger && !meta.isDetectionType)
     .map(([type]) => type as SensorType),
 );
-
-const objectLabelOptions = [...OBJECT_DETECTION_LABELS];
 
 const camerasQuery = new CamerasQuery();
 const camerasQueryRooms = new CamerasQuery();

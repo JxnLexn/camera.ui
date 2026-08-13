@@ -725,16 +725,14 @@ export class DetectionCoordinator {
     }
     for (const zone of this.config.zones.alert) {
       if (!zone.name) continue;
-      result.push({ name: zone.name, points: normalizePolygon(zone.points), match: zone.match ?? 'contain' });
+      result.push({
+        name: zone.name,
+        points: normalizePolygon(zone.points),
+        match: zone.match ?? 'contain',
+        alertLabels: zone.labels.map((label) => label.toLowerCase()),
+      });
     }
     return result;
-  }
-
-  private filterAllowedObjectLabels<T extends { label: string }>(detections: T[]): T[] {
-    const allowed = this.config.detectionSettings.object.labels;
-    if (!allowed || allowed.length === 0 || detections.length === 0) return detections;
-    const set = new Set<string>(allowed.map((label) => label.toLowerCase()));
-    return detections.filter((detection) => set.has(detection.label.toLowerCase()));
   }
 
   private applyExternalDetectionFilters(sensorType: SensorType, properties: Record<string, unknown>): Record<string, unknown> {
@@ -746,7 +744,7 @@ export class DetectionCoordinator {
     // a camera that reports a label without coordinates gives no position, a
     // zone cannot judge it and the object assist has not run yet
     const positioned = detections.filter((detection) => !isFullFrameBox(detection.box));
-    let boxless = detections.filter((detection) => isFullFrameBox(detection.box)) as Detection[];
+    const boxless = detections.filter((detection) => isFullFrameBox(detection.box)) as Detection[];
 
     let filtered: Detection[];
     let boxlessLabel: DetectionLabel | undefined;
@@ -761,8 +759,7 @@ export class DetectionCoordinator {
         filtered = this.pipeline.runZoneFilterWithLabel(positioned as LicensePlateDetection[], 'vehicle');
         break;
       case SensorType.Object:
-        boxless = this.filterAllowedObjectLabels(boxless);
-        filtered = this.pipeline.runZoneFilter(this.filterAllowedObjectLabels(positioned as Detection[]));
+        filtered = this.pipeline.runZoneFilter(positioned as Detection[]);
         break;
       case SensorType.Classifier:
       case SensorType.Motion:
@@ -1323,7 +1320,7 @@ export class DetectionCoordinator {
           // run the pipeline even on empty frames so Norfair advances its
           // Kalman state; the pose delta keeps predictions stable across pans
           const poseDelta = this.ptzAutotracker.consumePoseDelta();
-          const detected = this.filterAllowedObjectLabels(FrameScaler.undoLetterbox(ensureDetectionBoxes(result.detections), objectFrame.geometry));
+          const detected = FrameScaler.undoLetterbox(ensureDetectionBoxes(result.detections), objectFrame.geometry);
           const pipelineResult = this.pipeline.process(detected, poseDelta);
           // the tick that opens a span analysed the low stream (the switch lands
           // next tick), its picture work is worth a one-off HQ decode
@@ -1808,7 +1805,7 @@ export class DetectionCoordinator {
       this.perf.inferMs += Date.now() - inferStart;
       this.perf.inferCount++;
       const reportedLabels = new Set(reported.map((d) => d.label.toLowerCase()));
-      const boxed = this.filterAllowedObjectLabels(FrameScaler.undoLetterbox(ensureDetectionBoxes(result?.detections ?? []), scaled.geometry));
+      const boxed = FrameScaler.undoLetterbox(ensureDetectionBoxes(result?.detections ?? []), scaled.geometry);
       const found = boxed.filter((d) => reportedLabels.size === 0 || reportedLabels.has(d.label.toLowerCase()));
       if (found.length === 0) return { detections: reported, assisted: false };
       this.perf.objects += found.length;

@@ -5,6 +5,7 @@ import { boxAnchorInPolygon, boxInsidePolygon, boxIntersectsPolygon } from '../u
 import { detectionRecord } from './debug/detection-record.js';
 import { leanEvent, NvrSink } from './nvr-sink.js';
 import { MAX_UNTRACKED_PLATES, normalizePlateText, PlateVoteTracker } from './plate-vote.js';
+import { isFullFrameBox } from './types.js';
 
 import type { RPCClient } from '@camera.ui/rpc';
 import type {
@@ -25,8 +26,8 @@ import type {
 import type { DetectionEventMessage } from '@camera.ui/sdk/internal';
 import type { DetectionThumbnail } from '../../rpc/interfaces/detection.js';
 import type { LineCrossingEvent } from './detection-pipeline.js';
-import type { AnalysisStream } from './types.js';
 import type { EventAttachments, RecordedAttribute, RecordedEvent, RecordedSegment } from './nvr-sink.js';
+import type { AnalysisStream } from './types.js';
 
 export interface TrackedSecondary {
   parentTrackId?: number;
@@ -43,6 +44,8 @@ export interface NormalizedDetectionZone {
   points: Point[];
   /** Alert zones bring their own rule; filter zones are always tested by touch. */
   match?: AlertZoneMatch;
+  /** Set on alert zones only, lowercase. Empty means every label alerts here. */
+  alertLabels?: string[];
 }
 
 export const MOMENT_RANK_OBJECT = 0;
@@ -99,6 +102,17 @@ function zoneHit(box: BoundingBox, zone: NormalizedDetectionZone): boolean {
   if (zone.match === 'anchor') return boxAnchorInPolygon(box, zone.points);
   if (zone.match === 'contain') return boxInsidePolygon(box, zone.points);
   return boxIntersectsPolygon(box, zone.points);
+}
+
+function mayAlert(label: string, box: BoundingBox | undefined, hits: Set<string> | undefined, alertZones: NormalizedDetectionZone[]): boolean {
+  if (alertZones.length === 0) return true;
+
+  const lower = label.toLowerCase();
+  const claiming = alertZones.filter((zone) => zone.alertLabels!.length === 0 || zone.alertLabels!.includes(lower));
+  if (claiming.length === 0) return false;
+  if (!box || isFullFrameBox(box)) return true;
+
+  return claiming.some((zone) => hits?.has(zone.name));
 }
 
 function jpegInfo(jpeg: Buffer): string {
@@ -575,9 +589,11 @@ export class DetectionEventManager {
           }
         }
 
+        const alertZones = data.detectionZones.filter((zone) => zone.alertLabels !== undefined);
         const zonesSet = new Set<string>(this.activeSegment.zones ?? []);
         for (const detection of this.activeSegment.detections) {
           const hits = labelZones.get(detection.label);
+          detection.alert = mayAlert(detection.label, detection.box, hits, alertZones);
           if (!hits || hits.size === 0) continue;
           detection.zones = [...hits];
           for (const name of hits) zonesSet.add(name);

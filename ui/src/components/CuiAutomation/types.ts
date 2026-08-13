@@ -528,13 +528,6 @@ export const CAMERA_CONTROL_PROPERTY_DEFINITIONS: CameraControlPropertyDefinitio
   { key: 'detectionSettings.object.suppressStatic', labelKey: 'components.automation_nodes.camera_prop_suppress_static', inputType: 'boolean', defaultValue: 'true' },
   { key: 'detectionSettings.object.timeout', labelKey: 'components.automation_nodes.camera_prop_object_timeout', inputType: 'number', min: 10, defaultValue: '15' },
   {
-    key: 'detectionSettings.object.labels',
-    labelKey: 'components.automation_nodes.camera_prop_object_labels',
-    inputType: 'multiselect',
-    options: OBJECT_LABEL_OPTIONS,
-    defaultValue: '[]',
-  },
-  {
     key: 'detectionSettings.face.confidence',
     labelKey: 'components.automation_nodes.camera_prop_face_confidence',
     inputType: 'number',

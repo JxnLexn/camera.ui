@@ -110,7 +110,6 @@ export const detectionSettingsSchema = zod.object({
   }),
   object: zod.object({
     confidence: zod.number().min(0.3, 'Minimum 0.3').max(1, 'Maximum 1'),
-    labels: detectionLabelSchema.array().optional(),
     suppressStatic: zod.boolean().default(true),
     timeout: zod.number().min(10, 'Minimum 10 seconds').default(15),
   }),

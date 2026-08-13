@@ -373,6 +373,12 @@
                     "
                   />
                 </InputGroup>
+
+                <Transition name="fade">
+                  <p v-if="undetectedAlertLabels.length" class="cui-input-hint text-pretty">
+                    {{ $t('components.zone_editor.alert_conflict', { labels: undetectedAlertLabels.join(', ') }) }}
+                  </p>
+                </Transition>
               </div>
 
               <div v-if="activeTab === 'privacy'" class="flex flex-col field-gap w-full">
@@ -621,6 +627,17 @@ const polygons = computed(() => {
 }) as ComputedRef<EditorPolygon[]>;
 
 const tabHasLabels = computed(() => activeTab.value === 'object' || activeTab.value === 'alert');
+
+// an alert zone can only fire for types the object zones let through
+const undetectedAlertLabels = computed(() => {
+  if (activeTab.value !== 'alert' || selectedZone.value < 0) return [];
+
+  const include = objectZones.value.filter((zone) => zone.filter !== 'exclude');
+  if (include.length === 0 || include.some((zone) => zone.labels.length === 0)) return [];
+
+  const detected = new Set(include.flatMap((zone) => zone.labels));
+  return (alertZones.value[selectedZone.value]?.labels ?? []).filter((label) => !detected.has(label));
+});
 const tabHasFilter = computed(() => activeTab.value === 'motion' || activeTab.value === 'object');
 const polygonDashed = computed(() => activeTab.value === 'alert' || activeTab.value === 'motion');
 
@@ -858,6 +875,28 @@ function endDragPolygon(): void {
   }, 100);
 }
 
+const WHOLE_IMAGE: [number, number][] = [
+  [0, 0],
+  [100, 0],
+  [100, 100],
+  [0, 100],
+];
+
+function addZone(points: [number, number][]): void {
+  const color = getRandomHexColor();
+  const stamp = Date.now();
+
+  if (activeTab.value === 'motion') {
+    motionZones.value.push({ name: `motion-${stamp}`, points: [...points], filter: 'include', color });
+  } else if (activeTab.value === 'object') {
+    objectZones.value.push({ name: `object-${stamp}`, points: [...points], filter: 'include', type: 'intersect', labels: [], color });
+  } else if (activeTab.value === 'privacy') {
+    privacyZones.value.push({ name: `privacy-${stamp}`, points: [...points], dropDetections: true });
+  } else {
+    alertZones.value.push({ name: `alert-${stamp}`, points: [...points], labels: [], match: 'contain', color });
+  }
+}
+
 function addHandle(e: MouseEvent): void {
   if (!customizing.value || isDragging) {
     return;
@@ -868,18 +907,7 @@ function addHandle(e: MouseEvent): void {
   const y = Math.min(Math.max(Math.round(((e.offsetY - 10) / contentHeight.value) * 100), 0), 100);
 
   if (currentZone.value === undefined) {
-    const color = getRandomHexColor();
-    const stamp = Date.now();
-    if (activeTab.value === 'motion') {
-      motionZones.value.push({ name: `motion-${stamp}`, points: [], filter: 'include', color });
-    } else if (activeTab.value === 'object') {
-      objectZones.value.push({ name: `object-${stamp}`, points: [], filter: 'include', type: 'intersect', labels: ['person', 'vehicle', 'animal'], color });
-    } else if (activeTab.value === 'privacy') {
-      privacyZones.value.push({ name: `privacy-${stamp}`, points: [], dropDetections: true });
-    } else {
-      alertZones.value.push({ name: `alert-${stamp}`, points: [], labels: ['person', 'vehicle'], match: 'contain', color });
-    }
-
+    addZone([]);
     currentZone.value = polygons.value.length - 1;
   }
 
@@ -925,8 +953,22 @@ function updateHandle(payload: CoordsPosition): void {
 }
 
 function startCustomizing(): void {
+  // privacy is the one kind where a full-image default would be destructive
+  if (activeTab.value === 'privacy') {
+    customizing.value = true;
+    currentZone.value = undefined;
+    return;
+  }
+
+  // a new zone covers everything: "applies to the whole camera" is the common
+  // wish and costs no drawing, dragging the corners narrows it
+  addZone(WHOLE_IMAGE);
+  const zoneIndex = polygons.value.length - 1;
+  selectedZone.value = zoneIndex;
+  currentZone.value = zoneIndex;
   customizing.value = true;
-  currentZone.value = undefined;
+  updateCoordinatesFromZones();
+  nextTick(() => draggablesRef.value?.forEach((el) => makeDraggable(el)));
 }
 
 function finishCustomizing(inEdit: boolean): void {
