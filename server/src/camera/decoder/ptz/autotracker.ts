@@ -320,7 +320,8 @@ export class PtzAutotracker {
       const target = {
         pan: clamp(this.currentPose.pan + move.pan / PAN_TO_IMAGE_RATIO, -1, 1),
         tilt: clamp(this.currentPose.tilt + move.tilt / PAN_TO_IMAGE_RATIO, -1, 1),
-        zoom: this.currentPose.zoom,
+        // carried over unchanged, but a camera can report a pose outside the space it accepts
+        zoom: clamp(this.currentPose.zoom, -1, 1),
       };
 
       // a space-limit clamp can pin the target onto the pose; a 360° camera
