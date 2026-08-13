@@ -1,8 +1,15 @@
 import {
   AV_PIX_FMT_NV12,
+  AV_PIX_FMT_NV21,
+  AV_PIX_FMT_P010LE,
+  AV_PIX_FMT_P012LE,
+  AV_PIX_FMT_P016LE,
   AV_PIX_FMT_YUV420P,
+  AV_PIX_FMT_YUV420P10LE,
   AV_PIX_FMT_YUV422P,
+  AV_PIX_FMT_YUV422P10LE,
   AV_PIX_FMT_YUV444P,
+  AV_PIX_FMT_YUV444P10LE,
   AV_PIX_FMT_YUVJ420P,
   AV_PIX_FMT_YUVJ422P,
   AV_PIX_FMT_YUVJ444P,
@@ -21,17 +28,54 @@ export interface Region {
   height: number;
 }
 
-const BLACK_LUMA = 16;
-const NEUTRAL_CHROMA = 128;
+interface PixelLayout {
+  shiftX: number;
+  shiftY: number;
+  interleaved: boolean;
+  luma: Buffer;
+  chroma: Buffer;
+}
 
-// pixel format → [chroma shift x, chroma shift y]
-const PLANAR_CHROMA_SHIFT = new Map<number, [number, number]>([
-  [AV_PIX_FMT_YUV420P, [1, 1]],
-  [AV_PIX_FMT_YUVJ420P, [1, 1]],
-  [AV_PIX_FMT_YUV422P, [1, 0]],
-  [AV_PIX_FMT_YUVJ422P, [1, 0]],
-  [AV_PIX_FMT_YUV444P, [0, 0]],
-  [AV_PIX_FMT_YUVJ444P, [0, 0]],
+function sample8(value: number): Buffer {
+  return Buffer.from([value]);
+}
+
+function sample16(value: number): Buffer {
+  const buffer = Buffer.alloc(2);
+  buffer.writeUInt16LE(value);
+  return buffer;
+}
+
+const BLACK_LUMA_8 = sample8(16);
+const NEUTRAL_CHROMA_8 = sample8(128);
+const BLACK_LUMA_10 = sample16(16 << 2);
+const NEUTRAL_CHROMA_10 = sample16(128 << 2);
+const BLACK_LUMA_16 = sample16(16 << 8);
+const NEUTRAL_CHROMA_16 = sample16(128 << 8);
+
+function planar(shiftX: number, shiftY: number, luma: Buffer, chroma: Buffer): PixelLayout {
+  return { shiftX, shiftY, interleaved: false, luma, chroma };
+}
+
+function semiPlanar(luma: Buffer, chroma: Buffer): PixelLayout {
+  return { shiftX: 1, shiftY: 1, interleaved: true, luma, chroma };
+}
+
+const PIXEL_LAYOUTS = new Map<number, PixelLayout>([
+  [AV_PIX_FMT_YUV420P, planar(1, 1, BLACK_LUMA_8, NEUTRAL_CHROMA_8)],
+  [AV_PIX_FMT_YUVJ420P, planar(1, 1, BLACK_LUMA_8, NEUTRAL_CHROMA_8)],
+  [AV_PIX_FMT_YUV422P, planar(1, 0, BLACK_LUMA_8, NEUTRAL_CHROMA_8)],
+  [AV_PIX_FMT_YUVJ422P, planar(1, 0, BLACK_LUMA_8, NEUTRAL_CHROMA_8)],
+  [AV_PIX_FMT_YUV444P, planar(0, 0, BLACK_LUMA_8, NEUTRAL_CHROMA_8)],
+  [AV_PIX_FMT_YUVJ444P, planar(0, 0, BLACK_LUMA_8, NEUTRAL_CHROMA_8)],
+  [AV_PIX_FMT_YUV420P10LE, planar(1, 1, BLACK_LUMA_10, NEUTRAL_CHROMA_10)],
+  [AV_PIX_FMT_YUV422P10LE, planar(1, 0, BLACK_LUMA_10, NEUTRAL_CHROMA_10)],
+  [AV_PIX_FMT_YUV444P10LE, planar(0, 0, BLACK_LUMA_10, NEUTRAL_CHROMA_10)],
+  [AV_PIX_FMT_NV12, semiPlanar(BLACK_LUMA_8, NEUTRAL_CHROMA_8)],
+  [AV_PIX_FMT_NV21, semiPlanar(BLACK_LUMA_8, NEUTRAL_CHROMA_8)],
+  [AV_PIX_FMT_P010LE, semiPlanar(BLACK_LUMA_16, NEUTRAL_CHROMA_16)],
+  [AV_PIX_FMT_P012LE, semiPlanar(BLACK_LUMA_16, NEUTRAL_CHROMA_16)],
+  [AV_PIX_FMT_P016LE, semiPlanar(BLACK_LUMA_16, NEUTRAL_CHROMA_16)],
 ]);
 
 export class PrivacyMask {
@@ -123,43 +167,40 @@ export class PrivacyMask {
     const { width, height, format, linesize } = frame;
     if (width < 2 || height < 2) return false;
 
+    const layout = PIXEL_LAYOUTS.get(format);
+    if (!layout) return false;
+
     const spans = this.spansFor(width, height);
     if (spans.length === 0) return true;
 
-    const shift = PLANAR_CHROMA_SHIFT.get(format);
-    if (shift) {
-      const [shiftX, shiftY] = shift;
-      const [y, u, v] = planes;
-      if (!y || !u || !v) return false;
-      for (const [row, start, end] of spans) {
-        y.fill(BLACK_LUMA, row * linesize[0] + start, row * linesize[0] + end + 1);
-        if (shiftY === 1 && row % 2 !== 0) continue;
-        const cRow = row >> shiftY;
-        const cStart = start >> shiftX;
-        const cEnd = end >> shiftX;
-        u.fill(NEUTRAL_CHROMA, cRow * linesize[1] + cStart, cRow * linesize[1] + cEnd + 1);
-        v.fill(NEUTRAL_CHROMA, cRow * linesize[2] + cStart, cRow * linesize[2] + cEnd + 1);
+    const [y, u, v] = planes;
+    if (!y || !u) return false;
+    if (!layout.interleaved && !v) return false;
+
+    const bytes = layout.luma.length;
+
+    for (const [row, start, end] of spans) {
+      const lumaRow = row * linesize[0];
+      y.fill(layout.luma, lumaRow + start * bytes, lumaRow + (end + 1) * bytes);
+
+      if (layout.shiftY === 1 && row % 2 !== 0) continue;
+
+      const cRow = row >> layout.shiftY;
+      if (layout.interleaved) {
+        // two components per sample pair, so the pair index doubles
+        const first = (start >> 1) * 2;
+        const last = (end >> 1) * 2 + 1;
+        u.fill(layout.chroma, cRow * linesize[1] + first * bytes, cRow * linesize[1] + (last + 1) * bytes);
+        continue;
       }
-      return true;
+
+      const first = start >> layout.shiftX;
+      const last = end >> layout.shiftX;
+      u.fill(layout.chroma, cRow * linesize[1] + first * bytes, cRow * linesize[1] + (last + 1) * bytes);
+      v.fill(layout.chroma, cRow * linesize[2] + first * bytes, cRow * linesize[2] + (last + 1) * bytes);
     }
 
-    if (format === AV_PIX_FMT_NV12) {
-      const [y, uv] = planes;
-      if (!y || !uv) return false;
-      for (const [row, start, end] of spans) {
-        y.fill(BLACK_LUMA, row * linesize[0] + start, row * linesize[0] + end + 1);
-        if (row % 2 === 0) {
-          // interleaved chroma: two bytes per sample pair
-          const cRow = row >> 1;
-          const cStart = (start >> 1) * 2;
-          const cEnd = (end >> 1) * 2 + 1;
-          uv.fill(NEUTRAL_CHROMA, cRow * linesize[1] + cStart, cRow * linesize[1] + cEnd + 1);
-        }
-      }
-      return true;
-    }
-
-    return false;
+    return true;
   }
 
   private spansFor(width: number, height: number): Span[] {
