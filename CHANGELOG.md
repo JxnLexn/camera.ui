@@ -22,11 +22,19 @@ All notable changes to this project will be documented in this file.
 
 - **PTZ has its own controls on the camera, including presets.** Top right of the player there is now a bar with the home position, the positions saved on the camera and the switch for the pan/tilt/zoom controls. It appears on hover like the rest of the player controls and replaces the PTZ entries in the three dot menu.
 
+- **NVR Recording settings save again when a dropdown was never touched.** An option list nobody had picked from counted as an invalid entry, and since the whole page is checked at once, every save button on it stopped working.
+
+- **Camview only shows the slots you actually filled.** Pick the 10 slot layout for 8 cameras and you get 8 tiles instead of two dark boxes you cannot get rid of. The free space goes to the remaining cameras, and while assigning cameras the empty slots are back so you can still drop into them.
+
 - **The navigation keeps its logo and your profile in place.** Only the list of entries in between scrolls now, so the way out is always where you left it. Same in edit mode, where reset and done stay at the bottom, and dragging an entry towards the top or bottom of a long list now scrolls along.
 
 - **Sensors show the id they carry in the system they come from.** Two sensors with the same name are hard to tell apart, so the sensor list, the table and the edit dialog now show the source id underneath, for Home Assistant entities that is the entity id. The search finds sensors by it too.
 
 ### Fixed
+
+- **The animated Android notification is readable now.** The frames ran at triple speed and shared their width with the still picture, so you could hardly tell what happened. Each frame stays up for a second and the animation uses the full width. Needs the Android app update.
+
+- **Android notifications no longer cut the AI description off after one line.** The expanded notification ended the text in "…" whenever a picture was attached. It wraps onto several lines now, with the picture underneath. Needs the Android app update.
 
 - **The PTZ camera stops rocking back and forth when someone stands still.** A standing person makes the detection box breathe, and the camera chased every twitch, up and down or left and right. It now only turns for an offset that holds across several frames, and the motion prediction fades out as the target slows down.
 
