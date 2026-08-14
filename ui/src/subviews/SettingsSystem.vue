@@ -218,8 +218,10 @@ const updateAvailable = computed(() => {
   return false;
 });
 
+const onBetaTrack = computed(() => Boolean(installedVersion.value?.includes('-')));
+
 const updateAvailableBeta = computed(() => {
-  if (isBeta.value && installedVersion.value && latestBetaVersion.value) {
+  if ((isBeta.value || onBetaTrack.value) && installedVersion.value && latestBetaVersion.value) {
     return compareVersions(latestBetaVersion.value, installedVersion.value) === 1;
   }
 

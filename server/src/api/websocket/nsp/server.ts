@@ -149,8 +149,8 @@ export class ServerNamespace {
         this.proxyServer.notificationManager.notify({
           source: { kind: 'system', id: SystemNotificationTypeId.UpdateAvailable },
           notification: {
-            title: 'Update',
-            body: 'New camera.ui update available',
+            title: this.serverUpdate.betaUpdateAvailable ? 'Beta update' : 'Update',
+            body: this.serverUpdate.latestVersion ? `camera.ui ${this.serverUpdate.latestVersion} is available` : 'New camera.ui update available',
             severity: Severity.Info,
             tag: SystemNotificationTypeId.UpdateAvailable,
             deepLink: '/settings/system',

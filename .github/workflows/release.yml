@@ -91,8 +91,13 @@ jobs:
           notes="$(mktemp)"
 
           # Version section from the product changelog (header may carry a date suffix).
+          # A prerelease has no section of its own, it documents the version it leads to.
+          section="$VERSION"
+          if [ -f CHANGELOG.md ] && ! grep -q "^## \[$VERSION\]" CHANGELOG.md; then
+            section="${VERSION%%-*}"
+          fi
           if [ -f CHANGELOG.md ]; then
-            awk -v v="## [$VERSION]" 'index($0,v)==1{g=1;next} g&&/^## \[/{exit} g{print}' CHANGELOG.md >> "$notes"
+            awk -v v="## [$section]" 'index($0,v)==1{g=1;next} g&&/^## \[/{exit} g{print}' CHANGELOG.md >> "$notes"
           fi
 
           # Auto commit trail since the previous stable server release (same tag series).
