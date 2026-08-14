@@ -151,7 +151,7 @@ export class WorkerAgent implements WorkerAgentRPC {
     try {
       this.proxy.publish(NamespaceManager.workerDisconnect(), { agentId: this.agentId });
     } catch {
-      // best-effort — proxy might already be disconnected
+      // ignore — proxy might already be disconnected
     }
 
     if (this.syncInterval) {

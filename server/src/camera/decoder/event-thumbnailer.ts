@@ -4,10 +4,10 @@ import { BufferedSource } from './sources/buffered-source.js';
 import type { Logger } from '@camera.ui/common/logger';
 import type { FrameWorkerDecoderSettings } from '@camera.ui/sdk';
 import type { Frame } from 'node-av/lib';
-import type { DetectionEventManager } from './event-manager.js';
 import type { PrivacyMask } from '../privacy/mask.js';
+import type { DetectionEventManager } from './event-manager.js';
 import type { FrameScaler } from './frame-scaler.js';
-import type { FrameSource } from './sources/frame-source.js';
+import type { AnalysisSource } from './sources/analysis-source.js';
 import type { CoordinatorSourceUrl } from './types.js';
 
 export const EVENT_THUMB_MAX_WIDTH = MOMENT_FORMATS[1].width;
@@ -17,7 +17,7 @@ export const EVENT_THUMB_HQ_QUALITY = MOMENT_QUALITY;
 const HQ_FRAME_MAX_AGE_MS = 500;
 
 interface EventThumbnailerDeps {
-  frameSource: FrameSource;
+  frameSource: AnalysisSource;
   frameScaler: FrameScaler;
   privacy: PrivacyMask;
   eventManager: DetectionEventManager;
@@ -78,7 +78,7 @@ export class EventThumbnailer {
     const scaler = source.scaler;
     if (!scaler) return null;
 
-    const frame = await source.getFrame(maxAgeMs);
+    const frame = await source.decodeNewest(maxAgeMs);
     if (!frame) return null;
 
     return { frame, scaler };
@@ -107,7 +107,7 @@ export class EventThumbnailer {
           return;
         }
 
-        await using handle = await this.deps.frameSource.fetchSnapshotFrame();
+        await using handle = await this.deps.frameSource.getFrame(0);
         if (!handle) return;
         // large frames (plugin-native snapshots) can afford the HQ width
         const maxWidth = handle.frame.width >= EVENT_THUMB_HQ_MAX_WIDTH * 2 ? EVENT_THUMB_HQ_MAX_WIDTH : EVENT_THUMB_MAX_WIDTH;

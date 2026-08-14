@@ -442,6 +442,7 @@ export class FrameWorker extends Subscribed {
         frameWorkerSettings: this.resolveFrameWorkerSettings(this.camera.frameWorkerSettings),
         interfaceSettings: this.camera.interfaceSettings,
         nvrRpc: nvrRpcNamespace(),
+        streamHot: this.analysisSource.hotMode === true,
       });
 
       this.setStatus(PLUGIN_STATUS.STARTED);
@@ -590,13 +591,12 @@ export class FrameWorker extends Subscribed {
     return rewritten;
   }
 
-  private getVideoSource(): string {
-    const lowRes = this.camera.lowResolutionSource;
-    const midRes = this.camera.midResolutionSource;
-    const streamSource = this.camera.streamSource;
-    const source = lowRes ?? midRes ?? streamSource;
+  private get analysisSource() {
+    return this.camera.lowResolutionSource ?? this.camera.midResolutionSource ?? this.camera.streamSource;
+  }
 
-    return source.generateRTSPUrl({
+  private getVideoSource(): string {
+    return this.analysisSource.generateRTSPUrl({
       video: true,
       audio: false,
       gop: false,

@@ -87,7 +87,7 @@ export function usePushSync() {
     if (serverId) await writeDismissed(serverId);
   }
 
-  watch([active, devices], () => void evaluate(), { immediate: true });
+  watch([active, devices], () => evaluate(), { immediate: true });
 
   return {
     needsAction: computed(() => needsAction.value && active.value),
@@ -129,6 +129,6 @@ async function patchDismissed(serverId: string, dismissed: boolean): Promise<voi
     else delete all[serverId];
     await Preferences.set({ key: PREF_KEY_DISMISSED, value: JSON.stringify(all) });
   } catch {
-    // best-effort
+    // ignore
   }
 }

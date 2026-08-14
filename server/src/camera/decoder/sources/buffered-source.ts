@@ -1,20 +1,25 @@
-import { Decoder, Demuxer } from 'node-av/api';
+import { Decoder } from 'node-av/api';
 
 import { FrameScaler } from '../frame-scaler.js';
-import { createHardwareContext } from '../hardware.js';
-import { ReconnectBackoff } from '../reconnect-backoff.js';
+import { FrameHandle } from './frame-handle.js';
+import { ReconnectLoop } from './reconnect-loop.js';
+import { SnapshotFetcher } from './snapshot-fetcher.js';
+import { createFrameFilter, openVideoInput } from './video-input.js';
 
 import type { Logger } from '@camera.ui/common/logger';
 import type { FrameWorkerDecoderSettings } from '@camera.ui/sdk';
-import type { HardwareContext } from 'node-av/api';
+import type { Demuxer, FilterAPI, HardwareContext } from 'node-av/api';
 import type { Frame, Packet, Stream } from 'node-av/lib';
 import type { PrivacyMask } from '../../privacy/mask.js';
 import type { AnalysisSource, FrameSnap } from './analysis-source.js';
+import type { CycleOutcome } from './reconnect-loop.js';
+import type { SnapshotConfig } from './snapshot-fetcher.js';
 
 export interface BufferedSourceConfig {
   url: string;
   decoder?: FrameWorkerDecoderSettings;
   privacy?: PrivacyMask;
+  snapshot?: SnapshotConfig;
 }
 
 interface BufferedPacket {
@@ -37,6 +42,7 @@ export class BufferedSource implements AnalysisSource {
   private waitingForKeyframe = true;
 
   private decoder?: Decoder;
+  private filter?: FilterAPI;
   private decodedThrough = -1;
 
   private cachedFrame?: Frame;
@@ -45,18 +51,24 @@ export class BufferedSource implements AnalysisSource {
   private lastDecodeAt = 0;
 
   private shouldRun = false;
+  private paused = false;
   private connected = false;
   private producerPromise?: Promise<void>;
+  private producerError?: Error;
   private inflightDecode?: Promise<Frame | null>;
+  private resolvedFps?: number;
+  private _generation = 0;
 
-  private readonly backoff = new ReconnectBackoff();
-  private sleepTimer?: NodeJS.Timeout;
-  private sleepResolve?: () => void;
+  private readonly reconnect: ReconnectLoop;
+  private readonly snapshots?: SnapshotFetcher;
 
   constructor(
     private readonly config: BufferedSourceConfig,
     private readonly logger: Logger,
-  ) {}
+  ) {
+    this.reconnect = new ReconnectLoop(logger, 'Buffered source');
+    this.snapshots = config.snapshot ? new SnapshotFetcher(config.snapshot, logger) : undefined;
+  }
 
   public get isRunning(): boolean {
     return this.shouldRun;
@@ -74,21 +86,43 @@ export class BufferedSource implements AnalysisSource {
     return this.cachedFrameAt;
   }
 
-  public get hardwareContext(): HardwareContext | null | undefined {
-    return this.hwContext;
+  public get hardwareContext(): HardwareContext | null {
+    return this.hwContext ?? null;
   }
 
-  public start(): void {
+  public get fps(): number {
+    return this.resolvedFps ?? 20;
+  }
+
+  public get lastError(): Error | undefined {
+    return this.producerError;
+  }
+
+  public get generation(): number {
+    return this._generation;
+  }
+
+  public async start(): Promise<void> {
+    this.paused = false;
     if (this.shouldRun) return;
     this.shouldRun = true;
-    this.backoff.reset();
-    this.producerPromise = this.runProducer();
+    this.producerError = undefined;
+
+    this.producerPromise = this.reconnect.run(
+      () => this.shouldRun,
+      () => this.runCycle(),
+    );
+  }
+
+  public async detach(): Promise<void> {
+    this.paused = true;
+    this.wakePacketWaiters();
   }
 
   public async stop(): Promise<void> {
     if (!this.shouldRun && !this.producerPromise) return;
     this.shouldRun = false;
-    this.wakeSleep();
+    this.reconnect.wake();
     this.wakePacketWaiters();
 
     if (this.inflightDecode) {
@@ -113,7 +147,13 @@ export class BufferedSource implements AnalysisSource {
     }
   }
 
-  public async getFrame(maxAgeMs: number): Promise<Frame | null> {
+  public async getFrame(maxAgeMs: number): Promise<FrameHandle | null> {
+    const frame = maxAgeMs > 0 ? await this.decodeNewest(maxAgeMs) : null;
+    if (frame) return FrameHandle.fromClonedFrame(frame);
+    return (await this.snapshots?.fetch()) ?? null;
+  }
+
+  public async decodeNewest(maxAgeMs: number): Promise<Frame | null> {
     if (!this.hasBuffer || !this.videoStream) return null;
 
     if (this.cachedFrame && Date.now() - this.cachedFrameAt <= maxAgeMs) {
@@ -134,9 +174,9 @@ export class BufferedSource implements AnalysisSource {
   }
 
   public async nextFrame(lastId: number): Promise<FrameSnap | undefined> {
-    while (this.shouldRun) {
+    while (this.shouldRun && !this.paused) {
       if (this.hasBuffer && this.nextSerial - 1 > lastId) {
-        const frame = await this.getFrame(0);
+        const frame = await this.decodeNewest(0);
         // decoder delay can leave the cursor behind the newest packet, waiting
         // for the next one beats handing back a frame the caller already had
         if (frame && this.decodedThrough > lastId) {
@@ -151,7 +191,7 @@ export class BufferedSource implements AnalysisSource {
   }
 
   public async snapshotJpeg(maxWidth: number, quality?: number, maxAgeMs = 500): Promise<Buffer | null> {
-    const frame = await this.getFrame(maxAgeMs);
+    const frame = await this.decodeNewest(maxAgeMs);
     if (!frame) return null;
 
     try {
@@ -161,56 +201,53 @@ export class BufferedSource implements AnalysisSource {
     }
   }
 
-  private async runProducer(): Promise<void> {
-    while (this.shouldRun) {
-      try {
-        await this.connect();
-        this.backoff.reset();
-
-        for await (const packet of this.input!.packets(this.videoStream!.index)) {
-          if (!this.shouldRun) {
-            packet?.free();
-            break;
-          }
-          if (!packet) continue;
-          this.ingest(packet);
-        }
-      } catch (error: any) {
-        if (this.shouldRun) {
-          this.logger.debug(`Buffered source error: ${error.message}`);
-        }
-      }
-
+  private async runCycle(): Promise<CycleOutcome> {
+    try {
+      await this.connect();
+    } catch (error) {
       await this.teardown();
-      if (!this.shouldRun) break;
-
-      const delay = this.backoff.nextDelayMs();
-      this.logger.debug(`Buffered source disconnected, reconnecting in ${delay / 1000}s...`);
-      await this.sleep(delay);
+      throw error;
     }
 
-    await this.teardown();
+    this.reconnect.connected();
+    this._generation++;
+
+    let delivered = false;
+    try {
+      for await (const packet of this.input!.packets(this.videoStream!.index)) {
+        if (!this.shouldRun) {
+          packet?.free();
+          break;
+        }
+        if (!packet) continue;
+        this.ingest(packet);
+        delivered = true;
+      }
+    } catch (error) {
+      const failure = error instanceof Error ? error : new Error(String(error));
+      this.producerError = failure;
+      return { delivered, error: this.shouldRun ? failure : undefined };
+    } finally {
+      await this.teardown();
+    }
+
+    return { delivered };
   }
 
   private async connect(): Promise<void> {
     this.logger.debug('Connecting to buffered source:', this.config.url);
 
-    this.input = await Demuxer.open(this.config.url, {
-      options: {
-        timeout: 15_000_000,
-        rtsp_transport: 'tcp',
-        user_agent: 'camera.ui FrameWorker',
-        avioflags: 'direct',
-      },
+    const { input, videoStream, hardwareContext, fps } = await openVideoInput(this.config.url, this.logger, {
+      decoder: this.config.decoder,
+      timeoutUs: 15_000_000,
+      hardwareContext: this.hwContext,
     });
 
-    const videoStream = this.input.video();
-    if (!videoStream) {
-      throw new Error('No video stream found in buffered source');
-    }
+    this.input = input;
     this.videoStream = videoStream;
-
-    this.hwContext ??= createHardwareContext(this.config.decoder, this.logger);
+    this.hwContext = hardwareContext;
+    this.resolvedFps = fps;
+    this.filter = createFrameFilter(this.hwContext ?? null, fps);
     this.frameScaler ??= new FrameScaler(this.hwContext, this.logger, this.config.privacy);
 
     this.waitingForKeyframe = true;
@@ -302,6 +339,8 @@ export class BufferedSource implements AnalysisSource {
         return this.cachedFrame ?? null;
       }
 
+      last = await this.normalize(last);
+
       // ownership moves into the cache, consumers receive clones via getFrame
       this.cachedFrame?.[Symbol.dispose]?.();
       this.cachedFrame = last;
@@ -322,6 +361,25 @@ export class BufferedSource implements AnalysisSource {
     }
   }
 
+  private async normalize(frame: Frame): Promise<Frame> {
+    if (!this.filter) return frame;
+
+    let outputs: Frame[];
+    try {
+      outputs = await this.filter.processAll(frame);
+    } catch (error) {
+      this.logger.debug('Buffered source filter failed:', error);
+      return frame;
+    }
+
+    const newest = outputs.pop();
+    for (const extra of outputs) extra[Symbol.dispose]?.();
+    if (!newest) return frame;
+
+    frame[Symbol.dispose]?.();
+    return newest;
+  }
+
   private disposeDecoder(): void {
     try {
       this.decoder?.[Symbol.dispose]();
@@ -338,6 +396,11 @@ export class BufferedSource implements AnalysisSource {
     this.waitingForKeyframe = true;
     this.disposeDecoder();
     this.videoStream = undefined;
+
+    if (this.filter) {
+      this.filter[Symbol.dispose]();
+      this.filter = undefined;
+    }
 
     this.cachedFrame?.[Symbol.dispose]?.();
     this.cachedFrame = undefined;
@@ -363,22 +426,5 @@ export class BufferedSource implements AnalysisSource {
       }
     }
     this.buffer = [];
-  }
-
-  private sleep(ms: number): Promise<void> {
-    return new Promise<void>((resolve) => {
-      this.sleepResolve = resolve;
-      this.sleepTimer = setTimeout(() => {
-        this.sleepResolve = undefined;
-        resolve();
-      }, ms);
-    });
-  }
-
-  private wakeSleep(): void {
-    clearTimeout(this.sleepTimer);
-    this.sleepTimer = undefined;
-    this.sleepResolve?.();
-    this.sleepResolve = undefined;
   }
 }

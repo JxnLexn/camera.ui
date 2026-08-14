@@ -54,7 +54,7 @@ export async function clearCredentials(serverId: string | null): Promise<void> {
     await SecureStorage.remove(KEY_USERNAME_PREFIX + serverId);
     await SecureStorage.remove(KEY_PASSWORD_PREFIX + serverId);
   } catch {
-    // best-effort
+    // ignore
   }
 }
 

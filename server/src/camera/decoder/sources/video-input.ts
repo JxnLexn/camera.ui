@@ -1,0 +1,81 @@
+import { Demuxer, FilterAPI, FilterPreset } from 'node-av/api';
+import { AV_HWDEVICE_TYPE_OPENCL } from 'node-av/constants';
+
+import { createHardwareContext } from '../hardware.js';
+
+import type { Logger } from '@camera.ui/common/logger';
+import type { FrameWorkerDecoderSettings } from '@camera.ui/sdk';
+import type { HardwareContext } from 'node-av/api';
+import type { Stream } from 'node-av/lib';
+
+const FALLBACK_FPS = 20;
+
+export interface VideoInputOptions {
+  decoder?: FrameWorkerDecoderSettings;
+  timeoutUs?: number;
+  hardwareContext?: HardwareContext | null;
+}
+
+export interface VideoInput {
+  input: Demuxer;
+  videoStream: Stream;
+  hardwareContext: HardwareContext | null;
+  fps: number;
+}
+
+export async function openVideoInput(url: string, logger: Logger, options: VideoInputOptions = {}): Promise<VideoInput> {
+  const input = await Demuxer.open(url, {
+    options: {
+      ...(options.timeoutUs ? { timeout: options.timeoutUs } : {}),
+      rtsp_transport: 'tcp',
+      user_agent: 'camera.ui Decoder',
+      avioflags: 'direct',
+    },
+  });
+
+  const videoStream = input.video();
+  if (!videoStream) {
+    try {
+      await input[Symbol.asyncDispose]();
+    } catch {
+      // ignore
+    }
+    throw new Error('No video stream found');
+  }
+
+  return {
+    input,
+    videoStream,
+    hardwareContext: options.hardwareContext ?? acquireHardware(logger, options.decoder),
+    fps: resolveFps(videoStream),
+  };
+}
+
+export function createFrameFilter(hardwareContext: HardwareContext | null, fps: number): FilterAPI {
+  let chain = FilterPreset.chain(hardwareContext).filter('setpts', { expr: `N/(${fps}*TB)` });
+
+  if (hardwareContext?.deviceType === AV_HWDEVICE_TYPE_OPENCL) {
+    chain = chain.hwupload();
+  }
+
+  return FilterAPI.create(chain.build(), { hardware: hardwareContext });
+}
+
+function acquireHardware(logger: Logger, decoder?: FrameWorkerDecoderSettings): HardwareContext | null {
+  const context = createHardwareContext(decoder, logger);
+
+  if (context) {
+    logger.debug('Using hardware acceleration:', context.deviceTypeName);
+  } else if (decoder?.hardware === 'cpu') {
+    logger.debug('Software decoding (configured)');
+  } else {
+    logger.warn('No hardware acceleration available, using software decoding');
+  }
+
+  return context;
+}
+
+function resolveFps(videoStream: Stream): number {
+  const fps = videoStream.avgFrameRate.num / videoStream.avgFrameRate.den;
+  return Number.isFinite(fps) && fps > 0 ? fps : FALLBACK_FPS;
+}

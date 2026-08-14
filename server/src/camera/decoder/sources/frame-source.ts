@@ -1,136 +1,26 @@
-import { Decoder, Demuxer, FilterAPI, FilterPreset } from 'node-av/api';
-import { AV_HWDEVICE_TYPE_OPENCL } from 'node-av/constants';
+import { Decoder } from 'node-av/api';
 
-import { createHardwareContext } from '../hardware.js';
+import { FrameHandle } from './frame-handle.js';
+import { ReconnectLoop } from './reconnect-loop.js';
+import { SnapshotFetcher } from './snapshot-fetcher.js';
+import { createFrameFilter, openVideoInput } from './video-input.js';
 
 import type { Logger } from '@camera.ui/common/logger';
 import type { FrameWorkerDecoderSettings } from '@camera.ui/sdk';
-import type { HardwareContext } from 'node-av/api';
-import type { Frame } from 'node-av/lib';
+import type { Demuxer, FilterAPI, HardwareContext } from 'node-av/api';
 import type { AnalysisSource, FrameSnap } from './analysis-source.js';
+import type { CycleOutcome } from './reconnect-loop.js';
+import type { SnapshotConfig } from './snapshot-fetcher.js';
 
+export { FrameHandle };
 export type { FrameSnap };
 
-export interface FrameSourceConfig {
+export interface FrameSourceConfig extends SnapshotConfig {
   streamUrl: string;
-  snapshotUrl: string;
   decoder?: FrameWorkerDecoderSettings;
-  snapshotTimeoutMs?: number;
-  snapshotProvider?: () => Promise<Buffer | null>;
 }
 
 type Waiter = (snap: FrameSnap | undefined) => void;
-
-export class FrameHandle implements AsyncDisposable {
-  private disposed = false;
-
-  private constructor(
-    public readonly frame: Frame,
-    private readonly demuxer?: Demuxer,
-    private readonly decoder?: Decoder,
-  ) {}
-
-  public static fromClonedFrame(frame: Frame): FrameHandle {
-    return new FrameHandle(frame);
-  }
-
-  public static async fromUrl(url: string, timeoutMs: number): Promise<FrameHandle> {
-    // libavformat expects timeout in microseconds
-    const timeoutUs = Math.max(1, Math.floor(timeoutMs * 1000));
-    const isRTSP = url.startsWith('rtsp://') || url.startsWith('rtsps://');
-
-    const demuxer = await Demuxer.open(url, {
-      options: {
-        timeout: timeoutUs,
-        rtsp_transport: isRTSP ? 'tcp' : undefined,
-        user_agent: 'camera.ui FrameWorker',
-      },
-    });
-
-    return FrameHandle.decodeFirstFrame(demuxer);
-  }
-
-  public static async fromBuffer(data: Buffer): Promise<FrameHandle> {
-    const demuxer = await Demuxer.open(data);
-    return FrameHandle.decodeFirstFrame(demuxer);
-  }
-
-  private static async decodeFirstFrame(demuxer: Demuxer): Promise<FrameHandle> {
-    let decoder: Decoder | undefined;
-    let firstFrame: Frame | undefined;
-    try {
-      const videoStream = demuxer.video();
-      if (!videoStream) {
-        throw new Error('No video stream in snapshot source');
-      }
-
-      decoder = await Decoder.create(videoStream, { exitOnError: false });
-
-      // frames() yields null for packets that produce no frame, keep iterating
-      const packets = demuxer.packets(videoStream.index);
-      const frames = decoder.frames(packets);
-      for await (const frame of frames) {
-        if (!frame) continue;
-        firstFrame = frame;
-        break;
-      }
-
-      if (!firstFrame) {
-        throw new Error('Snapshot source produced no frame');
-      }
-
-      decoder[Symbol.dispose]();
-      decoder = undefined;
-      await demuxer[Symbol.asyncDispose]();
-
-      return new FrameHandle(firstFrame);
-    } catch (error) {
-      try {
-        firstFrame?.[Symbol.dispose]?.();
-      } catch {
-        // best-effort
-      }
-      try {
-        decoder?.[Symbol.dispose]();
-      } catch {
-        // best-effort
-      }
-      try {
-        await demuxer[Symbol.asyncDispose]();
-      } catch {
-        // best-effort
-      }
-      throw error;
-    }
-  }
-
-  public async [Symbol.asyncDispose](): Promise<void> {
-    if (this.disposed) return;
-    this.disposed = true;
-
-    try {
-      this.frame[Symbol.dispose]?.();
-    } catch {
-      // best-effort
-    }
-
-    if (this.decoder) {
-      try {
-        this.decoder[Symbol.dispose]();
-      } catch {
-        // best-effort
-      }
-    }
-
-    if (this.demuxer) {
-      try {
-        await this.demuxer[Symbol.asyncDispose]();
-      } catch {
-        // best-effort
-      }
-    }
-  }
-}
 
 export class FrameSource implements AnalysisSource {
   private input?: Demuxer;
@@ -138,12 +28,14 @@ export class FrameSource implements AnalysisSource {
   private filter?: FilterAPI;
   private _hardwareContext?: HardwareContext | null;
 
-  private _isStreaming = false;
+  private connected = false;
   private _resolvedFps?: number;
   private shouldRun = false;
+  private _generation = 0;
 
   // single-slot mailbox with monotonic id
   private latest?: FrameSnap;
+  private latestAt = 0;
   private nextId = 0;
   private waiter?: Waiter;
   private ended = false;
@@ -152,21 +44,27 @@ export class FrameSource implements AnalysisSource {
 
   private startCount = 0;
 
-  private inflightFetch?: Promise<FrameHandle | null>;
-  private static readonly FETCH_DEFAULT_TIMEOUT_MS = 8000;
-  private static readonly COALESCING_WINDOW_MS = 200;
+  private readonly reconnect: ReconnectLoop;
+  private readonly snapshots: SnapshotFetcher;
 
   constructor(
     private readonly config: FrameSourceConfig,
     private readonly logger: Logger,
-  ) {}
+  ) {
+    this.reconnect = new ReconnectLoop(logger, 'Stream');
+    this.snapshots = new SnapshotFetcher(config, logger);
+  }
 
   public get hardwareContext(): HardwareContext | null {
     return this._hardwareContext ?? null;
   }
 
-  public get isStreaming(): boolean {
-    return this._isStreaming;
+  public get isRunning(): boolean {
+    return this.shouldRun;
+  }
+
+  public get generation(): number {
+    return this._generation;
   }
 
   public get fps(): number {
@@ -178,81 +76,34 @@ export class FrameSource implements AnalysisSource {
   }
 
   public async start(): Promise<void> {
-    if (this._isStreaming) {
+    if (this.shouldRun) {
       this.logger.warn('start() called while already streaming — skipped');
       return;
     }
 
-    this.startCount++;
-    this.logger.debug(`Connecting to stream (start #${this.startCount}):`, this.config.streamUrl);
     this.shouldRun = true;
     this.ended = false;
-    this.latest = undefined;
-    this.nextId = 0;
     this.producerError = undefined;
 
-    this.input = await Demuxer.open(this.config.streamUrl, {
-      options: {
-        rtsp_transport: 'tcp',
-        user_agent: 'camera.ui FrameWorker',
-        avioflags: 'direct',
-      },
-    });
+    this.producerPromise = this.reconnect.run(
+      () => this.shouldRun,
+      () => this.runCycle(),
+    );
+  }
 
-    const videoStream = this.input.video();
-    if (!videoStream) {
-      throw new Error('No video stream found');
-    }
-
-    this._hardwareContext = createHardwareContext(this.config.decoder, this.logger);
-    if (this._hardwareContext) {
-      this.logger.debug('Using hardware acceleration:', this._hardwareContext.deviceTypeName);
-    } else if (this.config.decoder?.hardware === 'cpu') {
-      this.logger.debug('Software decoding (configured)');
-    } else {
-      this.logger.warn('No hardware acceleration available, using software decoding');
-    }
-
-    this.decoder = await Decoder.create(videoStream, {
-      hardware: this._hardwareContext,
-      exitOnError: false,
-    });
-
-    // the loop paces itself by pulling, the producer just keeps the slot fresh
-    let nativeFps = videoStream.avgFrameRate.num / videoStream.avgFrameRate.den;
-    if (!isFinite(nativeFps) || nativeFps <= 0 || isNaN(nativeFps)) {
-      nativeFps = 20;
-    }
-    this._resolvedFps = nativeFps;
-
-    this.logger.debug(`Detection stream: ${videoStream.codecpar.width}x${videoStream.codecpar.height} @ ${this._resolvedFps}fps`);
-
-    let filterChain = FilterPreset.chain(this._hardwareContext).filter('setpts', { expr: `N/(${this._resolvedFps}*TB)` });
-
-    if (this._hardwareContext?.deviceType === AV_HWDEVICE_TYPE_OPENCL) {
-      filterChain = filterChain.hwupload();
-    }
-
-    this.filter = FilterAPI.create(filterChain.build(), {
-      hardware: this._hardwareContext,
-    });
-
-    this._isStreaming = true;
-
-    this.producerPromise = this.runProducer();
+  public async detach(): Promise<void> {
+    await this.stop();
   }
 
   public async stop(): Promise<void> {
+    if (!this.shouldRun && !this.producerPromise) return;
     this.shouldRun = false;
-
-    if (!this._isStreaming) return;
-    this._isStreaming = false;
-    this._resolvedFps = undefined;
 
     // wake waiting consumers BEFORE awaiting the producer, otherwise they
     // hold it up
     this.ended = true;
     this.wakeWaiter();
+    this.reconnect.wake();
     this.input?.interrupt();
 
     if (this.producerPromise) {
@@ -264,33 +115,11 @@ export class FrameSource implements AnalysisSource {
       this.producerPromise = undefined;
     }
 
-    if (this.latest) {
-      try {
-        this.latest.frame[Symbol.dispose]?.();
-      } catch {
-        // best-effort
-      }
-      this.latest = undefined;
-    }
-
-    if (this.filter) {
-      this.filter[Symbol.dispose]();
-      this.filter = undefined;
-    }
-
-    if (this.decoder) {
-      this.decoder[Symbol.dispose]();
-      this.decoder = undefined;
-    }
+    this._resolvedFps = undefined;
 
     if (this._hardwareContext) {
       this._hardwareContext[Symbol.dispose]();
       this._hardwareContext = undefined;
-    }
-
-    if (this.input) {
-      await this.input[Symbol.asyncDispose]();
-      this.input = undefined;
     }
 
     this.logger.debug('Stream stopped');
@@ -308,56 +137,12 @@ export class FrameSource implements AnalysisSource {
     });
   }
 
-  public peekLatestFrame(): FrameHandle | null {
-    if (!this._isStreaming || !this.latest) return null;
-    const cloned = this.latest.frame.clone();
-    if (!cloned) return null;
-    return FrameHandle.fromClonedFrame(cloned);
-  }
-
-  public async fetchSnapshotFrame(): Promise<FrameHandle | null> {
-    if (!this.inflightFetch) {
-      const timeoutMs = this.config.snapshotTimeoutMs ?? FrameSource.FETCH_DEFAULT_TIMEOUT_MS;
-      const thisFetch = this.fetchSnapshotHandle(timeoutMs).catch((e) => {
-        this.logger.debug('fetchSnapshotFrame failed:', e);
-        return null;
-      });
-      this.inflightFetch = thisFetch;
-
-      // per-fetch dispose timer, overlapping fetches must not share state
-      thisFetch.finally(() => {
-        setTimeout(async () => {
-          if (this.inflightFetch === thisFetch) {
-            this.inflightFetch = undefined;
-          }
-          try {
-            const root = await thisFetch;
-            if (root) await root[Symbol.asyncDispose]();
-          } catch {
-            // best-effort
-          }
-        }, FrameSource.COALESCING_WINDOW_MS);
-      });
+  public async getFrame(maxAgeMs: number): Promise<FrameHandle | null> {
+    if (maxAgeMs > 0 && this.connected && this.latest && Date.now() - this.latestAt <= maxAgeMs) {
+      const cloned = this.latest.frame.clone();
+      if (cloned) return FrameHandle.fromClonedFrame(cloned);
     }
-
-    const rootHandle = await this.inflightFetch;
-    if (!rootHandle) return null;
-    const cloned = rootHandle.frame.clone();
-    return cloned ? FrameHandle.fromClonedFrame(cloned) : null;
-  }
-
-  private async fetchSnapshotHandle(timeoutMs: number): Promise<FrameHandle | null> {
-    if (this.config.snapshotProvider) {
-      try {
-        const jpeg = await this.config.snapshotProvider();
-        if (jpeg && jpeg.length > 0) {
-          return await FrameHandle.fromBuffer(jpeg);
-        }
-      } catch {
-        // fall back to snapshotUrl
-      }
-    }
-    return FrameHandle.fromUrl(this.config.snapshotUrl, timeoutMs);
+    return this.snapshots.fetch();
   }
 
   private wakeWaiter(): void {
@@ -377,24 +162,61 @@ export class FrameSource implements AnalysisSource {
     }
   }
 
-  private async runProducer(): Promise<void> {
-    if (!this.input || !this.decoder || !this.filter) {
-      this.ended = true;
-      this.wakeWaiter();
-      return;
+  private async runCycle(): Promise<CycleOutcome> {
+    this.startCount++;
+    this.logger.debug(`Connecting to stream (start #${this.startCount}):`, this.config.streamUrl);
+
+    try {
+      await this.connect();
+    } catch (error) {
+      await this.teardown();
+      throw error;
     }
 
-    const videoStream = this.input.video();
-    if (!videoStream) {
-      this.ended = true;
-      this.wakeWaiter();
-      return;
+    this.reconnect.connected();
+    this.connected = true;
+    this._generation++;
+    this.logger.debug('Stream connected, processing frames...');
+
+    try {
+      return await this.consume();
+    } finally {
+      this.connected = false;
+      await this.teardown();
+    }
+  }
+
+  private async connect(): Promise<void> {
+    const { input, videoStream, hardwareContext, fps } = await openVideoInput(this.config.streamUrl, this.logger, {
+      decoder: this.config.decoder,
+      hardwareContext: this._hardwareContext,
+    });
+
+    this.input = input;
+    this._hardwareContext = hardwareContext;
+    this._resolvedFps = fps;
+
+    this.decoder = await Decoder.create(videoStream, {
+      hardware: this._hardwareContext,
+      exitOnError: false,
+    });
+
+    this.logger.debug(`Detection stream: ${videoStream.codecpar.width}x${videoStream.codecpar.height} @ ${fps}fps`);
+
+    this.filter = createFrameFilter(this._hardwareContext ?? null, fps);
+  }
+
+  private async consume(): Promise<CycleOutcome> {
+    const videoStream = this.input?.video();
+    if (!this.input || !this.decoder || !this.filter || !videoStream) {
+      return { delivered: false };
     }
 
     const packets = this.input.packets(videoStream.index);
     const decodedFrames = this.decoder.frames(packets);
     const filteredFrames = this.filter.frames(decodedFrames);
 
+    let delivered = false;
     let firstFrame = true;
 
     try {
@@ -407,26 +229,53 @@ export class FrameSource implements AnalysisSource {
           firstFrame = false;
         }
 
-        // dispose any un-picked-up frame before overwriting the slot
-        if (this.latest) {
-          try {
-            this.latest.frame[Symbol.dispose]?.();
-          } catch {
-            // best-effort
-          }
-        }
+        this.dropLatest();
         this.latest = { frame, id: this.nextId++ };
+        this.latestAt = Date.now();
+        delivered = true;
 
         this.wakeWaiter();
       }
     } catch (error) {
-      if (this.shouldRun) {
-        this.producerError = error instanceof Error ? error : new Error(String(error));
-        this.logger.debug('Frame producer ended with read error:', error);
+      const failure = error instanceof Error ? error : new Error(String(error));
+      this.producerError = failure;
+      return { delivered, error: this.shouldRun ? failure : undefined };
+    }
+
+    return { delivered };
+  }
+
+  private dropLatest(): void {
+    if (!this.latest) return;
+    try {
+      this.latest.frame[Symbol.dispose]?.();
+    } catch {
+      // ignore
+    }
+    this.latest = undefined;
+    this.latestAt = 0;
+  }
+
+  private async teardown(): Promise<void> {
+    this.dropLatest();
+
+    if (this.filter) {
+      this.filter[Symbol.dispose]();
+      this.filter = undefined;
+    }
+
+    if (this.decoder) {
+      this.decoder[Symbol.dispose]();
+      this.decoder = undefined;
+    }
+
+    if (this.input) {
+      try {
+        await this.input[Symbol.asyncDispose]();
+      } catch {
+        // ignore
       }
-    } finally {
-      this.ended = true;
-      this.wakeWaiter();
+      this.input = undefined;
     }
   }
 }

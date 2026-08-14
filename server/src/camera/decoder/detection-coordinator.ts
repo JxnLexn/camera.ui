@@ -19,8 +19,8 @@ import { PerfTracker } from './perf-tracker.js';
 import { normalizePlateText } from './plate-vote.js';
 import { isVideoInputSpec, PluginRegistry } from './plugin-registry.js';
 import { PtzAutotracker } from './ptz/autotracker.js';
-import { ReconnectBackoff } from './reconnect-backoff.js';
 import { SecondaryStage } from './secondary-stage.js';
+import { BufferedSource } from './sources/buffered-source.js';
 import { FrameSource } from './sources/frame-source.js';
 import { DETECT_TIMEOUT_MS, ensureDetectionBoxes, isFullFrameBox, MOTION_WIDTH_MAP } from './types.js';
 
@@ -59,7 +59,8 @@ import type { NormalizedDetectionZone, ProcessedDetectionData, TrackedFaceDetect
 import type { LetterboxGeometry } from './frame-scaler.js';
 import type { CropWindow, MomentFormatName, MomentTarget } from './moment-crop.js';
 import type { RegisteredPlugin } from './plugin-registry.js';
-import type { FrameSourceConfig } from './sources/frame-source.js';
+import type { AnalysisSource } from './sources/analysis-source.js';
+import type { SnapshotConfig } from './sources/snapshot-fetcher.js';
 import type { CoordinatorSourceUrl, FrameWorkerPerfSnapshot } from './types.js';
 
 export interface DetectionCoordinatorConfig {
@@ -75,6 +76,9 @@ export interface DetectionCoordinatorConfig {
   frameWorkerSettings: CameraFrameWorkerSettings;
   interfaceSettings: CameraUiSettings;
   nvrRpc?: string;
+  // the analysis source is allowed to stay connected, so it holds packets while
+  // nothing is happening instead of waiting for a keyframe on every trigger
+  streamHot?: boolean;
 }
 
 interface PluginFrame {
@@ -117,10 +121,11 @@ const ACTIVE_TICK_MS = 100;
 const MOTION_INTERVAL_MS = 200;
 const TICK_SLACK_MS = 20;
 const MAIN_STREAM_HOLD_MS = 5000;
+const EXTERNAL_FRAME_MAX_AGE_MS = 1000;
 
 @RPCClass
 export class DetectionCoordinator {
-  private frameSource: FrameSource;
+  private frameSource: AnalysisSource;
   private frameScaler: FrameScaler;
 
   private readonly plugins = new PluginRegistry();
@@ -141,7 +146,6 @@ export class DetectionCoordinator {
   private readonly feedingSensors = new Map<string, SensorType>();
   private readonly dwell = new DwellManager();
   private readonly privacy: PrivacyMask;
-  private readonly videoBackoff = new ReconnectBackoff();
 
   // debugging
   private readonly perf = new PerfTracker();
@@ -184,26 +188,29 @@ export class DetectionCoordinator {
     private readonly proxy: RPCClient,
     private readonly logger: Logger,
   ) {
-    const frameSourceConfig: FrameSourceConfig = {
-      streamUrl: config.streamUrl,
-      snapshotUrl: config.snapshotUrl,
-      decoder: this.config.frameWorkerSettings.decoder,
-    };
+    const snapshot: SnapshotConfig = { snapshotUrl: config.snapshotUrl };
 
     if (config.controllerSnapshotSourceId) {
       const sourceId = config.controllerSnapshotSourceId;
       const controllerProxy = this.proxy.createProxy<CameraDeviceInterface>(NamespaceManager.cameraNamespaces(config.cameraId).cameraControllerRpc);
-      frameSourceConfig.snapshotProvider = async () => {
+      snapshot.snapshotProvider = async () => {
         const jpeg = await controllerProxy.snapshot(sourceId, true, true);
         if (!jpeg || jpeg.byteLength === 0) return null;
         return Buffer.from(jpeg);
       };
     }
 
-    this.frameSource = new FrameSource(frameSourceConfig, logger);
     this.config.zones = normalizeZones(config.zones);
     this.privacy = new PrivacyMask(logger);
     this.privacy.update(this.config.zones);
+
+    const decoder = this.config.frameWorkerSettings.decoder;
+    this.frameSource = config.streamHot
+      ? new BufferedSource({ url: config.streamUrl, decoder, privacy: this.privacy, snapshot }, logger)
+      : new FrameSource({ streamUrl: config.streamUrl, decoder, ...snapshot }, logger);
+
+    // a hot source buffers from the start, the loop only decides what is analysed
+    if (config.streamHot) this.frameSource.start();
     this.frameScaler = new FrameScaler(null, logger, this.privacy);
     this.pipeline = new DetectionPipeline(this.pipelineZones(), config.detectionSettings);
     this.secondaries = new SecondaryStage(this, this.plugins, this.pipeline, this.frameScaler, this.proxy, logger);
@@ -351,6 +358,7 @@ export class DetectionCoordinator {
 
   public async dispose(): Promise<void> {
     await this.stopVideoLoop();
+    await this.frameSource.stop();
     await this.audioLoop.stop();
     await this.thumbnailer.stop();
     this.ptzAutotracker.dispose();
@@ -453,39 +461,19 @@ export class DetectionCoordinator {
       try {
         const rawExternal = (filtered.detections as Detection[] | undefined) ?? [];
 
-        const peeked = this.frameSource.peekLatestFrame();
-        if (peeked) {
-          try {
-            const results: DetectionResults = { timestamp: Date.now() };
-            const objects = await this.runObjectAssist(peeked.frame, rawExternal);
-            this.ingestAssistedObjects(sensorId, objects);
-            // processExternal only adapts the shape, external boxes get no real tracking
-            const objectDetections = this.pipeline.processExternal(objects.detections);
-            await this.runSecondariesAndThumbnails({ frame: peeked.frame, scaler: this.frameScaler, isMainStream: false }, objectDetections, results);
-            this.ingestResultsForAllSecondaries(results);
-            const snapshot = this.buildSnapshot();
-            if (results.thumbnails && results.thumbnails.length > 0) {
-              snapshot.thumbnails = results.thumbnails;
-            }
-            this.eventManager.processResults(snapshot);
-          } finally {
-            await peeked[Symbol.asyncDispose]();
-          }
-          return;
-        }
-
-        const fetched = await this.frameSource.fetchSnapshotFrame();
-        if (!fetched) return;
+        const handle = await this.frameSource.getFrame(EXTERNAL_FRAME_MAX_AGE_MS);
+        if (!handle) return;
         try {
           const results: DetectionResults = { timestamp: Date.now() };
-          const objects = await this.runObjectAssist(fetched.frame, rawExternal);
+          const objects = await this.runObjectAssist(handle.frame, rawExternal);
           this.ingestAssistedObjects(sensorId, objects);
 
           if (objects.assisted) {
             // real boxes: crop the object like the frame pipeline, so face and
             // plate secondaries run on the subject instead of the whole scene
+            // (processExternal only adapts the shape, external boxes get no real tracking)
             const objectDetections = this.pipeline.processExternal(objects.detections);
-            await this.runSecondariesAndThumbnails({ frame: fetched.frame, scaler: this.frameScaler, isMainStream: false }, objectDetections, results);
+            await this.runSecondariesAndThumbnails({ frame: handle.frame, scaler: this.frameScaler, isMainStream: false }, objectDetections, results);
             this.ingestResultsForAllSecondaries(results);
             const snapshot = this.buildSnapshot();
             if (results.thumbnails && results.thumbnails.length > 0) {
@@ -493,9 +481,9 @@ export class DetectionCoordinator {
             }
             this.eventManager.processResults(snapshot);
           } else {
-            const sceneJpeg = await this.secondaries.detectFullFrame(fetched.frame, results);
+            const sceneJpeg = await this.secondaries.detectFullFrame(handle.frame, results);
             try {
-              results.thumbnails = await this.secondaries.generateThumbnails(fetched.frame, this.frameScaler, results);
+              results.thumbnails = await this.secondaries.generateThumbnails(handle.frame, this.frameScaler, results);
             } catch (error) {
               this.logger.error('Thumbnail generation error:', error);
             }
@@ -512,7 +500,7 @@ export class DetectionCoordinator {
             }
           }
         } finally {
-          await fetched[Symbol.asyncDispose]();
+          await handle[Symbol.asyncDispose]();
         }
       } finally {
         this.processingExternalSecondary = false;
@@ -1027,7 +1015,6 @@ export class DetectionCoordinator {
 
     this.logger.debug('Starting video detection loop');
     this.loopRunning = true;
-    this.videoBackoff.reset();
     this.loopPromise = this.runDetectionLoop();
   }
 
@@ -1044,7 +1031,7 @@ export class DetectionCoordinator {
     this.idleSince = 0;
 
     const doStop = async () => {
-      await this.frameSource.stop();
+      await this.frameSource.detach();
       await this.loopPromise;
       this.loopPromise = undefined;
     };
@@ -1074,83 +1061,77 @@ export class DetectionCoordinator {
   }
 
   private async runDetectionLoop(): Promise<void> {
+    // the source reconnects on its own, nextFrame simply waits it out
+    const startedAt = Date.now();
+    await this.frameSource.start();
+
+    let lastFrameId = -1;
+    let seenGeneration = -1;
+    let firstFrame = true;
+
     while (this.loopRunning) {
-      try {
-        await this.frameSource.start();
-        this.frameScaler.updateHardwareContext(this.frameSource.hardwareContext);
-        // the hardware context exists only after start, re-evaluate the HQ session
-        this.thumbnailer.sync(this.mainStreamAnalysisWanted);
+      const tickStart = Date.now();
+      const snap = await this.frameSource.nextFrame(lastFrameId);
+      if (!snap) break; // source stopped
 
-        this.logger.debug('Stream connected, processing frames...');
-        this.videoBackoff.reset();
-
-        let frameCount = 0;
-        let lastFrameId = -1;
-
-        while (this.loopRunning) {
-          const tickStart = Date.now();
-          const snap = await this.frameSource.nextFrame(lastFrameId);
-          if (!snap) break; // source ended (stop or EOF)
-
-          lastFrameId = snap.id;
-          frameCount++;
-
-          // motion always reads the low stream: switching its input resolution
-          // would reset the background model on every transition
-          const analysis = await this.acquireAnalysisFrame(snap.frame);
-          // debugging
-          detectionRecord.setFrame(analysis.isMainStream ? 'main' : 'low', analysis.frame.width, analysis.frame.height);
-          try {
-            await this.processRawFrame(analysis, snap.frame);
-          } finally {
-            try {
-              if (this.hqUpgrade) {
-                this.hqUpgrade.frame[Symbol.dispose]?.();
-                this.hqUpgrade = undefined;
-              }
-              if (analysis.frame !== snap.frame) analysis.frame[Symbol.dispose]?.();
-              snap.frame[Symbol.dispose]?.();
-            } catch {
-              // best-effort
-            }
-          }
-
-          this.updateStreamState();
-          // activity, not stream choice: cameras without main-stream analysis still count as active
-          if (this.worldSpans.size > 0 || this.eventManager.hasActiveSegment()) this.perf.activeTicks++;
-          else this.perf.idleTicks++;
-          this.perf.report(this.logger);
-
-          const remaining = (this.mainStreamActive ? ACTIVE_TICK_MS : IDLE_TICK_MS) - (Date.now() - tickStart);
-          if (remaining > 0) await sleep(remaining);
-          this.perf.loopMs += Date.now() - tickStart;
-        }
-
-        const streamError = this.frameSource.lastError;
-        await this.frameSource.stop();
-        this.frameScaler.clearCache();
-
-        if (this.loopRunning && streamError) {
-          const delay = this.videoBackoff.nextDelayMs();
-          this.logger.warn(`Stream ended with read error, reconnecting in ${delay / 1000}s: ${streamError.message}`);
-          await sleep(delay);
-        } else if (this.loopRunning && frameCount === 0) {
-          this.logger.debug('Stream ended without frames, waiting before reconnect...');
-          await sleep(this.videoBackoff.idleDelayMs);
-        }
-      } catch (error: any) {
-        if (!this.loopRunning) break;
-
-        await this.frameSource.stop();
-        this.frameScaler.clearCache();
-
-        const delay = this.videoBackoff.nextDelayMs();
-        this.logger.warn(`Stream error, reconnecting in ${delay / 1000}s: ${error.message}`);
-        await sleep(delay);
+      if (firstFrame) {
+        firstFrame = false;
+        this.logger.debug(`Analysing after ${Date.now() - startedAt}ms`);
       }
+
+      lastFrameId = snap.id;
+
+      try {
+        if (this.frameSource.generation !== seenGeneration) {
+          seenGeneration = this.frameSource.generation;
+          // a fresh connection brings its own hardware context and resolution
+          this.frameScaler.updateHardwareContext(this.frameSource.hardwareContext);
+          this.frameScaler.clearCache();
+          this.thumbnailer.sync(this.mainStreamAnalysisWanted);
+        }
+
+        // motion always reads the low stream: switching its input resolution
+        // would reset the background model on every transition
+        const analysis = await this.acquireAnalysisFrame(snap.frame);
+        // debugging
+        detectionRecord.setFrame(analysis.isMainStream ? 'main' : 'low', analysis.frame.width, analysis.frame.height);
+        try {
+          await this.processRawFrame(analysis, snap.frame);
+        } finally {
+          try {
+            if (this.hqUpgrade) {
+              this.hqUpgrade.frame[Symbol.dispose]?.();
+              this.hqUpgrade = undefined;
+            }
+            if (analysis.frame !== snap.frame) analysis.frame[Symbol.dispose]?.();
+          } catch {
+            // ignore
+          }
+        }
+
+        this.updateStreamState();
+      } catch (error) {
+        // the stream keeps running, a broken tick must not end the loop
+        this.logger.error('Detection tick failed:', error);
+      } finally {
+        try {
+          snap.frame[Symbol.dispose]?.();
+        } catch {
+          // ignore
+        }
+      }
+
+      // activity, not stream choice: cameras without main-stream analysis still count as active
+      if (this.worldSpans.size > 0 || this.eventManager.hasActiveSegment()) this.perf.activeTicks++;
+      else this.perf.idleTicks++;
+      this.perf.report(this.logger);
+
+      const remaining = (this.mainStreamActive ? ACTIVE_TICK_MS : IDLE_TICK_MS) - (Date.now() - tickStart);
+      if (remaining > 0) await sleep(remaining);
+      this.perf.loopMs += Date.now() - tickStart;
     }
 
-    await this.frameSource.stop();
+    await this.frameSource.detach();
     this.frameScaler.clearCache();
     this.logger.debug('Detection loop ended');
   }

@@ -28,7 +28,7 @@ export async function clearCapacitorCloudPreferences(): Promise<void> {
       SecureStorage.remove('proxyRefreshToken'),
     ]);
   } catch {
-    // best-effort — bounce + reload proceeds regardless
+    // ignore — bounce + reload proceeds regardless
   }
 }
 

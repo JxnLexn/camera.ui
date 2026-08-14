@@ -1,7 +1,4 @@
-import { sleep } from '@camera.ui/common/utils';
-
 import { isAudioModelSpec } from './plugin-registry.js';
-import { ReconnectBackoff } from './reconnect-backoff.js';
 import { AudioSource } from './sources/audio-source.js';
 
 import type { Logger } from '@camera.ui/common/logger';
@@ -45,7 +42,6 @@ export class AudioDetectionLoop {
   private running = false;
   private loopPromise?: Promise<void>;
   private stopPromise?: Promise<void>;
-  private readonly backoff = new ReconnectBackoff();
   private source?: AudioSource;
 
   constructor(
@@ -58,7 +54,6 @@ export class AudioDetectionLoop {
 
     this.logger.debug('Starting audio detection loop');
     this.running = true;
-    this.backoff.reset();
     this.loopPromise = this.run();
   }
 
@@ -107,79 +102,51 @@ export class AudioDetectionLoop {
       samplesPerFrame,
     };
 
+    // the source reconnects on its own, nextFrame simply waits it out
+    this.source = new AudioSource(audioConfig, this.logger);
+    await this.source.start();
+
+    let lastAudioFrameId = -1;
+
     while (this.running) {
+      const snap = await this.source.nextFrame(lastAudioFrameId);
+      if (!snap) break; // source stopped
+      lastAudioFrameId = snap.id;
+      const rawFrame = snap.frame;
+
       try {
-        this.source = new AudioSource(audioConfig, this.logger);
-        await this.source.start();
+        const frameData = rawFrame.data;
+        if (!frameData?.[0]) continue;
 
-        this.logger.debug('Audio stream connected, processing audio frames...');
-        this.backoff.reset();
+        const rawData = frameData[0];
+        const dBFS = calculateDBFS(rawData, format);
+        if (dBFS < this.hooks.getMinDecibels()) continue;
 
-        let frameCount = 0;
-        let lastAudioFrameId = -1;
+        const audioFrame: AudioFrameData = {
+          cameraId: this.hooks.cameraId,
+          data: rawData,
+          sampleRate,
+          channels,
+          format,
+          timestamp: Date.now(),
+        };
 
-        while (this.running) {
-          const snap = await this.source.nextFrame(lastAudioFrameId);
-          if (!snap) break; // source ended (stop or EOF)
-          lastAudioFrameId = snap.id;
-          const rawFrame = snap.frame;
-          frameCount++;
+        const result = await audioPlugin.proxy.detectAudio(audioFrame);
+        if (!result) continue;
 
-          try {
-            const frameData = rawFrame.data;
-            if (!frameData?.[0]) continue;
-
-            const rawData = frameData[0];
-            const dBFS = calculateDBFS(rawData, format);
-            if (dBFS < this.hooks.getMinDecibels()) continue;
-
-            const audioFrame: AudioFrameData = {
-              cameraId: this.hooks.cameraId,
-              data: rawData,
-              sampleRate,
-              channels,
-              format,
-              timestamp: Date.now(),
-            };
-
-            const result = await audioPlugin.proxy.detectAudio(audioFrame);
-            if (!result) continue;
-
-            this.hooks.onResult(audioPlugin.sensorId, result);
-          } catch (error) {
-            this.logger.error('Audio detection error:', error);
-          } finally {
-            try {
-              rawFrame[Symbol.dispose]?.();
-            } catch {
-              // best-effort
-            }
-          }
+        this.hooks.onResult(audioPlugin.sensorId, result);
+      } catch (error) {
+        this.logger.error('Audio detection error:', error);
+      } finally {
+        try {
+          rawFrame[Symbol.dispose]?.();
+        } catch {
+          // ignore
         }
-
-        const streamError = this.source.lastError;
-        await this.source.stop();
-
-        if (this.running && streamError) {
-          const delay = this.backoff.nextDelayMs();
-          this.logger.warn(`Audio stream ended with read error, reconnecting in ${delay / 1000}s: ${streamError.message}`);
-          await sleep(delay);
-        } else if (this.running && frameCount === 0) {
-          this.logger.debug('Audio stream ended without frames, waiting before reconnect...');
-          await sleep(this.backoff.idleDelayMs);
-        }
-      } catch (error: any) {
-        if (!this.running) break;
-
-        await this.source?.stop();
-
-        const delay = this.backoff.nextDelayMs();
-        this.logger.warn(`Audio stream error, reconnecting in ${delay / 1000}s: ${error.message}`);
-        await sleep(delay);
       }
     }
 
-    await this.source?.stop();
+    await this.source.stop();
     this.source = undefined;
     this.logger.debug('Audio detection loop ended');
   }

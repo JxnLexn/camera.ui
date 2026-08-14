@@ -306,7 +306,7 @@ async function goToCloud(): Promise<void> {
       const { SplashScreen } = await import('@capacitor/splash-screen');
       await SplashScreen.show({ autoHide: false, fadeInDuration: 0 });
     } catch {
-      // best-effort
+      // ignore
     }
     // Clear Capacitor cloud handoff state — cloud frontend bundle (index.html)
     // takes over after replace. Wiping preferences here ensures we don't try

@@ -160,7 +160,7 @@ export async function getWeeklyDownloads(names: string[]): Promise<Record<string
           result[name] = data.downloads;
         }
       } catch {
-        // best-effort: omit downloads for this name
+        // ignore: omit downloads for this name
       }
     }),
   );

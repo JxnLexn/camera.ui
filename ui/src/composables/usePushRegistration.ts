@@ -182,7 +182,7 @@ async function deletePushKey(serverId: string): Promise<void> {
     const { plugin } = await pushCrypto();
     await plugin?.deleteKey({ serverId });
   } catch {
-    // best-effort
+    // ignore
   }
 }
 
