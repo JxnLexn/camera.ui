@@ -1620,9 +1620,13 @@ export default {
       privacy_hint:
         'Privacy zones are the areas camera.ui covers. Without one, nothing is hidden. Inside one, live view, playback and pictures are covered, and detections are dropped unless you keep them.',
       lines_hint: 'A line reports objects crossing it in the chosen direction. Without one, nothing is reported. A line never filters detection.',
-      object_labels_info: 'Only the selected types count inside this zone. Select none and every type counts here.',
+      object_labels_info:
+        'Only the selected types count inside this zone. Select none and every type counts here. Faces and plates decide whether what counts here also gets a name.',
       alert_labels_info: 'The selected types only notify while they are inside this zone. Select none and every type notifies from here.',
       line_labels_info: 'Only the selected types trigger this line. Select none and every type triggers it.',
+      identify_group: 'Identification',
+      identify_faces: 'Recognize faces',
+      identify_plates: 'Read plates',
       alert_attributes: 'Who or what exactly',
       alert_faces: 'Faces',
       alert_faces_info: 'Nothing selected means every face notifies. Pick people to limit it, "Unknown" covers everyone the recognition cannot name.',

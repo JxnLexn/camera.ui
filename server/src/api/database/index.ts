@@ -80,7 +80,7 @@ import type {
 const INGRESS_USERNAME = 'homeassistant';
 
 export class Database {
-  static readonly VERSION = '2.1.7';
+  static readonly VERSION = '2.1.9';
 
   public workerStateDB!: DB<DBWorkerState, 'state'>;
 

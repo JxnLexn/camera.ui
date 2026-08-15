@@ -15,6 +15,7 @@ import type {
   CameraDetectionSettings,
   Detection,
   DetectionLabel,
+  ZoneLabel,
   DetectionLine,
   MotionZone,
   ObjectZone,
@@ -305,7 +306,7 @@ export class DetectionPipeline {
     return indices.map((i) => allowed[i]);
   }
 
-  public runZoneFilterWithLabel<T extends { box: BoundingBox; confidence: number }>(items: T[], label: DetectionLabel): T[] {
+  public runZoneFilterWithLabel<T extends { box: BoundingBox; confidence: number }>(items: T[], label: ZoneLabel): T[] {
     if (items.length === 0 || !this.objectLabelAllowed(label)) return [];
     const flat: RustDetection[] = items.map((item) => ({
       x: item.box.x,

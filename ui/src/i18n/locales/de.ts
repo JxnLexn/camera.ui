@@ -1635,9 +1635,13 @@ export default {
       privacy_hint:
         'Privatzonen sind die Bereiche, die camera.ui verdeckt. Ohne eine wird nichts verdeckt. In einer werden Livebild, Aufnahme und Bilder verdeckt, und Erkennungen verworfen, sofern man sie nicht behält.',
       lines_hint: 'Eine Linie meldet Objekte, die sie in der gewählten Richtung überqueren. Ohne eine wird nichts gemeldet. Eine Linie filtert die Erkennung nie.',
-      object_labels_info: 'Nur die gewählten Typen zählen in dieser Zone. Wähle keinen, dann zählt hier jeder Typ.',
+      object_labels_info:
+        'Nur die gewählten Typen zählen in dieser Zone. Wähle keinen, dann zählt hier jeder Typ. Gesichter und Kennzeichen entscheiden, ob das, was hier zählt, auch einen Namen bekommt.',
       alert_labels_info: 'Die gewählten Typen melden nur, solange sie in dieser Zone sind. Wähle keinen, dann meldet hier jeder Typ.',
       line_labels_info: 'Nur die gewählten Typen lösen diese Linie aus. Wähle keinen, dann löst jeder Typ sie aus.',
+      identify_group: 'Identifizierung',
+      identify_faces: 'Gesichter erkennen',
+      identify_plates: 'Kennzeichen lesen',
       alert_attributes: 'Wer oder was genau',
       alert_faces: 'Gesichter',
       alert_faces_info:

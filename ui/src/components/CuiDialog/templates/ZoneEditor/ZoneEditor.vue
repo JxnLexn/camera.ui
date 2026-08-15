@@ -354,7 +354,7 @@
                 <InputGroup>
                   <MultiSelect
                     :model-value="activeTab === 'alert' ? alertLabelModel : labelledZone(selectedZone)?.labels"
-                    :options="activeTab === 'alert' ? alertLabelOptions : spatialLabelOptions"
+                    :options="activeTab === 'alert' ? alertLabelOptions : activeTab === 'object' ? objectLabelOptions : spatialLabelOptions"
                     :loading="isLoading"
                     :disabled="selectedZone < 0"
                     :max-selected-labels="2"
@@ -765,6 +765,19 @@ const spatialLabelOptions = computed<LabelGroup[]>(() => {
     },
   ];
 });
+
+// object zones can switch identification off per area: the parent still counts,
+// but nothing on it gets a name
+const objectLabelOptions = computed<LabelGroup[]>(() => [
+  ...spatialLabelOptions.value,
+  {
+    label: t('components.zone_editor.identify_group'),
+    items: [
+      { label: t('components.zone_editor.identify_faces'), value: 'face' },
+      { label: t('components.zone_editor.identify_plates'), value: 'license_plate' },
+    ],
+  },
+]);
 
 const alertLabelOptions = computed<LabelGroup[]>(() => [
   ...spatialLabelOptions.value,

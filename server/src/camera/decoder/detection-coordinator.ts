@@ -39,7 +39,7 @@ import type {
   ClipEmbedding,
   ClipResult,
   Detection,
-  DetectionLabel,
+  ZoneLabel,
   FaceDetection,
   FaceResult,
   LicensePlateDetection,
@@ -735,16 +735,16 @@ export class DetectionCoordinator {
     const boxless = detections.filter((detection) => isFullFrameBox(detection.box)) as Detection[];
 
     let filtered: Detection[];
-    let boxlessLabel: DetectionLabel | undefined;
+    let boxlessLabel: ZoneLabel | undefined;
 
     switch (sensorType) {
       case SensorType.Face:
-        boxlessLabel = 'person';
-        filtered = this.pipeline.runZoneFilterWithLabel(positioned as FaceDetection[], 'person');
+        boxlessLabel = 'face';
+        filtered = this.pipeline.runZoneFilterWithLabel(positioned as FaceDetection[], 'face');
         break;
       case SensorType.LicensePlate:
-        boxlessLabel = 'vehicle';
-        filtered = this.pipeline.runZoneFilterWithLabel(positioned as LicensePlateDetection[], 'vehicle');
+        boxlessLabel = 'license_plate';
+        filtered = this.pipeline.runZoneFilterWithLabel(positioned as LicensePlateDetection[], 'license_plate');
         break;
       case SensorType.Object:
         filtered = this.pipeline.runZoneFilter(positioned as Detection[]);
@@ -1458,14 +1458,17 @@ export class DetectionCoordinator {
       }
       const facePlugin = this.plugins.get(SensorType.Face);
       if (facePlugin) {
+        // the crop path reaches ingestDetectionResult directly, so the zone
+        // filter that guards the plugin path has to be applied here too
+        const detections = this.pipeline.runZoneFilterWithLabel(results.face.detections, 'face');
         // no mid-segment clear: a turned-away head yields a no-face frame and
         // would flap the list, departure is reflected when the segment ends
-        for (const detection of results.face.detections) {
+        for (const detection of detections) {
           if (detection.identity) this.faceIdentities.add(detection.identity);
         }
         this.ingestDetectionResult(SensorType.Face, facePlugin.sensorId, {
-          detected: results.face.detected,
-          detections: results.face.detections,
+          detected: detections.length > 0 && results.face.detected,
+          detections,
           identities: [...this.faceIdentities].sort(),
         });
       }
@@ -1473,13 +1476,14 @@ export class DetectionCoordinator {
     if (results.licensePlate) {
       const lpdPlugin = this.plugins.get(SensorType.LicensePlate);
       if (lpdPlugin) {
-        for (const detection of results.licensePlate.detections) {
+        const detections = this.pipeline.runZoneFilterWithLabel(results.licensePlate.detections, 'license_plate');
+        for (const detection of detections) {
           const plate = detection.plateText ? normalizePlateText(detection.plateText) || detection.plateText : '';
           if (plate) this.platesSeen.add(plate);
         }
         this.ingestDetectionResult(SensorType.LicensePlate, lpdPlugin.sensorId, {
-          detected: results.licensePlate.detected,
-          detections: results.licensePlate.detections,
+          detected: detections.length > 0 && results.licensePlate.detected,
+          detections,
           plates: [...this.platesSeen].sort(),
         });
       }

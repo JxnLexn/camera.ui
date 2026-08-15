@@ -3,7 +3,7 @@ import * as zod from 'zod';
 
 import { normalizeZones } from '../../camera/zones.js';
 
-import type { CameraAspectRatio, DetectionLabel, VideoStreamingMode } from '@camera.ui/sdk';
+import type { CameraAspectRatio, DetectionLabel, VideoStreamingMode, ZoneLabel } from '@camera.ui/sdk';
 
 export function hasCloudProtocol(urls: string[]): boolean {
   const cloudProtocols = ['kasa://', 'nest:', 'ring:', 'tapo://'];
@@ -48,6 +48,8 @@ export const DEFAULT_NOTIFICATION_SETTINGS: zod.infer<typeof notificationSetting
 
 export const detectionLabelSchema = zod.string().trim().min(1, 'Detection label is required') as zod.ZodType<DetectionLabel>;
 
+export const zoneLabelSchema = zod.string().trim().min(1, 'Zone label is required') as zod.ZodType<ZoneLabel>;
+
 export const pointsSchema = zod.tuple([zod.number(), zod.number()]);
 
 const zoneColorSchema = zod
@@ -71,7 +73,7 @@ export const objectZoneSchema = zod
     points: pointsSchema.array().min(3, 'At least 3 points are required'),
     type: zod.union([zod.literal('intersect'), zod.literal('contain')]).default('intersect'),
     filter: zod.union([zod.literal('include'), zod.literal('exclude')]).default('include'),
-    labels: detectionLabelSchema.array(),
+    labels: zoneLabelSchema.array(),
     color: zoneColorSchema,
   })
   .array();
