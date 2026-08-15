@@ -1,4 +1,5 @@
 import { Scaler } from 'node-av/api';
+import { SWS_AREA, SWS_BICUBIC } from 'node-av/constants';
 import { Frame } from 'node-av/lib';
 
 import { PrivacyMask } from '../privacy/mask.js';
@@ -59,7 +60,8 @@ const LETTERBOX_FILL = 114;
 export class FrameScaler {
   private readonly MIN_THUMBNAIL_CROP = 64;
 
-  private scaler?: Scaler;
+  private downScaler?: Scaler;
+  private upScaler?: Scaler;
   private privacy: PrivacyMask;
   private maskedFrame?: { pts: bigint; width: number; height: number; revision: number; frame: Frame };
 
@@ -73,7 +75,8 @@ export class FrameScaler {
 
   public async scale(frame: Frame, targetWidth: number, targetHeight: number, format: ScaledFormat = 'rgb'): Promise<ScaledFrame | null> {
     if (targetWidth < 2 || targetHeight < 2) return null;
-    const data = await this.getScaler().toBuffer(frame, { resize: { width: targetWidth, height: targetHeight }, format });
+    const scaler = this.getScaler(frame.width, targetWidth);
+    const data = await scaler.toBuffer(frame, { resize: { width: targetWidth, height: targetHeight }, format });
     return { data, width: targetWidth, height: targetHeight, format };
   }
 
@@ -204,10 +207,10 @@ export class FrameScaler {
     const baseCrop = this.paddedCrop(detection.box, frame.width, frame.height, padding, 0, 32);
     if (!baseCrop) return results;
 
-    const scaler = this.getScaler();
     for (const t of targets) {
       const fitted = t.fit === 'expand' ? this.expandCropToAspect(baseCrop, frame.width, frame.height, t.width / t.height) : baseCrop;
       const crop = this.quantizeCrop(fitted, frame.width, frame.height);
+      const scaler = this.getScaler(crop.width, t.width);
       const data = await scaler.toBuffer(frame, { crop, resize: { width: t.width, height: t.height }, format: t.format });
       results.set(t.key, {
         frame: { id: `crop:${detection.label}:${t.key}`, data, width: t.width, height: t.height, format: t.format },
@@ -222,20 +225,22 @@ export class FrameScaler {
   }
 
   private async encodeJpeg(frame: Frame, options: { crop?: ScalerCrop; resize: { width: number; height: number }; quality: number }): Promise<Buffer | null> {
-    if (!this.privacy.active) return this.getScaler().toJpeg(frame, options);
+    const region = options.crop ?? { x: 0, y: 0, width: frame.width, height: frame.height };
+    const scaler = this.getScaler(region.width, options.resize.width);
+
+    if (!this.privacy.active) return scaler.toJpeg(frame, options);
 
     // a picture that would be black end to end is not worth encoding
-    const region = options.crop ?? { x: 0, y: 0, width: frame.width, height: frame.height };
     if (this.privacy.covers(region, frame.width, frame.height)) return null;
 
     if (frame.isSwFrame()) {
       if (!this.privacy.apply(frame)) return this.unmaskedFallback(frame, options);
-      return this.getScaler().toJpeg(frame, options);
+      return scaler.toJpeg(frame, options);
     }
 
     const masked = await this.maskedCopy(frame);
     if (!masked) return this.unmaskedFallback(frame, options);
-    return this.getScaler().toJpeg(masked, options);
+    return scaler.toJpeg(masked, options);
   }
 
   private async maskedCopy(frame: Frame): Promise<Frame | null> {
@@ -263,12 +268,15 @@ export class FrameScaler {
 
   private async unmaskedFallback(frame: Frame, options: { crop?: ScalerCrop; resize: { width: number; height: number }; quality: number }): Promise<Buffer | null> {
     if (this.privacy.reportFailure() === 'drop') return null;
-    return this.getScaler().toJpeg(frame, options);
+    const region = options.crop ?? { x: 0, y: 0, width: frame.width, height: frame.height };
+    return this.getScaler(region.width, options.resize.width).toJpeg(frame, options);
   }
 
   public clearCache(): void {
-    this.scaler?.[Symbol.dispose]();
-    this.scaler = undefined;
+    this.downScaler?.[Symbol.dispose]();
+    this.upScaler?.[Symbol.dispose]();
+    this.downScaler = undefined;
+    this.upScaler = undefined;
     this.maskedFrame?.frame.free();
     this.maskedFrame = undefined;
   }
@@ -358,8 +366,13 @@ export class FrameScaler {
     return { width: maxWidth & ~1, height: Math.round(frameHeight * scale) & ~1 };
   }
 
-  private getScaler(): Scaler {
-    this.scaler ??= new Scaler(this.hardwareContext ? { hardware: this.hardwareContext } : {});
-    return this.scaler;
+  private getScaler(sourceWidth = 0, targetWidth = 0): Scaler {
+    const hardware = this.hardwareContext ? { hardware: this.hardwareContext } : {};
+    if (targetWidth > sourceWidth) {
+      this.upScaler ??= new Scaler({ ...hardware, flags: SWS_BICUBIC });
+      return this.upScaler;
+    }
+    this.downScaler ??= new Scaler({ ...hardware, flags: SWS_AREA });
+    return this.downScaler;
   }
 }
