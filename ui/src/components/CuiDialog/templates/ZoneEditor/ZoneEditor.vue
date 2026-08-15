@@ -238,7 +238,7 @@
                 <InputGroup>
                   <MultiSelect
                     :model-value="detectionLines[selectedLine]?.labels"
-                    :options="spatialLabelOptions"
+                    :options="lineLabelOptions"
                     :loading="isLoading"
                     :max-selected-labels="2"
                     :show-toggle-all="false"
@@ -590,6 +590,7 @@ import { DETECTION_LABELS } from '@camera.ui/sdk';
 import Draggabilly from 'draggabilly';
 
 import { CamerasQuery } from '@/api/routes/cameras.js';
+import { detectionLabelKey } from '@/common/eventLabels.js';
 import { deepToRaw } from '@/common/utils.js';
 import { cameraCreatePatchLines, cameraCreatePatchObjectZones } from '@/schemas/cameras.schema.js';
 import { NON_TRACKED_LABELS } from './types.js';
@@ -732,13 +733,15 @@ const spatialLabelOptions = computed<LabelGroup[]>(() => {
   return [
     {
       label: t('components.zone_editor.base_labels'),
-      items: filteredLabels.map((label) => ({ label, value: label })),
+      items: filteredLabels.map((label) => ({ label: t(detectionLabelKey(label)), value: label })),
     },
   ];
 });
 
-// object zones can switch identification off per area: the parent still counts,
-// but nothing on it gets a name
+const lineLabelOptions = computed<LabelGroup[]>(() =>
+  spatialLabelOptions.value.map((group) => ({ ...group, items: group.items.filter((item) => item.value !== 'package') })),
+);
+
 const objectLabelOptions = computed<LabelGroup[]>(() => [
   ...spatialLabelOptions.value,
   {

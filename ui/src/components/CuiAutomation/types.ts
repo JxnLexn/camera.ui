@@ -1,5 +1,7 @@
 import { OBJECT_DETECTION_LABELS } from '@camera.ui/sdk';
 
+import { detectionLabelKey } from '@/common/eventLabels.js';
+
 import type { DBAutomation } from '@shared/types';
 import type { Edge, Node } from '@vue-flow/core';
 
@@ -426,12 +428,12 @@ export interface CameraControlPropertyDefinition {
   min?: number;
   max?: number;
   step?: number;
-  options?: Array<{ label: string; value: string }>;
+  options?: Array<{ labelKey: string; value: string }>;
   // multiselect values are stored JSON-encoded, the action decodes them again
   defaultValue: string;
 }
 
-const OBJECT_LABEL_OPTIONS = OBJECT_DETECTION_LABELS.map((label) => ({ label, value: label }));
+const OBJECT_LABEL_OPTIONS = OBJECT_DETECTION_LABELS.map((label) => ({ labelKey: detectionLabelKey(label), value: label as string }));
 
 export const CAMERA_CONTROL_PROPERTY_DEFINITIONS: CameraControlPropertyDefinition[] = [
   { key: 'detectionSettings.snooze', labelKey: 'components.automation_nodes.camera_prop_snooze', inputType: 'boolean', defaultValue: 'false' },
@@ -442,9 +444,9 @@ export const CAMERA_CONTROL_PROPERTY_DEFINITIONS: CameraControlPropertyDefinitio
     labelKey: 'components.automation_nodes.camera_prop_recording_mode',
     inputType: 'select',
     options: [
-      { label: 'Continuous', value: 'continuous' },
-      { label: 'Event', value: 'event' },
-      { label: 'Adhoc', value: 'adhoc' },
+      { labelKey: 'components.automation_nodes.option_continuous', value: 'continuous' },
+      { labelKey: 'components.automation_nodes.option_event', value: 'event' },
+      { labelKey: 'components.automation_nodes.option_adhoc', value: 'adhoc' },
     ],
     defaultValue: 'continuous',
   },
@@ -462,9 +464,9 @@ export const CAMERA_CONTROL_PROPERTY_DEFINITIONS: CameraControlPropertyDefinitio
     labelKey: 'components.automation_nodes.camera_prop_recording_sources',
     inputType: 'multiselect',
     options: [
-      { label: 'High', value: 'high' },
-      { label: 'Mid', value: 'mid' },
-      { label: 'Low', value: 'low' },
+      { labelKey: 'components.automation_nodes.option_high', value: 'high' },
+      { labelKey: 'components.automation_nodes.option_mid', value: 'mid' },
+      { labelKey: 'components.automation_nodes.option_low', value: 'low' },
     ],
     defaultValue: '["high","mid","low"]',
   },
@@ -501,9 +503,9 @@ export const CAMERA_CONTROL_PROPERTY_DEFINITIONS: CameraControlPropertyDefinitio
     labelKey: 'components.automation_nodes.camera_prop_motion_resolution',
     inputType: 'select',
     options: [
-      { label: 'Low', value: 'low' },
-      { label: 'Medium', value: 'medium' },
-      { label: 'High', value: 'high' },
+      { labelKey: 'components.automation_nodes.option_low', value: 'low' },
+      { labelKey: 'components.automation_nodes.option_medium', value: 'medium' },
+      { labelKey: 'components.automation_nodes.option_high', value: 'high' },
     ],
     defaultValue: 'low',
   },

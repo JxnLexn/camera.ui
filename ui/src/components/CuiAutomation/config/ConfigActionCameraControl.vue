@@ -34,7 +34,7 @@
         <Select
           v-if="def.inputType === 'select'"
           :model-value="getPropertyValue(def.key)"
-          :options="def.options"
+          :options="translatedOptions(def)"
           option-label="label"
           option-value="value"
           class="w-full"
@@ -43,7 +43,7 @@
         <MultiSelect
           v-else-if="def.inputType === 'multiselect'"
           :model-value="getListValue(def.key)"
-          :options="def.options"
+          :options="translatedOptions(def)"
           option-label="label"
           option-value="value"
           :show-toggle-all="false"
@@ -71,13 +71,17 @@ import { useCameraOptions } from './useCameraOptions.js';
 
 import { CAMERA_CONTROL_PROPERTY_DEFINITIONS } from '../types.js';
 
-import type { ConfigActionCameraControlProps, ConfigNodeUpdateEmits } from '../types.js';
+import type { CameraControlPropertyDefinition, ConfigActionCameraControlProps, ConfigNodeUpdateEmits } from '../types.js';
 
 const props = defineProps<ConfigActionCameraControlProps>();
 
 const emit = defineEmits<ConfigNodeUpdateEmits>();
 
 const { t } = useI18n();
+
+function translatedOptions(def: CameraControlPropertyDefinition): { label: string; value: string }[] {
+  return (def.options ?? []).map((option) => ({ label: t(option.labelKey), value: option.value }));
+}
 const { cameraOptions } = useCameraOptions();
 
 function isEnabled(key: string): boolean {

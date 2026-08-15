@@ -47,6 +47,10 @@ export const NOTIFY_SENSOR_TYPES = [
   'problem',
 ] as const;
 
+export function detectionLabelKey(label: string): string {
+  return `components.timeline.type_${label}`;
+}
+
 export function audioLabelKey(label: string): string {
   return AUDIO_LABEL_I18N[label] ?? label;
 }
