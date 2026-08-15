@@ -42,6 +42,7 @@ export interface SensorRegistryInterface {
   unregisterSensor(sensorId: string): void;
   updatePropertyValues(sensorId: string, properties: Record<string, unknown>): void;
   updateCapabilities(sensorId: string, capabilities: string[]): void;
+  updateModelSpec(sensorId: string, modelSpec: ModelSpec): void;
   getPropertyValue(sensorId: string, property: string): unknown;
   getAllPropertyValues(sensorId: string): Record<string, unknown>;
   getSensorState(sensorId: string): SensorRefreshedState | undefined;

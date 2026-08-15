@@ -5,11 +5,11 @@ import { container } from 'tsyringe';
 import type { Namespace, Server, Socket } from 'socket.io';
 import type { Systeminformation } from 'systeminformation';
 import type { CameraUiAPI } from '../../../api.js';
-import type { FrameWorkerPerfLifetime, FrameWorkerPerfSnapshot } from '../../../camera/decoder/types.js';
+import type { FrameWorkerPerfSnapshot } from '../../../camera/decoder/types.js';
 import type { Go2Rtc } from '../../../go2rtc/index.js';
 import type { PluginManager } from '../../../plugins/index.js';
 import type { NATS } from '../../../rpc/server.js';
-import type { AllProcesses, ProcessInfo, ProcessType, ServerProcesses, SocketNsp, WorkerPerfAverages, WorkerPerfStats, WorkerProcesses } from '../types.js';
+import type { AllProcesses, ProcessInfo, ProcessType, ServerProcesses, SocketNsp, WorkerDetectorStats, WorkerPerfStats, WorkerProcesses } from '../types.js';
 
 export class MetricsNamespace {
   public nsp: Namespace;
@@ -89,7 +89,9 @@ export class MetricsNamespace {
     }, this.HISTORY_INTERVAL);
 
     setInterval(async () => {
-      const [processData, systemData] = await Promise.all([this.collectProcessData(), this.getSystemLoad()]);
+      if (this.hasConnectedClients()) await this.refreshWorkerPerf();
+      const [collected, systemData] = await Promise.all([this.collectProcessData(), this.getSystemLoad()]);
+      const processData = this.withWorkerPerf(collected);
 
       this.realtimeData = {
         system: systemData,
@@ -113,7 +115,7 @@ export class MetricsNamespace {
     await Promise.all(
       controllers.map(async (controller) => {
         const snapshot = await controller.frameWorker.getPerfSnapshot();
-        if (snapshot && snapshot.elapsedMs > 0) {
+        if (snapshot && snapshot.uptimeMs > 0) {
           next[controller.frameWorker.name] = this.derivePerfStats(snapshot);
         }
       }),
@@ -122,44 +124,59 @@ export class MetricsNamespace {
     this.workerPerf = next;
   }
 
-  private derivePerfStats(snapshot: FrameWorkerPerfSnapshot): WorkerPerfStats {
-    const seconds = snapshot.elapsedMs / 1000;
-    const perUnit = (total: number, count: number) => (count > 0 ? Math.round((total / count) * 10) / 10 : 0);
-    const perSecond = (count: number) => Math.round((count / seconds) * 10) / 10;
-    const activeSeconds = snapshot.ticks > 0 ? seconds * (snapshot.activeTicks / snapshot.ticks) : 0;
-
-    return {
-      average: this.derivePerfAverages(snapshot.lifetime),
-      lowFps: perSecond(snapshot.ticks),
-      mainFps: activeSeconds > 0 ? Math.round((snapshot.mainFrames / activeSeconds) * 10) / 10 : 0,
-      mainStreamEnabled: snapshot.mainStreamEnabled,
-      frameAnalysis: snapshot.frameAnalysis,
-      activePercent: snapshot.ticks > 0 ? Math.round((snapshot.activeTicks / snapshot.ticks) * 100) : 0,
-      decodeMs: perUnit(snapshot.decodeMs, snapshot.mainFrames),
-      scaleMs: perUnit(snapshot.scaleMs, snapshot.ticks),
-      jpegMs: perUnit(snapshot.jpegMs, snapshot.activeTicks),
-      inferMs: perUnit(snapshot.inferMs, snapshot.inferCount),
-      secondaryMs: perUnit(snapshot.secondaryMs, snapshot.activeTicks),
-      objects: snapshot.objects,
-      faces: snapshot.faces,
-      plates: snapshot.plates,
-      switches: snapshot.switches,
-    };
+  private pluginName(pluginId?: string): string | undefined {
+    if (!pluginId) return undefined;
+    for (const plugin of this.pluginManager.plugins.values()) {
+      if (plugin.id === pluginId) return plugin.displayName ?? plugin.pluginName;
+    }
+    return pluginId;
   }
 
-  private derivePerfAverages(lifetime: FrameWorkerPerfLifetime): WorkerPerfAverages {
+  private derivePerfStats(snapshot: FrameWorkerPerfSnapshot): WorkerPerfStats {
     const round = (value: number) => Math.round(value * 10) / 10;
-    const loopSeconds = lifetime.loopMs / 1000;
-    const activeSeconds = lifetime.ticks > 0 ? loopSeconds * (lifetime.activeTicks / lifetime.ticks) : 0;
-    const detections = lifetime.objects + lifetime.faces + lifetime.plates;
+    const per = (total: number, count: number) => (count > 0 ? round(total / count) : 0);
+    const frames = snapshot.objectCount || snapshot.ticks;
+    const loopSeconds = snapshot.loopMs / 1000;
+    const activeSeconds = snapshot.ticks > 0 ? loopSeconds * (snapshot.activeTicks / snapshot.ticks) : 0;
+    const fallback: Partial<Record<string, number>> = {
+      motion: per(snapshot.motionMs, snapshot.motionCount),
+      object: per(snapshot.objectMs, snapshot.objectCount),
+      face: per(snapshot.faceMs, snapshot.faceCount),
+      licensePlate: per(snapshot.plateMs, snapshot.plateCount),
+      classifier: per(snapshot.classifierMs, snapshot.classifierCount),
+      clip: per(snapshot.clipMs, snapshot.clipCount),
+    };
+
+    const detectors: Record<string, WorkerDetectorStats> = {};
+    for (const [type, info] of Object.entries(snapshot.detectors)) {
+      detectors[type] = {
+        plugin: this.pluginName(info.plugin) ?? info.plugin,
+        input: info.input,
+        runtime: info.runtime,
+        models: info.models,
+        inferenceMs: info.calls ? per(info.handlerMs ?? 0, info.calls) : (fallback[type] ?? 0),
+        transportMs: info.calls ? per(info.transportMs ?? 0, info.calls) : 0,
+        stamped: Boolean(info.calls),
+      };
+    }
 
     return {
-      lowFps: loopSeconds > 0 ? round(lifetime.ticks / loopSeconds) : 0,
-      mainFps: activeSeconds > 0 ? round(lifetime.mainFrames / activeSeconds) : 0,
-      activePercent: lifetime.ticks > 0 ? Math.round((lifetime.activeTicks / lifetime.ticks) * 100) : 0,
-      inferMs: lifetime.inferCount > 0 ? round(lifetime.inferMs / lifetime.inferCount) : 0,
-      detectionsPerMinute: loopSeconds > 0 ? round(detections / (loopSeconds / 60)) : 0,
-      minutes: Math.round(loopSeconds / 60),
+      detectors,
+      processingMs: per(snapshot.scaleMs + snapshot.postMs, frames),
+      decodeMs: per(snapshot.decodeMs, snapshot.decodedFrames),
+      mainDecodeMs: per(snapshot.mainDecodeMs, snapshot.mainFrames),
+      scaleMs: per(snapshot.scaleMs, frames),
+      postMs: per(snapshot.postMs, frames),
+      transportMs: detectors.object?.transportMs ?? 0,
+      analysedFps: loopSeconds > 0 ? round(snapshot.ticks / loopSeconds) : 0,
+      mainFps: activeSeconds > 0 ? round(snapshot.mainFrames / activeSeconds) : 0,
+      mainStreamEnabled: snapshot.mainStreamEnabled,
+      frameAnalysis: snapshot.frameAnalysis,
+      activePercent: snapshot.uptimeMs > 0 ? Math.min(100, Math.round((snapshot.loopMs / snapshot.uptimeMs) * 100)) : 0,
+      objectsPerFrame: per(snapshot.objects, frames),
+      hitPercent: frames > 0 ? Math.round((snapshot.framesWithObjects / frames) * 100) : 0,
+      switches: snapshot.switches,
+      minutes: Math.round(snapshot.uptimeMs / 60_000),
     };
   }
 
@@ -172,7 +189,8 @@ export class MetricsNamespace {
 
   private async collectInitialData(): Promise<void> {
     await this.refreshWorkerPerf();
-    const [processData, systemData] = await Promise.all([this.collectProcessData(), this.getSystemLoad()]);
+    const [collected, systemData] = await Promise.all([this.collectProcessData(), this.getSystemLoad()]);
+    const processData = this.withWorkerPerf(collected);
 
     this.updateHistory(processData, systemData);
     this.realtimeData = {

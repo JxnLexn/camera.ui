@@ -450,6 +450,19 @@ export class SensorRegistry {
   }
 
   @RPCMethod
+  public updateModelSpec(sensorId: string, modelSpec: ModelSpec): void {
+    const runtime = this.runtime.get(sensorId);
+    const record = this.records.get(sensorId);
+    if (!runtime || !record) return;
+
+    runtime.modelSpec = modelSpec;
+
+    for (const cameraId of record.assignedCameraIds) {
+      this.enqueue(cameraId, () => this.pushSensorToCoordinator(record, cameraId));
+    }
+  }
+
+  @RPCMethod
   public updateCapabilities(sensorId: string, capabilities: string[]): void {
     const runtime = this.runtime.get(sensorId);
     const sensor = this.getSensor(sensorId);

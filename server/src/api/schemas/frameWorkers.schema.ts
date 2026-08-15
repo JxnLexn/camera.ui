@@ -5,3 +5,13 @@ export const frameWorkerParamsSchema = zod.object({
 });
 
 export type FrameWorkerParamsInput = zod.output<typeof frameWorkerParamsSchema>;
+
+export const frameWorkerBenchmarkSchema = zod
+  .object({
+    cameras: zod.array(zod.string()).optional(),
+    iterations: zod.number().int().min(20).max(2000).optional(),
+    concurrency: zod.number().int().min(1).max(16).optional(),
+  })
+  .nullish();
+
+export type FrameWorkerBenchmarkInput = zod.output<typeof frameWorkerBenchmarkSchema>;

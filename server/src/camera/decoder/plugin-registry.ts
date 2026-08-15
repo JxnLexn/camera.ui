@@ -17,6 +17,13 @@ export interface RegisteredPlugin {
   proxy: Promisify<DetectionPluginInterface>;
 }
 
+export function modelIdentity(spec: AnyModelSpec | undefined): string {
+  if (!spec) return '';
+  const input = 'input' in spec ? JSON.stringify(spec.input) : '';
+  const models = (spec.models ?? []).map((model) => `${model.name}:${model.role ?? ''}:${model.device ?? ''}:${model.precision ?? ''}`).join(',');
+  return `${input}|${spec.runtime ?? ''}|${models}`;
+}
+
 export function hasSecondaryModelSpec(spec: AnyModelSpec | undefined): spec is ModelSpec {
   return spec !== undefined && 'triggerLabels' in spec && Array.isArray(spec.triggerLabels);
 }

@@ -251,6 +251,15 @@ export class CameraDeviceProxy extends CameraDevice {
     sensor._init(async (properties: Record<string, unknown>) => {
       const sensorType = sensor.type;
       if (DETECTION_SENSOR_TYPES.has(sensorType)) {
+        // the spec belongs to the registry: it survives a frame worker that is
+        // not up yet, the coordinator receives it with the next sensor push
+        const { modelSpec, ...rest } = properties;
+        if (modelSpec) {
+          await this.#sensorRegistryProxy.updateModelSpec(sensor.id, modelSpec as ModelSpec);
+          if (Object.keys(rest).length === 0) return;
+          properties = rest;
+        }
+
         if (!this.frameWorkerState.getValue()) return;
         try {
           await this.#detectionCoordinatorProxy.reportSensorWrite(sensor.id, sensorType, properties);

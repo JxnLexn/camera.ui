@@ -17,12 +17,12 @@ import { FrameScaler } from './frame-scaler.js';
 import { directionBetween, directionOf, MOMENT_FORMATS, MOMENT_QUALITY, momentWindow, unionBox } from './moment-crop.js';
 import { PerfTracker } from './perf-tracker.js';
 import { normalizePlateText } from './plate-vote.js';
-import { isVideoInputSpec, PluginRegistry } from './plugin-registry.js';
+import { isVideoInputSpec, modelIdentity, PluginRegistry } from './plugin-registry.js';
 import { PtzAutotracker } from './ptz/autotracker.js';
 import { SecondaryStage } from './secondary-stage.js';
 import { BufferedSource } from './sources/buffered-source.js';
 import { FrameSource } from './sources/frame-source.js';
-import { DETECT_TIMEOUT_MS, ensureDetectionBoxes, isFullFrameBox, MOTION_WIDTH_MAP } from './types.js';
+import { DETECT_TIMEOUT_MS, DETECTOR_METRIC_TYPES, ensureDetectionBoxes, isFullFrameBox, MOTION_WIDTH_MAP } from './types.js';
 
 import type { Logger } from '@camera.ui/common/logger';
 import type { RPCClient } from '@camera.ui/rpc';
@@ -39,7 +39,6 @@ import type {
   ClipEmbedding,
   ClipResult,
   Detection,
-  ZoneLabel,
   FaceDetection,
   FaceResult,
   LicensePlateDetection,
@@ -49,6 +48,7 @@ import type {
   PtzAutotrackSettings,
   TrackedDetection,
   VideoFrameData,
+  ZoneLabel,
 } from '@camera.ui/sdk';
 import type { Frame } from 'node-av/lib';
 import type { CoordinatorSensorInfo, DetectionPluginInterface, DetectionResults } from '../../rpc/interfaces/detection.js';
@@ -58,10 +58,10 @@ import type { LineCrossingEvent, PipelineResult, ZoneConfig } from './detection-
 import type { NormalizedDetectionZone, ProcessedDetectionData, TrackedFaceDetection, TrackedLicensePlateDetection } from './event-manager.js';
 import type { LetterboxGeometry } from './frame-scaler.js';
 import type { CropWindow, MomentFormatName, MomentTarget } from './moment-crop.js';
-import type { RegisteredPlugin } from './plugin-registry.js';
+import type { AnyModelSpec, RegisteredPlugin } from './plugin-registry.js';
 import type { AnalysisSource } from './sources/analysis-source.js';
 import type { SnapshotConfig } from './sources/snapshot-fetcher.js';
-import type { CoordinatorSourceUrl, FrameWorkerPerfSnapshot } from './types.js';
+import type { CoordinatorSourceUrl, DetectorInfo, FrameWorkerPerfSnapshot, ObjectBenchmarkResult } from './types.js';
 
 export interface DetectionCoordinatorConfig {
   cameraId: string;
@@ -149,6 +149,7 @@ export class DetectionCoordinator {
 
   // debugging
   private readonly perf = new PerfTracker();
+  private benchmarkRunning = false;
 
   private hqUpgrade?: AnalysisFrame;
   private mainStreamActive = false;
@@ -213,7 +214,7 @@ export class DetectionCoordinator {
     if (config.streamHot) this.frameSource.start();
     this.frameScaler = new FrameScaler(null, logger, this.privacy);
     this.pipeline = new DetectionPipeline(this.pipelineZones(), config.detectionSettings);
-    this.secondaries = new SecondaryStage(this, this.plugins, this.pipeline, this.frameScaler, this.proxy, logger);
+    this.secondaries = new SecondaryStage(this, this.plugins, this.pipeline, this.frameScaler, this.proxy, this.perf, logger);
 
     if (config.zones.lines.length > 0) {
       this.pipeline.updateLines(config.zones.lines, this.videoAspectRatio);
@@ -318,7 +319,93 @@ export class DetectionCoordinator {
   }
 
   public getPerfSnapshot(): FrameWorkerPerfSnapshot {
-    return { ...this.perf.snapshot(), mainStreamEnabled: this.mainStreamAvailable, frameAnalysis: this.plugins.shouldVideoBeActive() };
+    const { timings, ...counters } = this.perf.snapshot();
+    const detectors: Record<string, DetectorInfo> = {};
+
+    for (const type of DETECTOR_METRIC_TYPES) {
+      const plugin = this.plugins.get(type);
+      // motion without frames is the camera's own signal, there is no detector to report
+      if (!plugin || (type === SensorType.Motion && !plugin.requiresFrames)) continue;
+
+      const input = plugin.modelSpec?.input;
+      detectors[type] = {
+        plugin: plugin.pluginId,
+        input: isVideoInputSpec(input) ? `${input.width}x${input.height}` : undefined,
+        runtime: plugin.modelSpec?.runtime,
+        models: plugin.modelSpec?.models,
+        ...timings[type],
+      };
+    }
+
+    return {
+      ...counters,
+      detectors,
+      mainStreamEnabled: this.mainStreamAvailable,
+      frameAnalysis: this.plugins.shouldVideoBeActive(),
+    };
+  }
+
+  public resetPerf(): void {
+    this.perf.reset();
+  }
+
+  public pauseForBenchmark(paused: boolean): void {
+    this.benchmarkRunning = paused;
+  }
+
+  public async runObjectBenchmark(iterations: number, concurrency: number): Promise<ObjectBenchmarkResult | null> {
+    const plugin = this.plugins.get(SensorType.Object);
+    const input = plugin?.modelSpec?.input;
+    if (!plugin || !isVideoInputSpec(input)) return null;
+
+    const channels = input.format === 'gray' ? 1 : input.format === 'nv12' ? 1.5 : 3;
+    const frame: VideoFrameData = {
+      id: 'benchmark',
+      data: Buffer.alloc(Math.round(input.width * input.height * channels)),
+      width: input.width,
+      height: input.height,
+      format: input.format,
+    };
+
+    let handlerMs = 0;
+    let completed = 0;
+    let failed = 0;
+    const timed = this.proxy.createProxy<DetectionPluginInterface>(NamespaceManager.sensorProviderNamespaces(plugin.pluginId, plugin.sensorId).sensorRpc, {
+      onTiming: (_method, timing) => {
+        handlerMs += timing.handlerMs;
+      },
+    });
+
+    const startedAt = Date.now();
+    const workers = Array.from({ length: Math.max(1, concurrency) }, async () => {
+      while (completed + failed < iterations) {
+        completed++;
+        try {
+          await PromiseTimeout(timed.detectObjects(frame), DETECT_TIMEOUT_MS, undefined, `Benchmark call timed out after ${DETECT_TIMEOUT_MS}ms`);
+        } catch (error) {
+          completed--;
+          failed++;
+          this.logger.debug('Benchmark call failed:', error);
+        }
+      }
+    });
+    await Promise.all(workers);
+    const totalMs = Date.now() - startedAt;
+
+    return {
+      camera: '',
+      plugin: plugin.pluginId,
+      sensorId: plugin.sensorId,
+      runtime: plugin.modelSpec?.runtime,
+      models: plugin.modelSpec?.models,
+      input: `${input.width}x${input.height}`,
+      iterations: completed,
+      failed,
+      concurrency,
+      totalMs,
+      perSecond: totalMs > 0 ? Math.round((completed / (totalMs / 1000)) * 10) / 10 : 0,
+      handlerMs: completed > 0 ? Math.round((handlerMs / completed) * 10) / 10 : 0,
+    };
   }
 
   public updateZoneConfig(zones: CameraZones): void {
@@ -427,6 +514,12 @@ export class DetectionCoordinator {
   public async reportSensorWrite(sensorId: string, sensorType: SensorType, properties: Record<string, unknown>): Promise<void> {
     // the registry only announces the plugin assigned for this type, everyone else reports into the void
     if (!this.feedingSensors.has(sensorId)) return;
+
+    // a detector reports its spec again once its models finished loading
+    if (properties.modelSpec) {
+      this.applyModelSpec(sensorId, sensorType, properties.modelSpec as AnyModelSpec);
+      if (Object.keys(properties).length === 1) return;
+    }
 
     if (sensorType === SensorType.Object) {
       const filtered = this.applyExternalDetectionFilters(sensorType, properties);
@@ -905,6 +998,19 @@ export class DetectionCoordinator {
     }
   }
 
+  private applyModelSpec(sensorId: string, sensorType: SensorType, modelSpec: AnyModelSpec): void {
+    const current = this.plugins.get(sensorType);
+    if (current?.sensorId !== sensorId) return;
+
+    // another model means other numbers, keeping the old average would mislead;
+    // load time is not part of the identity, a reload of the same model is not a change
+    if (sensorType === SensorType.Object || sensorType === SensorType.Motion) {
+      if (modelIdentity(current.modelSpec) !== modelIdentity(modelSpec)) this.perf.reset();
+    }
+
+    this.plugins.updateModelSpec(sensorId, modelSpec);
+  }
+
   private async registerDetectionPluginInternal(sensor: CoordinatorSensorInfo): Promise<void> {
     if (this.videoStopPromise) await this.videoStopPromise;
     await this.audioLoop.waitForStop();
@@ -913,7 +1019,9 @@ export class DetectionCoordinator {
     const wasAudioNeeded = this.plugins.shouldAudioBeActive();
 
     const namespaces = NamespaceManager.sensorProviderNamespaces(sensor.pluginId, sensor.sensorId);
-    const sensorProxy = this.proxy.createProxy<DetectionPluginInterface>(namespaces.sensorRpc);
+    const sensorProxy = this.proxy.createProxy<DetectionPluginInterface>(namespaces.sensorRpc, {
+      onTiming: (_method, timing) => this.perf.trackTiming(sensor.sensorType, timing.handlerMs, timing.transportMs),
+    });
 
     const registered = this.plugins.register({
       pluginId: sensor.pluginId,
@@ -925,7 +1033,7 @@ export class DetectionCoordinator {
     });
     if (!registered) {
       // re-push from the registry: the sensor is already live, only the spec may have changed
-      this.plugins.updateModelSpec(sensor.sensorId, sensor.modelSpec);
+      if (sensor.modelSpec) this.applyModelSpec(sensor.sensorId, sensor.sensorType, sensor.modelSpec);
       return;
     }
     this.logger.trace(`Plugin registered: ${sensor.pluginId} for ${sensor.sensorType}`);
@@ -1081,6 +1189,14 @@ export class DetectionCoordinator {
 
       lastFrameId = snap.id;
 
+      if (this.benchmarkRunning) {
+        // the detector is saturated on purpose, feeding it real frames would
+        // both distort the measurement and queue up behind it
+        snap.frame[Symbol.dispose]?.();
+        await sleep(IDLE_TICK_MS);
+        continue;
+      }
+
       try {
         if (this.frameSource.generation !== seenGeneration) {
           seenGeneration = this.frameSource.generation;
@@ -1121,6 +1237,10 @@ export class DetectionCoordinator {
         }
       }
 
+      const decode = this.frameSource.takeDecodeStats();
+      this.perf.decodeMs += decode.ms;
+      this.perf.decodedFrames += decode.frames;
+
       // activity, not stream choice: cameras without main-stream analysis still count as active
       if (this.worldSpans.size > 0 || this.eventManager.hasActiveSegment()) this.perf.activeTicks++;
       else this.perf.idleTicks++;
@@ -1152,7 +1272,7 @@ export class DetectionCoordinator {
         const main = await this.thumbnailer.acquireHqFrame(0);
         if (main) {
           this.perf.mainFrames++;
-          this.perf.decodeMs += Date.now() - t0;
+          this.perf.mainDecodeMs += Date.now() - t0;
           return { frame: main.frame, scaler: main.scaler, isMainStream: true };
         }
       } catch (error) {
@@ -1170,7 +1290,7 @@ export class DetectionCoordinator {
       const main = await this.thumbnailer.acquireHqFrame(0);
       if (main) {
         this.perf.mainFrames++;
-        this.perf.decodeMs += Date.now() - t0;
+        this.perf.mainDecodeMs += Date.now() - t0;
         return { frame: main.frame, scaler: main.scaler, isMainStream: true };
       }
     } catch (error) {
@@ -1239,8 +1359,8 @@ export class DetectionCoordinator {
         try {
           const motionInferStart = Date.now();
           const result = await motionPlugin.proxy.detectMotion(motionFrame);
-          this.perf.inferMs += Date.now() - motionInferStart;
-          this.perf.inferCount++;
+          this.perf.motionMs += Date.now() - motionInferStart;
+          this.perf.motionCount++;
           if (!this.loopRunning) return;
           if (ptzSuppressed) {
             // fed for the background model only, results discarded: frame-diff
@@ -1292,8 +1412,8 @@ export class DetectionCoordinator {
             undefined,
             `Object detection timed out after ${DETECT_TIMEOUT_MS}ms`,
           );
-          this.perf.inferMs += Date.now() - inferStart;
-          this.perf.inferCount++;
+          this.perf.objectMs += Date.now() - inferStart;
+          this.perf.objectCount++;
           if (!this.loopRunning) return;
 
           this.trackDetectionCadence();
@@ -1301,8 +1421,10 @@ export class DetectionCoordinator {
           // run the pipeline even on empty frames so Norfair advances its
           // Kalman state; the pose delta keeps predictions stable across pans
           const poseDelta = this.ptzAutotracker.consumePoseDelta();
+          const postStart = Date.now();
           const detected = FrameScaler.undoLetterbox(ensureDetectionBoxes(result.detections), objectFrame.geometry);
           const pipelineResult = this.pipeline.process(detected, poseDelta);
+          this.perf.postMs += Date.now() - postStart;
           // the tick that opens a span analysed the low stream (the switch lands
           // next tick), its picture work is worth a one-off HQ decode
           if (this.updateWorldSpans(pipelineResult) && !analysis.isMainStream) {
@@ -1435,6 +1557,7 @@ export class DetectionCoordinator {
     if (objectDetections.length === 0) return;
 
     this.perf.objects += objectDetections.length;
+    this.perf.framesWithObjects++;
 
     const secondaryStart = Date.now();
     await this.secondaries.detect(analysis.frame, analysis.scaler, objectDetections, results);
@@ -1787,8 +1910,8 @@ export class DetectionCoordinator {
     try {
       const inferStart = Date.now();
       const result = await PromiseTimeout(assist.proxy.detectObjects(scaled.model), DETECT_TIMEOUT_MS, undefined, `Object assist timed out after ${DETECT_TIMEOUT_MS}ms`);
-      this.perf.inferMs += Date.now() - inferStart;
-      this.perf.inferCount++;
+      this.perf.assistMs += Date.now() - inferStart;
+      this.perf.assistCount++;
       const reportedLabels = new Set(reported.map((d) => d.label.toLowerCase()));
       const boxed = FrameScaler.undoLetterbox(ensureDetectionBoxes(result?.detections ?? []), scaled.geometry);
       const found = boxed.filter((d) => reportedLabels.size === 0 || reportedLabels.has(d.label.toLowerCase()));

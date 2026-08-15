@@ -16,7 +16,7 @@ import type { PrivateChannel, RPCClient } from '@camera.ui/rpc';
 import type { CameraDetectionSettings, CameraFrameWorkerSettings, CameraUiSettings, CameraZones, PtzAutotrackSettings } from '@camera.ui/sdk';
 import type { CoreManagerNamespaces, FrameWorkerNamespaces } from '../../rpc/namespaces.js';
 import type { DetectionCoordinatorConfig } from './detection-coordinator.js';
-import type { FrameWorkerPerfSnapshot, WorkerToMainMessage } from './types.js';
+import type { FrameWorkerPerfSnapshot, ObjectBenchmarkResult, WorkerToMainMessage } from './types.js';
 
 const ignorableLogMessages = [
   'vt decoder cb: output image buffer is null',
@@ -150,6 +150,21 @@ export class FrameWorkerChild {
   @RPCMethod
   public getPerfSnapshot(): FrameWorkerPerfSnapshot | null {
     return this.detectionCoordinator?.getPerfSnapshot() ?? null;
+  }
+
+  @RPCMethod
+  public resetPerf(): void {
+    this.detectionCoordinator?.resetPerf();
+  }
+
+  @RPCMethod
+  public pauseForBenchmark(paused: boolean): void {
+    this.detectionCoordinator?.pauseForBenchmark(paused);
+  }
+
+  @RPCMethod
+  public async runObjectBenchmark(iterations: number, concurrency: number): Promise<ObjectBenchmarkResult | null> {
+    return (await this.detectionCoordinator?.runObjectBenchmark(iterations, concurrency)) ?? null;
   }
 
   private async onStart(): Promise<void> {

@@ -1,26 +1,10 @@
+/* eslint-disable @stylistic/max-len */
 import { detectionRecord } from './debug/detection-record.js';
 
 import type { Logger } from '@camera.ui/common/logger';
-import type { FrameWorkerPerfLifetime, FrameWorkerPerfSnapshot } from './types.js';
+import type { DetectorTiming, FrameWorkerPerfCounters, FrameWorkerPerfSnapshot } from './types.js';
 
 const REPORT_MS = 60_000;
-
-interface PerfCounters {
-  loopMs: number;
-  idleTicks: number;
-  activeTicks: number;
-  mainFrames: number;
-  switches: number;
-  decodeMs: number;
-  scaleMs: number;
-  jpegMs: number;
-  inferMs: number;
-  inferCount: number;
-  secondaryMs: number;
-  objects: number;
-  faces: number;
-  plates: number;
-}
 
 export class PerfTracker {
   public loopMs = 0;
@@ -29,31 +13,67 @@ export class PerfTracker {
   public mainFrames = 0;
   public switches = 0;
   public decodeMs = 0;
+  public decodedFrames = 0;
+  public mainDecodeMs = 0;
   public scaleMs = 0;
+  public postMs = 0;
   public jpegMs = 0;
-  public inferMs = 0;
-  public inferCount = 0;
+  public motionMs = 0;
+  public motionCount = 0;
+  public objectMs = 0;
+  public objectCount = 0;
+  public assistMs = 0;
+  public assistCount = 0;
+  public faceMs = 0;
+  public faceCount = 0;
+  public plateMs = 0;
+  public plateCount = 0;
+  public clipMs = 0;
+  public clipCount = 0;
+  public classifierMs = 0;
+  public classifierCount = 0;
   public secondaryMs = 0;
   public objects = 0;
   public faces = 0;
   public plates = 0;
+  public framesWithObjects = 0;
+
+  // stamped by the plugin itself, per sensor type: the wall-clock counters above
+  // still hold the whole round trip
+  public readonly detectors = new Map<string, DetectorTiming>();
 
   private readonly enabled = Boolean(process.env.CAMERA_UI_DEBUG_DIR);
   private cpu = process.cpuUsage();
   private since = 0;
-  private reportBase = this.copyCounters();
-  private snapshotBase = this.copyCounters();
-  private snapshotAt = Date.now();
+  private startedAt = Date.now();
+  private reportBase = this.counters();
 
-  public snapshot(): Omit<FrameWorkerPerfSnapshot, 'mainStreamEnabled' | 'frameAnalysis'> {
-    const now = Date.now();
-    const delta = this.diff(this.snapshotBase);
-    const elapsedMs = now - this.snapshotAt;
+  public snapshot(): Omit<FrameWorkerPerfSnapshot, 'mainStreamEnabled' | 'frameAnalysis' | 'detectors'> & { timings: Record<string, DetectorTiming> } {
+    return {
+      uptimeMs: Date.now() - this.startedAt,
+      ticks: this.idleTicks + this.activeTicks,
+      timings: Object.fromEntries(this.detectors),
+      ...this.counters(),
+    };
+  }
 
-    this.snapshotBase = this.copyCounters();
-    this.snapshotAt = now;
+  public trackTiming(sensorType: string, handlerMs: number, transportMs: number): void {
+    const entry = this.detectors.get(sensorType) ?? { handlerMs: 0, transportMs: 0, calls: 0 };
+    entry.handlerMs += handlerMs;
+    entry.transportMs += transportMs;
+    entry.calls++;
+    this.detectors.set(sensorType, entry);
+  }
 
-    return { elapsedMs, ticks: delta.idleTicks + delta.activeTicks, ...delta, lifetime: this.lifetime() };
+  public reset(): void {
+    for (const key of Object.keys(this.counters()) as (keyof FrameWorkerPerfCounters)[]) {
+      this[key] = 0;
+    }
+    this.detectors.clear();
+    this.startedAt = Date.now();
+    this.since = Date.now();
+    this.cpu = process.cpuUsage();
+    this.reportBase = this.counters();
   }
 
   public report(logger: Logger): void {
@@ -68,7 +88,8 @@ export class PerfTracker {
     const elapsed = now - this.since;
     if (elapsed < REPORT_MS) return;
 
-    const { loopMs, idleTicks, activeTicks, mainFrames, switches, decodeMs, scaleMs, jpegMs, inferMs, secondaryMs, objects, faces, plates } = this.diff(this.reportBase);
+    const delta = this.diff(this.reportBase);
+    const { loopMs, idleTicks, activeTicks, switches, decodeMs, scaleMs, postMs, jpegMs, motionMs, objectMs, assistMs, secondaryMs, objects, faces, plates } = delta;
     const ticks = idleTicks + activeTicks;
     if (ticks > 0) {
       const cpu = process.cpuUsage(this.cpu);
@@ -79,50 +100,18 @@ export class PerfTracker {
       const rate = loopMs > 0 ? (ticks / (loopMs / 1000)).toFixed(1) : '0';
       const activePct = Math.round((activeTicks / ticks) * 100);
       const shape = `${Math.round(elapsed / 1000)}s loop=${Math.round(loopMs / 1000)}s ticks=${ticks} (${rate}/s) active=${activePct}% switches=${switches}`;
-      const cost = `cpu=${cpuMs}ms decode=${decodeMs}ms scale=${scaleMs}ms jpeg=${jpegMs}ms infer=${inferMs}ms secondary=${secondaryMs}ms`;
+      const cost = `cpu=${cpuMs}ms decode=${decodeMs}ms scale=${scaleMs}ms post=${postMs}ms jpeg=${jpegMs}ms motion=${motionMs}ms object=${objectMs}ms assist=${assistMs}ms secondary=${secondaryMs}ms`;
       const found = `rss=${rssMb}MB ext=${externalMb}MB obj=${objects} face=${faces} plate=${plates}`;
       logger.debug(`[perf] ${shape} ${cost} ${found}`);
-      detectionRecord.perf({
-        elapsedMs: elapsed,
-        loopMs,
-        idleTicks,
-        activeTicks,
-        mainFrames,
-        switches,
-        cpuMs,
-        rssMb,
-        externalMb,
-        decodeMs,
-        scaleMs,
-        jpegMs,
-        inferMs,
-        secondaryMs,
-        objects,
-        faces,
-        plates,
-      });
+      detectionRecord.perf({ ...delta, elapsedMs: elapsed, cpuMs, rssMb, externalMb });
     }
 
     this.cpu = process.cpuUsage();
     this.since = now;
-    this.reportBase = this.copyCounters();
+    this.reportBase = this.counters();
   }
 
-  private lifetime(): FrameWorkerPerfLifetime {
-    return {
-      loopMs: this.loopMs,
-      ticks: this.idleTicks + this.activeTicks,
-      activeTicks: this.activeTicks,
-      mainFrames: this.mainFrames,
-      inferMs: this.inferMs,
-      inferCount: this.inferCount,
-      objects: this.objects,
-      faces: this.faces,
-      plates: this.plates,
-    };
-  }
-
-  private copyCounters(): PerfCounters {
+  private counters(): FrameWorkerPerfCounters {
     return {
       loopMs: this.loopMs,
       idleTicks: this.idleTicks,
@@ -130,21 +119,37 @@ export class PerfTracker {
       mainFrames: this.mainFrames,
       switches: this.switches,
       decodeMs: this.decodeMs,
+      decodedFrames: this.decodedFrames,
+      mainDecodeMs: this.mainDecodeMs,
       scaleMs: this.scaleMs,
+      postMs: this.postMs,
       jpegMs: this.jpegMs,
-      inferMs: this.inferMs,
-      inferCount: this.inferCount,
+      motionMs: this.motionMs,
+      motionCount: this.motionCount,
+      objectMs: this.objectMs,
+      objectCount: this.objectCount,
+      assistMs: this.assistMs,
+      assistCount: this.assistCount,
+      faceMs: this.faceMs,
+      faceCount: this.faceCount,
+      plateMs: this.plateMs,
+      plateCount: this.plateCount,
+      clipMs: this.clipMs,
+      clipCount: this.clipCount,
+      classifierMs: this.classifierMs,
+      classifierCount: this.classifierCount,
       secondaryMs: this.secondaryMs,
       objects: this.objects,
       faces: this.faces,
       plates: this.plates,
+      framesWithObjects: this.framesWithObjects,
     };
   }
 
-  private diff(base: PerfCounters): PerfCounters {
-    const current = this.copyCounters();
-    const out = {} as PerfCounters;
-    for (const key of Object.keys(current) as (keyof PerfCounters)[]) {
+  private diff(base: FrameWorkerPerfCounters): FrameWorkerPerfCounters {
+    const current = this.counters();
+    const out = {} as FrameWorkerPerfCounters;
+    for (const key of Object.keys(current) as (keyof FrameWorkerPerfCounters)[]) {
       out[key] = current[key] - base[key];
     }
     return out;

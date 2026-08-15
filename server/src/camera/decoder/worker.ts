@@ -32,7 +32,7 @@ import type { ConfigService } from '../../services/config/index.js';
 import type { LogManager } from '../../services/logger/logManager.js';
 import type { WorkerManager } from '../../workers/manager.js';
 import type { CameraController } from '../controller.js';
-import type { CoordinatorSourceUrl, FrameWorkerPerfSnapshot, WorkerToMainMessage } from './types.js';
+import type { CoordinatorSourceUrl, FrameWorkerPerfSnapshot, ObjectBenchmarkResult, WorkerToMainMessage } from './types.js';
 
 const REMOTE_START_TIMEOUT_MS = 30_000;
 
@@ -183,6 +183,36 @@ export class FrameWorker extends Subscribed {
 
     try {
       return await this.frameWorkerChildProxy.getPerfSnapshot();
+    } catch {
+      return null;
+    }
+  }
+
+  public async resetPerf(): Promise<void> {
+    if (this.status !== PLUGIN_STATUS.STARTED) return;
+
+    try {
+      await this.frameWorkerChildProxy.resetPerf();
+    } catch {
+      // ignore
+    }
+  }
+
+  public async pauseForBenchmark(paused: boolean): Promise<void> {
+    if (this.status !== PLUGIN_STATUS.STARTED) return;
+
+    try {
+      await this.frameWorkerChildProxy.pauseForBenchmark(paused);
+    } catch {
+      // ignore
+    }
+  }
+
+  public async runObjectBenchmark(iterations: number, concurrency: number): Promise<ObjectBenchmarkResult | null> {
+    if (this.status !== PLUGIN_STATUS.STARTED) return null;
+
+    try {
+      return await this.frameWorkerChildProxy.runObjectBenchmark(iterations, concurrency);
     } catch {
       return null;
     }

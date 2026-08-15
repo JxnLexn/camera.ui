@@ -3,7 +3,7 @@ import { onlyAdminCanDoThisAction } from '../middlewares/authPermission.middlewa
 import { validJWTNeeded } from '../middlewares/authValidation.middleware.js';
 import { pages } from '../middlewares/pagination.middleware.js';
 import { paginationQuerySchema } from '../schemas/common.schema.js';
-import { frameWorkerParamsSchema } from '../schemas/frameWorkers.schema.js';
+import { frameWorkerBenchmarkSchema, frameWorkerParamsSchema } from '../schemas/frameWorkers.schema.js';
 
 import type { FastifyInstance, FastifyPluginAsync } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
@@ -21,6 +21,29 @@ export const FrameWorkersRoute: FastifyPluginAsync = async (app: FastifyInstance
       tags: ['Frame Workers'],
       summary: 'List all frame workers with pagination',
       querystring: paginationQuerySchema,
+    },
+  });
+
+  app.withTypeProvider<ZodTypeProvider>().route({
+    url: '/perf/benchmark',
+    method: 'POST',
+    preValidation: [validJWTNeeded, onlyAdminCanDoThisAction],
+    handler: frameWorkersController.benchmark.bind(frameWorkersController),
+    schema: {
+      tags: ['Frame Workers'],
+      summary: 'Saturate the object detector with test frames and report its throughput',
+      body: frameWorkerBenchmarkSchema,
+    },
+  });
+
+  app.withTypeProvider<ZodTypeProvider>().route({
+    url: '/perf/reset',
+    method: 'PUT',
+    preValidation: [validJWTNeeded, onlyAdminCanDoThisAction],
+    handler: frameWorkersController.resetPerf.bind(frameWorkersController),
+    schema: {
+      tags: ['Frame Workers'],
+      summary: 'Reset the measured detection performance of all frame workers',
     },
   });
 

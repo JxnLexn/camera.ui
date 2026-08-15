@@ -8,6 +8,7 @@ import { createFrameFilter, openVideoInput } from './video-input.js';
 import type { Logger } from '@camera.ui/common/logger';
 import type { FrameWorkerDecoderSettings } from '@camera.ui/sdk';
 import type { Demuxer, FilterAPI, HardwareContext } from 'node-av/api';
+import type { Frame } from 'node-av/lib';
 import type { AnalysisSource, FrameSnap } from './analysis-source.js';
 import type { CycleOutcome } from './reconnect-loop.js';
 import type { SnapshotConfig } from './snapshot-fetcher.js';
@@ -43,6 +44,8 @@ export class FrameSource implements AnalysisSource {
   private producerError?: Error;
 
   private startCount = 0;
+  private decodeMs = 0;
+  private decodedFrames = 0;
 
   private readonly reconnect: ReconnectLoop;
   private readonly snapshots: SnapshotFetcher;
@@ -213,28 +216,35 @@ export class FrameSource implements AnalysisSource {
     }
 
     const packets = this.input.packets(videoStream.index);
-    const decodedFrames = this.decoder.frames(packets);
-    const filteredFrames = this.filter.frames(decodedFrames);
 
     let delivered = false;
     let firstFrame = true;
 
     try {
-      for await (const frame of filteredFrames) {
+      for await (using packet of packets) {
         if (!this.shouldRun) break;
-        if (!frame) continue;
+        if (!packet) continue;
 
-        if (firstFrame) {
-          this.logger.trace('First frame received');
-          firstFrame = false;
+        const decodeStart = Date.now();
+        for await (const decoded of this.decoder.frames(packet)) {
+          if (!decoded) continue;
+
+          const frame = await this.applyFilter(decoded);
+          this.decodeMs += Date.now() - decodeStart;
+          this.decodedFrames++;
+
+          if (firstFrame) {
+            this.logger.trace('First frame received');
+            firstFrame = false;
+          }
+
+          this.dropLatest();
+          this.latest = { frame, id: this.nextId++ };
+          this.latestAt = Date.now();
+          delivered = true;
+
+          this.wakeWaiter();
         }
-
-        this.dropLatest();
-        this.latest = { frame, id: this.nextId++ };
-        this.latestAt = Date.now();
-        delivered = true;
-
-        this.wakeWaiter();
       }
     } catch (error) {
       const failure = error instanceof Error ? error : new Error(String(error));
@@ -243,6 +253,32 @@ export class FrameSource implements AnalysisSource {
     }
 
     return { delivered };
+  }
+
+  public takeDecodeStats(): { ms: number; frames: number } {
+    const stats = { ms: this.decodeMs, frames: this.decodedFrames };
+    this.decodeMs = 0;
+    this.decodedFrames = 0;
+    return stats;
+  }
+
+  private async applyFilter(frame: Frame): Promise<Frame> {
+    if (!this.filter) return frame;
+
+    let outputs: Frame[];
+    try {
+      outputs = await this.filter.processAll(frame);
+    } catch (error) {
+      this.logger.debug('Stream filter failed:', error);
+      return frame;
+    }
+
+    const newest = outputs.pop();
+    for (const extra of outputs) extra[Symbol.dispose]?.();
+    if (!newest) return frame;
+
+    frame[Symbol.dispose]?.();
+    return newest;
   }
 
   private dropLatest(): void {

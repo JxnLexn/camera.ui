@@ -639,6 +639,20 @@ class CameraDeviceProxy(Subscribed, CameraDeviceInterface):
         self, sensor_id: str, sensor_type: SensorType, properties: dict[str, Any]
     ) -> None:
         if sensor_type in DETECTION_SENSOR_TYPES:
+            # the spec belongs to the registry: it survives a frame worker that is
+            # not up yet, the coordinator receives it with the next sensor push
+            model_spec = properties.get("modelSpec")
+            if model_spec is not None:
+                properties = {k: v for k, v in properties.items() if k != "modelSpec"}
+
+                async def notify_spec() -> None:
+                    with contextlib.suppress(Exception):
+                        await self._sensor_registry_proxy.updateModelSpec(sensor_id, model_spec)
+
+                self._tasks.add(notify_spec())
+                if not properties:
+                    return
+
             if not (self._frame_worker_state.value or False):
                 return
 

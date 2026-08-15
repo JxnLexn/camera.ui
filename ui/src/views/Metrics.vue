@@ -50,20 +50,50 @@
         </TabPanel>
 
         <TabPanel value="cameras">
-          <div>
-            <span class="card-title">{{ $t('views.metrics.cameras') }}</span>
-            <span class="block text-sm text-muted mb-3">{{ $t('views.metrics.cameras_hint') }}</span>
-            <CuiChartTable
-              :items="frameworkerItems"
-              :headers="headers('frameworker')"
-              :chart-data="frameworkerChartData"
-              :loading="frameWorkersLoading"
-              paginator
-              :pagination="{ page: tablePages.frameworker }"
-              :total-records="frameworkerItems.length"
-              :empty-message="$t('views.metrics.no_cameras')"
-              @update:page="onPage($event, 'frameworker')"
-            />
+          <div class="flex flex-col gap-6">
+            <div>
+              <span class="card-title">{{ $t('views.metrics.cameras') }}</span>
+              <CuiChartTable
+                :items="frameworkerItems"
+                :headers="headers('frameworker')"
+                :chart-data="frameworkerChartData"
+                :loading="frameWorkersLoading"
+                paginator
+                :pagination="{ page: tablePages.frameworker }"
+                :total-records="frameworkerItems.length"
+                :empty-message="$t('views.metrics.no_cameras')"
+                @update:page="onPage($event, 'frameworker')"
+              />
+            </div>
+
+            <div>
+              <span class="card-title">{{ $t('views.metrics.analysis') }}</span>
+              <CuiChartTable
+                :items="analysisItems"
+                :headers="analysisHeaders"
+                :loading="frameWorkersLoading"
+                paginator
+                :pagination="{ page: tablePages.frameworker }"
+                :total-records="analysisItems.length"
+                :empty-message="$t('views.metrics.no_cameras')"
+                @update:page="onPage($event, 'frameworker')"
+              >
+                <template #actions>
+                  <Button
+                    severity="secondary"
+                    outlined
+                    class="cui-button-medium"
+                    :label="showInference ? $t('views.metrics.show_performance') : $t('views.metrics.show_inference')"
+                    @click="showInference = !showInference"
+                  />
+
+                  <div class="flex items-end gap-2">
+                    <Button severity="secondary" class="cui-button-medium" :loading="resetPerfLoading" :label="$t('views.metrics.reset')" @click="confirmReset" />
+                    <Button class="cui-button-medium" :disabled="resetPerfLoading" :label="$t('views.metrics.benchmark')" @click="openBenchmark" />
+                  </div>
+                </template>
+              </CuiChartTable>
+            </div>
           </div>
         </TabPanel>
 
@@ -125,9 +155,9 @@
                     {{ $t('views.metrics.storage_not_available') }}
                   </div>
                   <CuiDataTable v-else :value="cameraRows" :pt="tablePtOptions" striped-rows scrollable>
-                    <Column field="status" :header="''" style="width: 3rem">
+                    <Column field="status" :header="''" header-class="p-2! w-5 max-w-5" class="p-2! w-5 max-w-5">
                       <template #body="{ data }">
-                        <div class="flex items-center justify-center">
+                        <div class="flex items-center">
                           <Badge
                             v-tooltip="{ value: data.isRecording ? $t('views.metrics.status_recording') : $t('views.metrics.status_stopped') }"
                             :style="{ background: data.isRecording ? 'green' : 'gray' }"
@@ -135,9 +165,9 @@
                         </div>
                       </template>
                     </Column>
-                    <Column field="name" :header="$t('views.metrics.col_camera')">
+                    <Column field="name" :header="$t('views.metrics.col_camera')" header-class="w-56 min-w-56 max-w-56" class="w-56 min-w-56 max-w-56">
                       <template #body="{ data }">
-                        <span class="font-medium block max-w-[200px] truncate">{{ data.name }}</span>
+                        <span class="font-bold text-color block whitespace-normal break-all hyphens-auto">{{ data.name }}</span>
                       </template>
                     </Column>
                     <Column field="size" :header="$t('views.metrics.col_size')">
@@ -182,6 +212,7 @@ import { FrameWorkerQuery } from '@/api/routes/frameWorkers.js';
 import { PluginsQuery } from '@/api/routes/plugins.js';
 import { ServerQuery } from '@/api/routes/server.js';
 import { isHeaderChart } from '@/components/CuiChartTable/types.js';
+import BenchmarkDialog from '@/components/CuiDialog/templates/DetectionBenchmark/DetectionBenchmark.vue';
 import { DEFAULT_PROCESS_LOAD, MAX_METRICS_DATA_POINTS } from '@/composables/sockets/useMetricsSocket.js';
 
 import type { TableHeader, TableHeaderChart } from '@/components/CuiChartTable/types.js';
@@ -212,12 +243,14 @@ const frameWorkerQuery = new FrameWorkerQuery();
 const serverQuery = new ServerQuery();
 
 const { t } = useI18n();
+const dialog = useCuiDialog();
 const metricsSocket = useMetricsSocket();
 const { mdBreakpoint, smBreakpoint } = useSharedCuiBreakpoint();
 const { beginServerRestart } = useServerRestart();
 const { stats, isLoading: storageStatsLoading } = useStorageStats();
 
 const currentTab = ref('overview');
+const showInference = ref(false);
 const tablePages = ref({ frameworker: 1, plugins: 1 });
 
 const frameworkersPagination = ref<PaginationQuery>({ page: 1, pageSize: -1 });
@@ -228,6 +261,7 @@ const { data: plugins, isBusy: pluginsLoading, suspense: pluginsSuspense } = plu
 const { data: frameWorkers, isBusy: frameWorkersLoading, suspense: frameWorkerSuspense } = frameWorkerQuery.getFrameWorkersQuery(frameworkersPagination);
 const { mutateAsync: restartPlugin } = pluginsQuery.restartPluginQuery();
 const { mutateAsync: restartFrameWorker } = frameWorkerQuery.restartFrameWorkerQuery();
+const { mutateAsync: resetFrameWorkerPerf, isPending: resetPerfLoading } = frameWorkerQuery.resetFrameWorkerPerfQuery();
 const { mutate: restartGo2Rtc, isPending: restartGo2RtcLoading } = serverQuery.restartGo2RtcQuery();
 const { mutate: restartServer, isPending: restartSystemLoading } = serverQuery.restartServerQuery();
 
@@ -286,8 +320,8 @@ const headers = computed<(type: 'system' | 'core' | 'frameworker' | 'plugins') =
         columnProps: {
           alignFrozen: 'left',
           frozen: !mdBreakpoint.value,
-          headerClass: 'w-40 min-w-40 max-w-40',
-          class: 'w-40 min-w-40 max-w-40',
+          headerClass: 'w-56 min-w-56 max-w-56',
+          class: 'w-56 min-w-56 max-w-56',
         },
         props: {
           class: 'font-bold text-color',
@@ -387,112 +421,138 @@ const headers = computed<(type: 'system' | 'core' | 'frameworker' | 'plugins') =
       headersObj = headersObj.filter((header) => header.field !== 'pid' && header.field !== 'restart' && header.field !== 'status');
     }
 
-    if (type === 'frameworker') {
-      headersObj.splice(headersObj.length - 1, 0, ...perfHeaders.value);
-    }
-
     return headersObj;
   };
 });
 
-const perfHeaders = computed<TableHeader[]>(() => {
+const analysisItems = computed(() => frameworkerItems.value);
+
+const analysisHeaders = computed<TableHeader[]>(() => {
   const columnProps = { headerClass: 'min-w-24', class: 'min-w-24' };
-  // a quiet minute measures nothing, the whole run still does: fall back to it
-  // and mark the value, so a live number is never confused with an average
-  const asAverage = (value: string) => `~${value}`;
-  const externalIdle = (item: ProcessInfo) => Boolean(item.perf && !item.perf.frameAnalysis && item.perf.lowFps === 0);
-  const idleTooltip = (item: ProcessInfo, average: number) => {
-    if (average > 0) {
-      const minutes = item.perf?.average.minutes ?? 0;
-      return minutes >= 1 ? `${t('views.metrics.info_average')} (${minutes} min)` : t('views.metrics.info_average');
-    }
-    return externalIdle(item) ? t('views.metrics.info_external') : undefined;
+  const firstColumnProps = { headerClass: 'min-w-24 pl-4', class: 'min-w-24 pl-4' };
+  const ms = (value?: number) => (value && value > 0 ? `${value.toFixed(1)} ms` : '-');
+  const fps = (value?: number) => (value && value > 0 ? value.toFixed(1) : '-');
+  const detector = (item: ProcessInfo, type: string) => item.perf?.detectors?.[type];
+  const detectorTooltip = (item: ProcessInfo, type: string) => {
+    const info = detector(item, type);
+    if (!info) return t('views.metrics.tip_no_plugin');
+
+    const models = (info.models ?? []).map((model) => [model.name, model.role, model.device].filter(Boolean).join(' '));
+    const parts = [info.plugin, info.input, info.runtime, ...models];
+    if (!info.stamped) parts.push(t('views.metrics.tip_round_trip'));
+    return parts.filter(Boolean).join(' · ');
   };
 
+  const cameraColumn: TableHeader = {
+    type: 'category',
+    field: 'name',
+    name: t('views.metrics.col_camera'),
+    columnProps: {
+      alignFrozen: 'left',
+      frozen: !mdBreakpoint.value,
+      headerClass: 'w-56 min-w-56 max-w-56',
+      class: 'w-56 min-w-56 max-w-56',
+    },
+    props: { class: 'font-bold text-color' },
+  };
+
+  if (showInference.value) {
+    const inferenceColumn = (type: string, name: string, info: string, first = false): TableHeader => ({
+      type: 'category',
+      field: (item: ProcessInfo) => ms(detector(item, type)?.inferenceMs),
+      name,
+      headerTooltip: info,
+      columnProps: first ? firstColumnProps : columnProps,
+      tooltip: (item: ProcessInfo) => detectorTooltip(item, type),
+    });
+
+    return [
+      cameraColumn,
+      inferenceColumn('motion', t('views.metrics.col_motion'), t('views.metrics.info_motion'), true),
+      inferenceColumn('object', t('views.metrics.col_object'), t('views.metrics.info_object')),
+      inferenceColumn('face', t('views.metrics.col_face'), t('views.metrics.info_secondary')),
+      inferenceColumn('licensePlate', t('views.metrics.col_plate'), t('views.metrics.info_secondary')),
+      inferenceColumn('classifier', t('views.metrics.col_classifier'), t('views.metrics.info_secondary')),
+      inferenceColumn('clip', t('views.metrics.col_clip'), t('views.metrics.info_secondary')),
+    ];
+  }
+
   return [
+    cameraColumn,
     {
       type: 'category',
-      field(item: ProcessInfo) {
-        if (!item.perf) return '-';
-        if (item.perf.lowFps > 0) return item.perf.lowFps.toFixed(1);
-        return item.perf.average.lowFps > 0 ? asAverage(item.perf.average.lowFps.toFixed(1)) : '-';
-      },
-      name: t('views.metrics.col_fps_low'),
-      headerTooltip: t('views.metrics.info_fps_low'),
-      columnProps,
-      tooltip: (item: ProcessInfo) => (item.perf && item.perf.lowFps === 0 ? idleTooltip(item, item.perf.average.lowFps) : undefined),
+      field: (item: ProcessInfo) => `${ms(item.perf?.decodeMs)} / ${ms(item.perf?.mainDecodeMs)}`,
+      name: t('views.metrics.col_decode'),
+      headerTooltip: t('views.metrics.info_decode'),
+      columnProps: firstColumnProps,
+      tooltip: () => `${t('views.metrics.tip_analysis_stream')} / ${t('views.metrics.tip_main')}`,
     },
     {
       type: 'category',
-      field(item: ProcessInfo) {
-        if (!item.perf?.mainStreamEnabled) return '-';
-        if (item.perf.activePercent > 0 && item.perf.mainFps > 0) return item.perf.mainFps.toFixed(1);
-        return item.perf.average.mainFps > 0 ? asAverage(item.perf.average.mainFps.toFixed(1)) : '-';
-      },
-      name: t('views.metrics.col_fps_main'),
-      headerTooltip: t('views.metrics.info_fps_main'),
+      field: (item: ProcessInfo) => ms(item.perf?.processingMs),
+      name: t('views.metrics.col_processing'),
+      headerTooltip: t('views.metrics.info_processing'),
       columnProps,
-      tooltip: (item: ProcessInfo) => (item.perf?.mainStreamEnabled && item.perf.activePercent === 0 ? idleTooltip(item, item.perf.average.mainFps) : undefined),
+      tooltip: (item: ProcessInfo) =>
+        [`${t('views.metrics.tip_scale')}: ${ms(item.perf?.scaleMs)}`, `${t('views.metrics.tip_post')}: ${ms(item.perf?.postMs)}`].join(' · '),
     },
     {
       type: 'category',
-      field(item: ProcessInfo) {
-        if (!item.perf) return '-';
-        if (item.perf.activePercent > 0) return `${item.perf.activePercent}%`;
-        if (item.perf.average.activePercent > 0) return asAverage(`${item.perf.average.activePercent}%`);
-        return externalIdle(item) ? '-' : '0%';
-      },
+      field: (item: ProcessInfo) => ms(item.perf?.transportMs),
+      name: t('views.metrics.col_transport'),
+      headerTooltip: t('views.metrics.info_transport'),
+      columnProps,
+    },
+    {
+      type: 'category',
+      field: (item: ProcessInfo) => `${fps(item.perf?.analysedFps)} / ${fps(item.perf?.mainFps)}`,
+      name: t('views.metrics.col_analysed'),
+      headerTooltip: t('views.metrics.info_analysed'),
+      columnProps,
+      tooltip: () => `${t('views.metrics.tip_analysis_stream')} / ${t('views.metrics.tip_main')}`,
+    },
+    {
+      type: 'category',
+      field: (item: ProcessInfo) => (item.perf ? `${item.perf.activePercent}%` : '-'),
       name: t('views.metrics.col_active'),
       headerTooltip: t('views.metrics.info_active'),
       columnProps,
-      tooltip: (item: ProcessInfo) => (item.perf && item.perf.activePercent === 0 ? idleTooltip(item, item.perf.average.activePercent) : undefined),
     },
     {
       type: 'category',
-      field(item: ProcessInfo) {
-        if (!item.perf) return '-';
-        if (item.perf.inferMs > 0) return `${item.perf.inferMs} ms`;
-        return item.perf.average.inferMs > 0 ? asAverage(`${item.perf.average.inferMs} ms`) : '-';
-      },
-      name: t('views.metrics.col_inference'),
-      headerTooltip: t('views.metrics.info_inference'),
-      columnProps,
-      tooltip(item: ProcessInfo) {
-        if (!item.perf) return undefined;
-        if (item.perf.inferMs === 0) return idleTooltip(item, item.perf.average.inferMs);
-        return [
-          `${t('views.metrics.tip_decode')}: ${item.perf.decodeMs} ms`,
-          `${t('views.metrics.tip_scale')}: ${item.perf.scaleMs} ms`,
-          `${t('views.metrics.tip_jpeg')}: ${item.perf.jpegMs} ms`,
-          `${t('views.metrics.tip_secondary')}: ${item.perf.secondaryMs} ms`,
-        ].join(' · ');
-      },
-    },
-    {
-      type: 'category',
-      field(item: ProcessInfo) {
-        if (!item.perf) return '-';
-        const found = item.perf.objects + item.perf.faces + item.perf.plates;
-        if (found > 0) return String(found);
-        if (item.perf.average.detectionsPerMinute > 0) return asAverage(item.perf.average.detectionsPerMinute.toFixed(1));
-        return externalIdle(item) ? '-' : '0';
-      },
+      field: (item: ProcessInfo) => (item.perf ? item.perf.objectsPerFrame.toFixed(1) : '-'),
       name: t('views.metrics.col_detections'),
       headerTooltip: t('views.metrics.info_detections'),
       columnProps,
-      tooltip(item: ProcessInfo) {
-        if (!item.perf) return undefined;
-        const found = item.perf.objects + item.perf.faces + item.perf.plates;
-        if (found === 0) return idleTooltip(item, item.perf.average.detectionsPerMinute);
-        return [
-          `${t('views.metrics.tip_objects')}: ${item.perf.objects}`,
-          `${t('views.metrics.tip_faces')}: ${item.perf.faces}`,
-          `${t('views.metrics.tip_plates')}: ${item.perf.plates}`,
-        ].join(' · ');
-      },
+      tooltip: (item: ProcessInfo) => `${t('views.metrics.tip_hit_rate')}: ${item.perf ? `${item.perf.hitPercent}%` : '-'}`,
     },
   ];
 });
+
+function confirmReset() {
+  dialog.openTextDialog({
+    data: {
+      title: t('views.metrics.reset'),
+      contentText: t('views.metrics.reset_confirm'),
+      confirmText: t('views.metrics.reset'),
+      awaitConfirm: true,
+    },
+    onConfirm: async () => {
+      await resetFrameWorkerPerf();
+    },
+  });
+}
+
+function openBenchmark() {
+  dialog.openComponentDialog(BenchmarkDialog, {
+    data: {
+      title: t('views.metrics.benchmark'),
+      confirmText: t('views.metrics.benchmark_start'),
+      cancelText: t('components.form.button.close'),
+      contentProps: { cameras: analysisItems.value.filter((item) => item.perf?.detectors?.object).map((item) => item.name) },
+    },
+  });
+}
 
 const systemItems = computed(() => systemProcess.value);
 const coreItems = computed(() => Object.values(coreProcesses.value).filter(Boolean));

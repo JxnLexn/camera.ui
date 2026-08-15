@@ -106,6 +106,14 @@ export class SensorManagerProxy implements SensorManager {
 
     sensor._init(async (properties: Record<string, unknown>) => {
       if (DETECTION_SENSOR_TYPES.has(sensor.type)) {
+        // the spec belongs to the registry, it reaches the coordinators from there
+        const { modelSpec, ...rest } = properties;
+        if (modelSpec) {
+          await this.#registryProxy.updateModelSpec(sensor.id, modelSpec as ModelSpec);
+          if (Object.keys(rest).length === 0) return;
+          properties = rest;
+        }
+
         // external detection provider: fan the write into every assigned camera's coordinator
         for (const cameraId of sensor.assignedCameraIds) {
           const detectionNs = NamespaceManager.frameWorkerDetectionNamespaces(cameraId);

@@ -1,3 +1,4 @@
+import type { LoadedModel } from '@camera.ui/sdk';
 import type { Namespace } from 'socket.io';
 import type { PLUGIN_STATUS } from '../../plugins/types.js';
 import type { RuntimeInfo } from '../../services/config/types.js';
@@ -11,30 +12,32 @@ export interface SocketNspMap {
 
 export type ProcessType = 'system' | 'core' | 'frameworker' | 'plugin';
 
+export interface WorkerDetectorStats {
+  plugin: string;
+  input?: string;
+  runtime?: string;
+  models?: LoadedModel[];
+  inferenceMs: number;
+  transportMs: number;
+  stamped: boolean;
+}
+
 export interface WorkerPerfStats {
-  lowFps: number;
+  detectors: Record<string, WorkerDetectorStats>;
+  processingMs: number;
+  decodeMs: number;
+  mainDecodeMs: number;
+  scaleMs: number;
+  postMs: number;
+  transportMs: number;
+  analysedFps: number;
   mainFps: number;
   mainStreamEnabled: boolean;
   frameAnalysis: boolean;
   activePercent: number;
-  decodeMs: number;
-  scaleMs: number;
-  jpegMs: number;
-  inferMs: number;
-  secondaryMs: number;
-  objects: number;
-  faces: number;
-  plates: number;
+  objectsPerFrame: number;
+  hitPercent: number;
   switches: number;
-  average: WorkerPerfAverages;
-}
-
-export interface WorkerPerfAverages {
-  lowFps: number;
-  mainFps: number;
-  activePercent: number;
-  inferMs: number;
-  detectionsPerMinute: number;
   minutes: number;
 }
 

@@ -352,6 +352,19 @@ class SensorManagerProxy:
         properties: dict[str, Any],
     ) -> None:
         if sensor_type in DETECTION_SENSOR_TYPES:
+            # the spec belongs to the registry, it reaches the coordinators from there
+            model_spec = properties.get("modelSpec")
+            if model_spec is not None:
+                properties = {k: v for k, v in properties.items() if k != "modelSpec"}
+
+                async def notify_spec() -> None:
+                    with contextlib.suppress(Exception):
+                        await self._registry_proxy.updateModelSpec(sensor.id, model_spec)
+
+                self._tasks.add(notify_spec())
+                if not properties:
+                    return
+
             # external detection provider: fan the write into every assigned camera's coordinator
             async def notify_coordinators() -> None:
                 for camera_id in sensor.assignedCameraIds:

@@ -31,6 +31,7 @@ import type { DetectionCoordinator } from './detection-coordinator.js';
 import type { DetectionPipeline } from './detection-pipeline.js';
 import type { TrackedClassifierDetection, TrackedClipEmbedding, TrackedFaceDetection, TrackedLicensePlateDetection } from './event-manager.js';
 import type { ConsumerSpec, CropFit, FrameScaler, ScaleTarget } from './frame-scaler.js';
+import type { PerfTracker } from './perf-tracker.js';
 import type { PluginRegistry } from './plugin-registry.js';
 
 const SECONDARY_CONSUMERS: { type: SensorType; key: string; fit: CropFit }[] = [
@@ -53,6 +54,7 @@ export class SecondaryStage {
     private readonly pipeline: DetectionPipeline,
     private readonly frameScaler: FrameScaler,
     private readonly proxy: RPCClient,
+    private readonly perf: PerfTracker,
     private readonly logger: Logger,
   ) {}
 
@@ -277,9 +279,11 @@ export class SecondaryStage {
     fn: () => Promise<FaceResult | LicensePlateResult | ClipResult | { pluginId: string; result: ClassifierResult }[] | undefined>,
   ): Promise<void> {
     let detections: Awaited<ReturnType<typeof fn>>;
+    const startedAt = Date.now();
 
     try {
       detections = await fn();
+      if (detections) this.trackTiming(type, Date.now() - startedAt);
     } catch (error) {
       if (!this.coordinator.running || isNoRespondersError(error)) return;
       const logType = type === SensorType.Face ? 'Face' : type === SensorType.LicensePlate ? 'License plate' : type === SensorType.Clip ? 'CLIP' : 'Classifier';
@@ -303,6 +307,22 @@ export class SecondaryStage {
         results.classifiers[pluginId] = result;
       }
       if (Object.keys(results.classifiers).length === 0) delete results.classifiers;
+    }
+  }
+
+  private trackTiming(type: SensorType.Face | SensorType.LicensePlate | SensorType.Classifier | SensorType.Clip, ms: number): void {
+    if (type === SensorType.Face) {
+      this.perf.faceMs += ms;
+      this.perf.faceCount++;
+    } else if (type === SensorType.LicensePlate) {
+      this.perf.plateMs += ms;
+      this.perf.plateCount++;
+    } else if (type === SensorType.Clip) {
+      this.perf.clipMs += ms;
+      this.perf.clipCount++;
+    } else {
+      this.perf.classifierMs += ms;
+      this.perf.classifierCount++;
     }
   }
 

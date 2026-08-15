@@ -206,6 +206,7 @@ declare module 'vue' {
     DataTable: typeof import('primevue/datatable')['default']
     DatePicker: typeof import('primevue/datepicker')['default']
     DeletableEdge: typeof import('./../components/CuiAutomation/edges/DeletableEdge.vue')['default']
+    DetectionBenchmark: typeof import('./../components/CuiDialog/templates/DetectionBenchmark/DetectionBenchmark.vue')['default']
     Divider: typeof import('primevue/divider')['default']
     Drawer: typeof import('primevue/drawer')['default']
     DynamicDialog: typeof import('primevue/dynamicdialog')['default']

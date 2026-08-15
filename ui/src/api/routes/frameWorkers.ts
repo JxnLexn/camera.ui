@@ -1,7 +1,7 @@
 import { i18n } from '@/i18n/index.js';
 import { axiosInstance as api } from '..';
 
-import type { FrameWorkerResponse, MethodKeys, PaginationQuery } from '@shared/types';
+import type { FrameWorkerResponse, MethodKeys, ObjectBenchmarkRun, PaginationQuery } from '@shared/types';
 import type { AxiosResponse } from 'axios';
 import type { AckResponse } from '..';
 
@@ -12,6 +12,16 @@ export async function getFrameWorkersFn({ parameter, signal }: { parameter: Pagi
 
 export async function restartFrameWorkerFn({ frameWorkerName }: { frameWorkerName: string }): Promise<AckResponse> {
   const response: AxiosResponse<AckResponse> = await api.put(`/frameworkers/${frameWorkerName}/restart`);
+  return response.data;
+}
+
+export async function resetFrameWorkerPerfFn(): Promise<AckResponse> {
+  const response: AxiosResponse<AckResponse> = await api.put('/frameworkers/perf/reset');
+  return response.data;
+}
+
+export async function benchmarkObjectDetectionFn({ cameras }: { cameras: string[] }): Promise<ObjectBenchmarkRun> {
+  const response: AxiosResponse<ObjectBenchmarkRun> = await api.post('/frameworkers/perf/benchmark', { cameras });
   return response.data;
 }
 
@@ -47,6 +57,21 @@ export class FrameWorkerQuery {
         await this._queryClient.refetchQueries({ queryKey: ['frameWorkers', variables.frameWorkerName] });
         this.toast.add({ severity: 'success', detail: this.t('components.toast.frame_worker_restarted'), life: 3000 });
       },
+    });
+  }
+
+  public resetFrameWorkerPerfQuery() {
+    return useMutation({
+      mutationFn: resetFrameWorkerPerfFn,
+      onSuccess: () => {
+        this.toast.add({ severity: 'success', detail: this.t('components.toast.metrics_reset'), life: 3000 });
+      },
+    });
+  }
+
+  public benchmarkObjectDetectionQuery() {
+    return useMutation({
+      mutationFn: benchmarkObjectDetectionFn,
     });
   }
 

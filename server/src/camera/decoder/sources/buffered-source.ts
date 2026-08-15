@@ -49,6 +49,8 @@ export class BufferedSource implements AnalysisSource {
   private cachedFrameAt = 0;
   private lastPacketAt = 0;
   private lastDecodeAt = 0;
+  private decodeMs = 0;
+  private decodedFrames = 0;
 
   private shouldRun = false;
   private paused = false;
@@ -304,7 +306,15 @@ export class BufferedSource implements AnalysisSource {
     for (const resolve of waiters) resolve();
   }
 
+  public takeDecodeStats(): { ms: number; frames: number } {
+    const stats = { ms: this.decodeMs, frames: this.decodedFrames };
+    this.decodeMs = 0;
+    this.decodedFrames = 0;
+    return stats;
+  }
+
   private async catchUpDecode(): Promise<Frame | null> {
+    const decodeStart = Date.now();
     const pending: BufferedPacket[] = [];
     for (const b of this.buffer) {
       if (b.serial <= this.decodedThrough) continue;
@@ -330,6 +340,7 @@ export class BufferedSource implements AnalysisSource {
         while ((frame = await this.decoder.receive())) {
           last?.[Symbol.dispose]?.();
           last = frame;
+          this.decodedFrames++;
         }
         this.decodedThrough = p.serial;
       }
@@ -356,6 +367,7 @@ export class BufferedSource implements AnalysisSource {
       this.disposeDecoder();
       return this.cachedFrame ?? null;
     } finally {
+      this.decodeMs += Date.now() - decodeStart;
       last?.[Symbol.dispose]?.();
       for (const p of pending) p.packet.free();
     }

@@ -1,4 +1,6 @@
-import type { BoundingBox, MotionResolution, StreamingRole } from '@camera.ui/sdk';
+import { SensorType } from '@camera.ui/sdk';
+
+import type { BoundingBox, LoadedModel, MotionResolution, StreamingRole } from '@camera.ui/sdk';
 
 export type PixelFormat = 'yuv420p' | 'rgb24' | 'nv12';
 
@@ -32,36 +34,96 @@ export interface WorkerToMainMessage {
   data: Record<string, any>;
 }
 
-export interface FrameWorkerPerfSnapshot {
-  elapsedMs: number;
-  mainStreamEnabled: boolean;
-  frameAnalysis: boolean;
-  ticks: number;
+export interface ObjectBenchmarkResult {
+  camera: string;
+  plugin: string;
+  sensorId: string;
+  runtime?: string;
+  models?: LoadedModel[];
+  input: string;
+  iterations: number;
+  failed: number;
+  concurrency: number;
+  totalMs: number;
+  perSecond: number;
+  handlerMs: number;
+}
+
+export interface BenchmarkSystem {
+  cpu: string;
+  cores: number;
+  memoryGb: number;
+  gpu?: string;
+  os: string;
+  version: string;
+}
+
+export interface ObjectBenchmarkRun {
+  system: BenchmarkSystem;
+  total: {
+    cameras: number;
+    iterations: number;
+    failed: number;
+    concurrency: number;
+    totalMs: number;
+    perSecond: number;
+    handlerMs: number;
+  };
+  cameras: ObjectBenchmarkResult[];
+}
+
+export interface FrameWorkerPerfCounters {
   loopMs: number;
   idleTicks: number;
   activeTicks: number;
   mainFrames: number;
   switches: number;
   decodeMs: number;
+  decodedFrames: number;
+  mainDecodeMs: number;
   scaleMs: number;
+  postMs: number;
   jpegMs: number;
-  inferMs: number;
-  inferCount: number;
+  motionMs: number;
+  motionCount: number;
+  objectMs: number;
+  objectCount: number;
+  assistMs: number;
+  assistCount: number;
+  faceMs: number;
+  faceCount: number;
+  plateMs: number;
+  plateCount: number;
+  clipMs: number;
+  clipCount: number;
+  classifierMs: number;
+  classifierCount: number;
   secondaryMs: number;
   objects: number;
   faces: number;
   plates: number;
-  lifetime: FrameWorkerPerfLifetime;
+  framesWithObjects: number;
 }
 
-export interface FrameWorkerPerfLifetime {
-  loopMs: number;
+export const DETECTOR_METRIC_TYPES = [SensorType.Motion, SensorType.Object, SensorType.Face, SensorType.LicensePlate, SensorType.Classifier, SensorType.Clip] as const;
+
+export interface DetectorTiming {
+  handlerMs: number;
+  transportMs: number;
+  calls: number;
+}
+
+export interface DetectorInfo extends Partial<DetectorTiming> {
+  plugin: string;
+  input?: string;
+  runtime?: string;
+  models?: LoadedModel[];
+}
+
+export interface FrameWorkerPerfSnapshot extends FrameWorkerPerfCounters {
+  uptimeMs: number;
   ticks: number;
-  activeTicks: number;
-  mainFrames: number;
-  inferMs: number;
-  inferCount: number;
-  objects: number;
-  faces: number;
-  plates: number;
+  mainStreamEnabled: boolean;
+  frameAnalysis: boolean;
+  detectors: Record<string, DetectorInfo>;
 }
