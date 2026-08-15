@@ -40,7 +40,7 @@ const SECONDARY_CONSUMERS: { type: SensorType; key: string; fit: CropFit }[] = [
 ];
 
 interface NvrFaceMatcher {
-  matchFaces(embeddings: number[][], embeddingModel: string): Promise<({ identity: string } | null)[]>;
+  matchFaces(embeddings: number[][], embeddingModel: string, matchThreshold: number): Promise<({ identity: string } | null)[]>;
 }
 
 export class SecondaryStage {
@@ -444,7 +444,7 @@ export class SecondaryStage {
 
     try {
       const embeddings = withEmbeddings.map((f) => f.embedding!);
-      const matches = await nvr.matchFaces(embeddings, embeddingModel);
+      const matches = await nvr.matchFaces(embeddings, embeddingModel, this.coordinator.detectionSettings.face?.matchThreshold ?? 0);
       for (let i = 0; i < withEmbeddings.length; i++) {
         if (matches[i]) {
           withEmbeddings[i].identity = matches[i]!.identity;

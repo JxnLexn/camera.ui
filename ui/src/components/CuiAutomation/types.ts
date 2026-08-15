@@ -539,6 +539,15 @@ export const CAMERA_CONTROL_PROPERTY_DEFINITIONS: CameraControlPropertyDefinitio
     defaultValue: '0.5',
   },
   {
+    key: 'detectionSettings.face.matchThreshold',
+    labelKey: 'components.automation_nodes.camera_prop_face_match_threshold',
+    inputType: 'number',
+    min: 0.3,
+    max: 0.95,
+    step: 0.05,
+    defaultValue: '0.55',
+  },
+  {
     key: 'detectionSettings.licensePlate.confidence',
     labelKey: 'components.automation_nodes.camera_prop_plate_confidence',
     inputType: 'number',

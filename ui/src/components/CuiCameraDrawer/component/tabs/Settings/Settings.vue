@@ -600,8 +600,8 @@
                 :max="1"
                 mode="decimal"
                 :use-grouping="false"
-                @value-change="(e) => (cameraForm.detectionSettings.face = { confidence: e ?? undefined })"
-                @input="(e) => (cameraForm.detectionSettings.face = { confidence: (e.value as any) ?? undefined })"
+                @value-change="(e) => (cameraForm.detectionSettings.face = { ...cameraForm.detectionSettings.face, confidence: e ?? undefined })"
+                @input="(e) => (cameraForm.detectionSettings.face = { ...cameraForm.detectionSettings.face, confidence: (e.value as any) ?? undefined })"
               />
             </InputGroup>
 
@@ -611,6 +611,40 @@
 
             <Message v-if="!errors.length" severity="secondary" variant="simple" size="small" class="cui-input-hint">{{
               $t('components.form.hint.face_confidence')
+            }}</Message>
+          </Field>
+
+          <Field
+            v-slot="{ errors }"
+            :model-value="cameraForm.detectionSettings.face?.matchThreshold"
+            name="detectionSettings.face.matchThreshold"
+            as="div"
+            class="flex flex-col field-gap"
+          >
+            <label for="detectionSettings.face.matchThreshold" class="cui-label">{{ $t('components.form.label.face_match_threshold') }}</label>
+            <InputGroup>
+              <InputNumber
+                :model-value="cameraForm.detectionSettings.face?.matchThreshold"
+                :invalid="errors.length > 0"
+                :loading="isLoading"
+                show-buttons
+                :step="0.05"
+                :max-fraction-digits="2"
+                :min="0.3"
+                :max="0.95"
+                mode="decimal"
+                :use-grouping="false"
+                @value-change="(e) => (cameraForm.detectionSettings.face = { ...cameraForm.detectionSettings.face, matchThreshold: e ?? undefined })"
+                @input="(e) => (cameraForm.detectionSettings.face = { ...cameraForm.detectionSettings.face, matchThreshold: (e.value as any) ?? undefined })"
+              />
+            </InputGroup>
+
+            <Transition name="fade">
+              <ErrorMessage name="detectionSettings.face.matchThreshold" class="cui-input-error" />
+            </Transition>
+
+            <Message v-if="!errors.length" severity="secondary" variant="simple" size="small" class="cui-input-hint">{{
+              $t('components.form.hint.face_match_threshold')
             }}</Message>
           </Field>
 

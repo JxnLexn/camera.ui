@@ -143,8 +143,9 @@ export const detectionSettingsSchema = zod.object({
   face: zod
     .object({
       confidence: zod.number().min(0, 'Minimum 0').max(1, 'Maximum 1').default(0.5),
+      matchThreshold: zod.number().min(0.3, 'Minimum 0.3').max(0.95, 'Maximum 0.95').default(0.55),
     })
-    .default({ confidence: 0.5 }),
+    .default({ confidence: 0.5, matchThreshold: 0.55 }),
   licensePlate: zod
     .object({
       confidence: zod.number().min(0, 'Minimum 0').max(1, 'Maximum 1').default(0.3),
@@ -504,6 +505,7 @@ export const createCameraBaseSchema = zod
       },
       face: {
         confidence: 0.5,
+        matchThreshold: 0.55,
       },
       licensePlate: {
         confidence: 0.3,
