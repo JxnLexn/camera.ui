@@ -31,6 +31,7 @@
 </template>
 
 <script setup lang="ts">
+import { defaultCameraSettings } from '@shared/types';
 import { Form } from 'vee-validate';
 
 import { CamerasQuery } from '@/api/routes/cameras.js';
@@ -71,77 +72,8 @@ async function onSave() {
   const cameraData = deepToRaw(cameraForm.value) as CameraFormModelInput;
 
   const newCameraData: CreateCameraInput = {
+    ...defaultCameraSettings(),
     ...cameraData,
-    type: cameraData.type,
-    isCloud: false,
-    zones: { privacyFallback: 'send', motion: [], object: [], privacy: [], alert: [], lines: [] },
-    detectionSettings: {
-      motion: {
-        resolution: 'medium',
-        timeout: 30,
-      },
-      object: {
-        confidence: 0.7,
-        suppressStatic: true,
-        timeout: 15,
-      },
-      audio: {
-        minDecibels: -40,
-        timeout: 30,
-        confidence: 0.7,
-      },
-      face: {
-        confidence: 0.5,
-      },
-      licensePlate: {
-        confidence: 0.9,
-        minLength: 4,
-      },
-      sensor: {
-        timeout: 30,
-        triggers: [],
-      },
-      cascadeDetection: true,
-      cascadeTimeout: 10,
-      snooze: false,
-    },
-    ptzAutotrack: {
-      enabled: false,
-      targetLabels: ['person'],
-      minConfidence: 0.5,
-      triggerDeadZone: 0.05,
-      trackingSpeed: 2,
-      leadMs: 1800,
-      panRate: 0.85,
-      returnToHome: false,
-      homeWaitMs: 10000,
-      minTargetSize: 0,
-      maxTargetSize: 0,
-    },
-    recordingSettings: {
-      enabled: true,
-      mode: 'continuous',
-      preBuffer: 10,
-      sources: ['high', 'mid', 'low'],
-    },
-    notificationSettings: {
-      enabled: true,
-      video: false,
-      audio: ['glass_break', 'scream', 'gunshot', 'alarm', 'siren', 'smoke_alarm'],
-      sensors: ['doorbell', 'contact', 'siren', 'security_system', 'smoke', 'gas', 'carbonMonoxide', 'heat', 'leak', 'cold', 'vibration', 'tamper', 'problem'],
-      cooldown: 30,
-      speed: 'balanced',
-    },
-    frameWorkerSettings: {
-      mainStreamAnalysis: false,
-    },
-    snapshotSettings: {
-      autoRefresh: false,
-      ttl: 50,
-      interval: 60,
-    },
-    plugins: cameraData.plugins || [],
-    assignments: cameraData.assignments || {},
     sources: cameraData.sources.map((input) => ({
       ...input,
       muted: input.muted ?? false,

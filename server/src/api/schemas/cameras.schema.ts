@@ -525,6 +525,15 @@ export const createCameraBaseSchema = zod
   })
   .strict();
 
+export function defaultCameraSettings(): Omit<zod.output<typeof createCameraBaseSchema>, '_id' | 'name' | 'sources' | 'nativeId' | 'pluginInfo'> {
+  const parsed = createCameraBaseSchema.parse({
+    name: 'default',
+    sources: [{ name: 'default', role: 'high-resolution', urls: ['rtsp://localhost'] }],
+  });
+  const { _id, name, sources, nativeId, pluginInfo, ...defaults } = parsed;
+  return defaults;
+}
+
 export const createCameraSchema = createCameraBaseSchema.transform((data) => {
   const allUrls = data.sources.flatMap((source) => source.urls);
 
