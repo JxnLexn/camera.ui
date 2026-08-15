@@ -62,6 +62,13 @@
                   @drop="(camera: DBCamera) => emit('drop', idx, camera)"
                   @remove="(camera: DBCamera) => emit('remove', camera)"
                 />
+
+                <div
+                  v-if="resizingIdx === idx"
+                  class="absolute top-2 left-2 z-20 px-2 py-1 rounded-md bg-black/75 text-white text-xs tabular-nums pointer-events-none select-none"
+                >
+                  {{ resizeSize.w }} &times; {{ resizeSize.h }}
+                </div>
               </div>
             </div>
           </div>
@@ -118,6 +125,9 @@ const fullScreenCard = ref<number>();
 const collapsingCard = ref<number>();
 
 let gsInstance: GridStack | null = null;
+
+const resizingIdx = ref<number>();
+const resizeSize = ref({ w: 0, h: 0 });
 
 const { isFullscreen, toggle: toggleFs } = useCuiFullscreen(viewRef, { mode: 'scroll' });
 const viewBounds = useElementSize(viewRef);
@@ -205,6 +215,14 @@ function onGridChange(): void {
   emitRearrange();
 }
 
+function trackResize(el: Element): void {
+  const idx = parseInt((el as any).gridstackNode?.id ?? '');
+  if (Number.isNaN(idx)) return;
+  const rect = el.getBoundingClientRect();
+  resizingIdx.value = idx;
+  resizeSize.value = { w: Math.round(rect.width), h: Math.round(rect.height) };
+}
+
 function initGrid(): void {
   if (!gridRef.value) return;
   const info = VIEW_GRID_INFO[viewSize.value];
@@ -224,7 +242,7 @@ function initGrid(): void {
       minRow: rows,
       cellHeight: cellH,
       margin: isRearrange ? 3 : 1,
-      float: false,
+      float: !isMobile,
       animate: false,
       staticGrid: !isRearrange,
       resizable: isMobile ? { handles: '' } : { handles: 'se' },
@@ -237,6 +255,11 @@ function initGrid(): void {
   if (!gsInstance) return;
 
   gsInstance.on('change', onGridChange);
+  gsInstance.on('resizestart', (_event, el) => trackResize(el));
+  gsInstance.on('resize', (_event, el) => trackResize(el));
+  gsInstance.on('resizestop', () => {
+    resizingIdx.value = undefined;
+  });
 
   // Enable animation after first paint so items don't slide on initial load
   requestAnimationFrame(() => gsInstance?.setAnimation(true));
@@ -244,6 +267,7 @@ function initGrid(): void {
 
 function destroyGrid(): void {
   if (!gsInstance) return;
+  resizingIdx.value = undefined;
   gsInstance.offAll();
   gsInstance.destroy(false);
   gsInstance = null;
@@ -582,7 +606,7 @@ defineExpose({
 
 .grid-stack:not(.grid-stack-static) > .grid-stack-item > .grid-stack-item-content {
   border-radius: 12px;
-  border: 2px solid transparent;
+  border: 2px solid rgba(255, 255, 255, 0.2);
   animation: rearrange-border-pulse 0.5s ease-out;
   transition:
     top 0.25s ease,
@@ -603,7 +627,7 @@ defineExpose({
   }
 
   100% {
-    border-color: transparent;
+    border-color: rgba(255, 255, 255, 0.2);
   }
 }
 

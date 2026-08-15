@@ -872,6 +872,7 @@ const {
   doubleClickZoom,
   expandableCard,
   flatCard,
+  cardFit,
   resizable,
   cardProps,
   routerLink,
@@ -1086,7 +1087,29 @@ const { sensor: faceSensor } = useFaceSensor(gatedCameraDevice);
 const { sensor: licensePlateSensor } = useLicensePlateSensor(gatedCameraDevice);
 const { sensors: classifierSensors } = useClassifierSensors(gatedCameraDevice);
 
+const isExpanded = computed(() => props.expanded ?? internalExpanded.value);
+
+const fillsCard = computed(() => cardFit.value !== 'aspect' && !isExpanded.value && !cameraStream.isFullscreen.value && zoomValue.value <= 1);
+
+const coverStyle = computed(() => {
+  if (!fillsCard.value || cardFit.value !== 'cover') return undefined;
+
+  const cw = playerContainer.width.value;
+  const ch = playerContainer.height.value;
+  const { w, h } = arParsed.value;
+  if (!cw || !ch) return undefined;
+
+  const scale = Math.max(cw / w, ch / h);
+  return { width: `${w * scale}px`, height: `${h * scale}px`, maxWidth: 'none', maxHeight: 'none', flexShrink: 0 };
+});
+
 const arStyle = computed(() => {
+  if (coverStyle.value) {
+    return coverStyle.value;
+  }
+  if (fillsCard.value) {
+    return { width: '100%', height: '100%' };
+  }
   return {
     height: cameraStream.isFullscreen.value || zoomValue.value > 1 ? 'auto' : '100%',
     aspectRatio: cameraAspectRatio.value,
@@ -1106,7 +1129,6 @@ const cameraZones = computed(() => cameraDevice.value?.camera.value?.zones?.obje
 const cameraLines = computed(() => cameraDevice.value?.camera.value?.zones?.lines ?? []);
 const cameraPrivacyZones = computed(() => cameraDevice.value?.camera.value?.zones?.privacy ?? []);
 
-const isExpanded = computed(() => props.expanded ?? internalExpanded.value);
 const bboxClasses = computed<DetectionLabel[]>(() => (bboxEnabled.value ? [] : ['__none__' as DetectionLabel]));
 const gridSearchActive = computed(() => !!gridSearch?.active.value);
 
@@ -1189,6 +1211,7 @@ const resizableContainerHeight = computed(() => {
 });
 
 const videoContainerStyle = computed(() => {
+  if (fillsCard.value) return { height: '100%' };
   if (cameraStream.isFullscreen.value || !resizable.value) return {};
   const height = resizableContainerHeight.value;
   if (!height) return {};
@@ -1234,6 +1257,11 @@ const zoomMinimapStyle = computed(() => {
 });
 
 const videoWrapperStyle = computed(() => {
+  if (fillsCard.value)
+    return {
+      width: '100%',
+      height: '100%',
+    };
   if (!resizable.value)
     return {
       aspectRatio: cameraAspectRatio.value,
@@ -1324,7 +1352,7 @@ const cardPt = computed<PassThrough<CardPassThroughOptions>>(() => {
   const basePt: PassThrough<CardPassThroughOptions> = {
     body: { class: 'w-full h-full p-0 overflow-hidden justify-center', style: { backgroundColor: cardBackgroundColor.value } },
     root: { class: {} },
-    content: { class: 'flex flex-col justify-center' },
+    content: { class: fillsCard.value ? 'flex flex-col justify-center h-full' : 'flex flex-col justify-center' },
   };
 
   if (flatCard.value) {

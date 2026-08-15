@@ -48,6 +48,18 @@
         </CuiTopNavbarItem>
 
         <CuiTopNavbarItem
+          v-if="!editMode && currentView && rearrangeMode && !smBreakpoint"
+          v-tooltip.bottom="{ value: $t('views.camview.card_fit') }"
+          :active="cardFit !== 'aspect'"
+          :menu-open="cardFitMenuRef?.isOpen"
+          @click="(e) => cardFitMenuRef?.toggleMenu(e)"
+        >
+          <template #icon>
+            <i-mdi:arrow-expand-all width="100%" height="100%" />
+          </template>
+        </CuiTopNavbarItem>
+
+        <CuiTopNavbarItem
           v-if="!editMode && currentView"
           v-tooltip.bottom="{ value: timelineState ? $t('components.form.tooltip.hide_timeline') : $t('components.form.tooltip.show_timeline') }"
           :active="timelineState"
@@ -264,6 +276,18 @@
     />
 
     <CuiMenu
+      ref="cardFitMenuRef"
+      :items="cardFitItems"
+      :popover="{
+        pt: {
+          content: {
+            class: 'p-0! rounded-xl! overflow-hidden!',
+          },
+        },
+      }"
+    />
+
+    <CuiMenu
       ref="newViewMenuRef"
       :items="addViewItems"
       :popover="{
@@ -312,7 +336,7 @@ import type { MenuItem } from '@/components/CuiMenu/types.js';
 import type { CameraActivityMode, VideoStreamingMode } from '@camera.ui/browser';
 import type { CuiTimelineLocale } from '@camera.ui/nvr';
 import type { StreamingRole } from '@camera.ui/sdk';
-import type { DBCamera, DBCamviewLayout, DBCamviewLayoutCamera, DBCamviewViewSize } from '@shared/types';
+import type { DBCamera, DBCamviewCardFit, DBCamviewLayout, DBCamviewLayoutCamera, DBCamviewViewSize } from '@shared/types';
 import type { ButtonProps } from 'primevue';
 import type { HTMLAttributes } from 'vue';
 
@@ -348,10 +372,12 @@ const { data: views, isLoading: viewsLoading } = usersQuery.getViewsQuery(user.v
 const { mutate: deleteView, isPending: removeViewPending } = usersQuery.removeViewQuery();
 const { mutateAsync: addView, isPending: addViewPending } = usersQuery.createViewQuery();
 const { mutateAsync: patchView, isPending: patchViewPending } = usersQuery.patchViewQuery();
+const { mutateAsync: patchViewSilent } = usersQuery.patchViewQuerySilent();
 
 const { navbarWidth, navbarLeft } = toRefs(props);
 const menuRef = useTemplateRef<InstanceType<typeof CuiMenu>>('menuRef');
 const newViewMenuRef = useTemplateRef<InstanceType<typeof CuiMenu>>('newViewMenuRef');
+const cardFitMenuRef = useTemplateRef<InstanceType<typeof CuiMenu>>('cardFitMenuRef');
 const viewDndRef = useTemplateRef<InstanceType<typeof CuiCameraViewDnD>>('viewDndRef');
 const viewForm = ref<DBCamviewLayout>({} as DBCamviewLayout);
 const editView = ref(false);
@@ -365,6 +391,7 @@ const activityMode = ref<CameraActivityMode>('always-on');
 const sourceRole = ref<StreamingRole>('low-resolution');
 const streamingMode = ref<VideoStreamingMode>('webrtc');
 const cards = ref<CardState[]>([]);
+const cardFitOverride = ref<DBCamviewCardFit>();
 const expandedCameraId = ref<string | null>(null);
 const cameraCardModels = reactive<CuiCameraCardModels>({
   sourceRole: sourceRole.value,
@@ -386,14 +413,26 @@ const timelineLocaleSettings = computed<CuiTimelineLocale>(() => {
   };
 });
 
+const cardFit = computed<DBCamviewCardFit>(() => cardFitOverride.value ?? currentView.value?.cardFit ?? 'aspect');
+
+const cardFitItems = computed<MenuItem[]>(() =>
+  (['aspect', 'fill', 'cover'] as const).map((fit) => ({
+    label: t(`views.camview.card_fit_${fit}`),
+    description: t(`views.camview.card_fit_${fit}_info`),
+    active: cardFit.value === fit,
+    onClick: () => setCardFit(fit),
+  })),
+);
+
 const cameraCardProps = computed<Partial<CuiCameraCardProps>>(() => ({
   doubleClickZoom: false,
   flatCard: true,
+  cardFit: cardFit.value,
   cameraNameOverlay: true,
   control: true,
   toolbar: false,
   expandableCard: (currentView.value?.cameras?.length ?? 0) > 1,
-  detectionIndicatorOverlay: true,
+  detectionIndicatorOverlay: !rearrangeMode.value,
   boundingBoxOverlay: false,
   cardClickAction: 'expand',
   viewTransition: true,
@@ -725,6 +764,20 @@ function saveView(view: DBCamviewLayout): void {
   editView.value = false;
 }
 
+async function setCardFit(fit: DBCamviewCardFit): Promise<void> {
+  const view = currentView.value;
+  const username = user.value?.username;
+  if (!view || !username || cardFit.value === fit) return;
+
+  cardFitOverride.value = fit;
+
+  try {
+    await patchViewSilent({ username, viewid: view._id, viewData: { cardFit: fit } });
+  } catch {
+    cardFitOverride.value = undefined;
+  }
+}
+
 function toggleFullscreen() {
   viewDndRef.value?.toggleFullscreen();
 }
@@ -768,6 +821,13 @@ async function toggleIntercom(state: boolean) {
 watch(timelineState, (active) => {
   if (active) timelineAnimating.value = true;
 });
+
+watch(
+  () => currentView.value?._id,
+  () => {
+    cardFitOverride.value = undefined;
+  },
+);
 
 watch(
   [viewSize, currentView, cameras, editMode, uiSettings, smBreakpoint],

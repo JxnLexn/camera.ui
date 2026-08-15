@@ -7,6 +7,7 @@ import {
   camviewViewTypeSchema,
   sensorShortcutTypeSchema,
   userLanguageSchema,
+  camviewCardFitSchema,
   userPreferencesCamviewViewsLayoutCameras,
 } from '../schemas/users.schema.js';
 
@@ -18,6 +19,7 @@ const dbCamviewLayoutSchema = zod.object({
   viewSize: camviewViewSizeSchema,
   cameras: userPreferencesCamviewViewsLayoutCameras.array().default([]),
   type: camviewViewTypeSchema,
+  cardFit: camviewCardFitSchema.optional(),
 });
 
 const dbCameraShortcutSchema = zod.object({

@@ -262,6 +262,8 @@ export interface DBInstancesConfig {
 
 export type DBCamviewViewSize = 1 | 4 | 6 | 7 | 9 | 10 | 12 | 13 | 15 | 16 | 20 | 26;
 
+export type DBCamviewCardFit = 'aspect' | 'fill' | 'cover';
+
 export type CamviewSettingsLayoutMode = 'dnd' | 'view';
 
 export interface DBCamviewLayout {
@@ -270,6 +272,7 @@ export interface DBCamviewLayout {
   viewSize: DBCamviewViewSize;
   cameras: DBCamviewLayoutCamera[];
   type: CamviewSettingsLayoutMode;
+  cardFit?: DBCamviewCardFit;
 }
 
 export interface DBCamviewLayoutCamera {

@@ -38,6 +38,8 @@ export const camviewViewSizeSchema = zod.union([
 
 export const camviewViewTypeSchema = zod.union([zod.literal('dnd'), zod.literal('view')]);
 
+export const camviewCardFitSchema = zod.enum(['aspect', 'fill', 'cover']);
+
 export const userPreferencesCamviewViewsLayout = zod.object({
   _id: zod
     .string()
@@ -47,6 +49,7 @@ export const userPreferencesCamviewViewsLayout = zod.object({
   viewSize: camviewViewSizeSchema,
   cameras: userPreferencesCamviewViewsLayoutCameras.array(),
   type: camviewViewTypeSchema,
+  cardFit: camviewCardFitSchema.optional(),
 });
 
 export const patchPreferencesCamviewViewsLayout = zod
@@ -54,6 +57,7 @@ export const patchPreferencesCamviewViewsLayout = zod
     name: zod.string().trim().min(1, 'Layout name is required'),
     viewSize: camviewViewSizeSchema,
     cameras: userPreferencesCamviewViewsLayoutCameras.array(),
+    cardFit: camviewCardFitSchema,
   })
   .partial()
   .optional();

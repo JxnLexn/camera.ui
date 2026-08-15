@@ -1,7 +1,7 @@
 import type { CameraActivityMode, VideoStreamingMode } from '@camera.ui/browser';
 import type { EventDescription } from '@camera.ui/nvr';
 import type { StreamingRole } from '@camera.ui/sdk';
-import type { DBCamera } from '@shared/types';
+import type { DBCamera, DBCamviewCardFit } from '@shared/types';
 import type { CardProps } from 'primevue';
 import type { HTMLAttributes } from 'vue';
 
@@ -30,6 +30,7 @@ export interface CuiCameraCardProps {
   expandableCard?: boolean;
   expanded?: boolean;
   flatCard?: boolean;
+  cardFit?: DBCamviewCardFit;
   resizable?: boolean;
   cardProps?: CardProps;
   routerLink?: string;
@@ -101,6 +102,7 @@ export const CAMERA_CARD_DEFAULTS: InferDefaults<CuiCameraCardProps> = {
   doubleClickZoom: true,
   expandableCard: false,
   flatCard: false,
+  cardFit: 'aspect',
   resizable: false,
   pipToggleButton: false,
   cardClickAction: 'redirect',

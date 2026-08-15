@@ -312,6 +312,7 @@ declare module 'vue' {
     'IMdi:alertCircle': typeof import('~icons/mdi/alert-circle')['default']
     'IMdi:alertCircleOutline': typeof import('~icons/mdi/alert-circle-outline')['default']
     'IMdi:alertOutline': typeof import('~icons/mdi/alert-outline')['default']
+    'IMdi:arrowExpandAll': typeof import('~icons/mdi/arrow-expand-all')['default']
     'IMdi:arrowLeft': typeof import('~icons/mdi/arrow-left')['default']
     'IMdi:autoFix': typeof import('~icons/mdi/auto-fix')['default']
     'IMdi:backupRestore': typeof import('~icons/mdi/backup-restore')['default']
