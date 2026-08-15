@@ -187,7 +187,7 @@
             @mousedown="onContentMouseDown"
             @wheel="onContentWheel"
           >
-            <div :data-zoomable-content="randomId" class="relative h-full min-w-0" :style="videoWrapperStyle">
+            <div ref="videoBoxRef" :data-zoomable-content="randomId" class="relative h-full min-w-0" :style="videoWrapperStyle">
               <div class="absolute inset-0 pointer-events-none" :class="showPtz || timelineState ? 'z-3' : 'z-7'">
                 <CuiShortcuts
                   v-if="!inStandby && !isDisabled && showShortcuts"
@@ -938,6 +938,7 @@ const detectionCanvasRef = useTemplateRef<InstanceType<typeof CuiBBoxPlayground>
 const playerContainerRef = useTemplateRef('playerContainerRef');
 const nativePipMode = ref(false);
 const arBoxRef = useTemplateRef<HTMLElement>('arBoxRef');
+const videoBoxRef = useTemplateRef<HTMLElement>('videoBoxRef');
 const speedPopoverRef = useTemplateRef<InstanceType<typeof Popover>>('speedPopoverRef');
 const morePopoverRef = useTemplateRef<InstanceType<typeof Popover>>('morePopoverRef');
 
@@ -2323,6 +2324,7 @@ onBeforeUnmount(() => {
 
 defineExpose({
   activeResolution,
+  videoBoxRef,
   showControl,
   micActive,
   streamHasIntercom,

@@ -12,8 +12,8 @@
           }"
         >
           <div class="relative w-full flex flex-col items-center justify-center">
-            <div class="absolute top-0 left-0 right-0 bottom-0">
-              <div ref="playgroundContainerRef" class="playground-container flex w-full h-full min-w-0">
+            <div class="absolute top-0 left-0 right-0 bottom-0 flex items-center justify-center pointer-events-none">
+              <div ref="playgroundContainerRef" class="playground-container flex min-w-0 pointer-events-auto" :style="playgroundStyle">
                 <section class="playground w-full h-full" :class="playgroundClasses" @click="addHandle">
                   <div class="sandbox w-full h-full">
                     <div class="handles">
@@ -613,7 +613,7 @@ const dialogRefProps = inject<DialogRefProps>('dialogRefProps')!;
 const { mutateAsync: patchZoneConfig, isPending: patchZoneConfigLoading } = camerasQuery.patchZoneConfigQuery();
 
 const { cameraName, zones } = toRefs(props);
-const cameraCardRef = useTemplateRef('cameraCardRef');
+const cameraCardRef = useTemplateRef<{ videoBoxRef: HTMLElement | null }>('cameraCardRef');
 const containerRef = useTemplateRef('container');
 const draggablesRef = useTemplateRef<HTMLElement[]>('draggablesRef');
 const outsideRef = useTemplateRef('outsideRef');
@@ -647,6 +647,7 @@ let draggingLine: { lineIndex: number; pointIndex: number } | null = null;
 
 const containerSize = useElementSize(containerRef);
 const playgroundSize = useElementSize(playgroundContainerRef);
+const videoSize = useElementSize(() => cameraCardRef.value?.videoBoxRef ?? null);
 
 const zoneNameSchema = cameraCreatePatchObjectZones.element.shape.name;
 const lineNameSchema = cameraCreatePatchLines.element.shape.name;
@@ -716,6 +717,17 @@ const selectedLineNameError = computed(() => {
 
 const contentWidth = computed(() => Math.max(0, playgroundSize.width.value - 20));
 const contentHeight = computed(() => Math.max(0, playgroundSize.height.value - 20));
+
+const playgroundStyle = computed(() => {
+  const width = videoSize.width.value;
+  const height = videoSize.height.value;
+
+  if (!width || !height) {
+    return { width: '100%', height: '100%' };
+  }
+
+  return { width: `${width + 20}px`, height: `${height + 20}px` };
+});
 
 const tabOptions = computed(() => [
   { label: t('components.zone_editor.tab_motion'), value: 'motion' as const },
@@ -1504,8 +1516,8 @@ defineExpose({
 <style lang="scss" scoped>
 .playground-container {
   justify-content: center;
-  flex: 1;
   position: relative;
+  flex-shrink: 0;
   z-index: 100;
   user-select: none;
   -webkit-tap-highlight-color: transparent;
@@ -1646,14 +1658,18 @@ defineExpose({
 
   .handle {
     border-radius: 50%;
-    box-shadow: #fff inset 0 0 0 10px;
+    box-shadow:
+      #fff inset 0 0 0 10px,
+      0 0 0 2px rgba(0, 0, 0, 0.65);
     opacity: 0.8;
     transition: opacity 0.25s;
 
     &.is-dragging,
     &.is-pointer-down {
       z-index: 100;
-      box-shadow: #d0d0d0 inset 0 0 0 10px;
+      box-shadow:
+        #d0d0d0 inset 0 0 0 10px,
+        0 0 0 2px rgba(0, 0, 0, 0.65);
       cursor: none;
       transition: box-shadow 0s;
     }
