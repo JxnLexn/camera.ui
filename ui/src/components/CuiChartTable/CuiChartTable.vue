@@ -40,7 +40,7 @@
                     <Badge v-tooltip="{ value: header.tooltip?.(data) }" :style="{ background: header.color?.(data) ?? 'gray' }" />
                   </div>
 
-                  <div v-else-if="isHeaderCategory(header)" v-tooltip="{ value: header.tooltip?.(data) }" v-bind="header.props">
+                  <div v-else-if="isHeaderCategory(header)" v-tooltip="{ value: header.tooltip?.(data) }" v-bind="header.props" class="w-fit">
                     <Chip v-if="header.asChip" v-bind="header.chipProps">
                       <span>{{ header.altName ? header.altName : typeof header.field === 'string' ? data[header.field] : header.field(data) }}</span>
                       <span v-if="header.suffix">{{ header.suffix }}</span>
@@ -101,6 +101,10 @@
             :template="TABLE_PAGINATOR_TEMPLATE"
             @page="goToPage($event.page + 1)"
           />
+        </div>
+
+        <div v-if="$slots.actions" class="flex flex-wrap items-end justify-between gap-2 pt-4">
+          <slot name="actions" />
         </div>
       </template>
     </Card>
@@ -230,9 +234,7 @@ function getChartOptions(header: TableHeaderChart, data: any): ChartOptions<'bar
 
 .cui-chart-table td {
   white-space: nowrap;
-  border-color: var(--p-datatable-body-cell-border-color);
-  border-style: solid;
-  border-width: 0 0 1px 0;
+  border-bottom: 1px solid var(--p-datatable-body-cell-border-color);
 }
 
 .cui-chart-table td > div,
