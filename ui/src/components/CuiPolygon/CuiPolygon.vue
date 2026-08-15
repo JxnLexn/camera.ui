@@ -35,7 +35,7 @@
       :d="convertToSvgPath(zone.points.map((coord: [number, number]) => coord))"
       :class="{ dash: zone.type === 'intersect' }"
       :style="{
-        fill: zone.filter === 'exclude' ? 'transparent' : `${zone.color}4D`,
+        fill: `${zone.color}4D`,
         stroke: zone.color,
         'stroke-width': '2',
       }"

@@ -62,7 +62,6 @@ export const motionZoneSchema = zod
   .object({
     name: zod.string().trim().min(1, 'Zone Name is required'),
     points: pointsSchema.array().min(3, 'At least 3 points are required'),
-    filter: zod.union([zod.literal('include'), zod.literal('exclude')]).default('include'),
     color: zoneColorSchema,
   })
   .array();
@@ -72,7 +71,6 @@ export const objectZoneSchema = zod
     name: zod.string().trim().min(1, 'Zone Name is required'),
     points: pointsSchema.array().min(3, 'At least 3 points are required'),
     type: zod.union([zod.literal('intersect'), zod.literal('contain')]).default('intersect'),
-    filter: zod.union([zod.literal('include'), zod.literal('exclude')]).default('include'),
     labels: zoneLabelSchema.array(),
     color: zoneColorSchema,
   })

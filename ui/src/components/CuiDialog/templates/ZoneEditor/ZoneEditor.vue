@@ -461,26 +461,6 @@
                 </InputGroup>
               </div>
 
-              <div v-if="tabHasFilter" class="flex flex-col field-gap w-full">
-                <label :for="`zone[${selectedZone}].filter`" class="cui-label">{{ $t('components.zone_editor.zone_filter') }}</label>
-                <InputGroup>
-                  <Select
-                    :model-value="filteredZone(selectedZone)?.filter ?? 'include'"
-                    :options="filterOptions"
-                    :loading="isLoading"
-                    :disabled="selectedZone < 0"
-                    option-label="label"
-                    option-value="value"
-                    @value-change="
-                      (e) => {
-                        const zone = filteredZone(selectedZone);
-                        if (zone) zone.filter = e;
-                      }
-                    "
-                  />
-                </InputGroup>
-              </div>
-
               <div v-if="activeTab === 'object' || activeTab === 'alert'" class="flex flex-col field-gap w-full">
                 <label :for="`zone[${selectedZone}].match`" class="cui-label">{{ $t('components.zone_editor.zone_match') }}</label>
                 <InputGroup>
@@ -690,26 +670,18 @@ const tabHasLabels = computed(() => activeTab.value === 'object' || activeTab.va
 const undetectedAlertLabels = computed(() => {
   if (activeTab.value !== 'alert' || selectedZone.value < 0) return [];
 
-  const include = objectZones.value.filter((zone) => zone.filter !== 'exclude');
+  const include = objectZones.value;
   if (include.length === 0 || include.some((zone) => zone.labels.length === 0)) return [];
 
   const detected = new Set(include.flatMap((zone) => zone.labels));
   return (alertZones.value[selectedZone.value]?.labels ?? []).filter((label) => !detected.has(label));
 });
 
-const tabHasFilter = computed(() => activeTab.value === 'motion' || activeTab.value === 'object');
-
 const polygonDashed = computed(() => activeTab.value === 'alert' || activeTab.value === 'motion');
 
 function labelledZone(index: number): ObjectZone | AlertZone | undefined {
   if (activeTab.value === 'object') return objectZones.value[index];
   if (activeTab.value === 'alert') return alertZones.value[index];
-  return undefined;
-}
-
-function filteredZone(index: number): MotionZone | ObjectZone | undefined {
-  if (activeTab.value === 'motion') return motionZones.value[index];
-  if (activeTab.value === 'object') return objectZones.value[index];
   return undefined;
 }
 
@@ -722,8 +694,7 @@ function polygonStyle(zone: EditorPolygon): Record<string, string> {
   if (!('color' in zone)) {
     return { fill: '#000', stroke: '#000', 'stroke-width': '2' };
   }
-  const excluded = 'filter' in zone && zone.filter === 'exclude';
-  return { fill: excluded ? 'transparent' : `${zone.color}4D`, stroke: zone.color, 'stroke-width': '2' };
+  return { fill: `${zone.color}4D`, stroke: zone.color, 'stroke-width': '2' };
 }
 
 const selectedZoneNameError = computed(() => {
@@ -830,11 +801,6 @@ const privacyFallbackOptions = computed(() => [
 const privacyDropOptions = computed(() => [
   { label: t('components.zone_editor.privacy_drop_on'), value: true },
   { label: t('components.zone_editor.privacy_drop_off'), value: false },
-]);
-
-const filterOptions = computed(() => [
-  { label: t('components.zone_editor.filter_include'), value: 'include' as const },
-  { label: t('components.zone_editor.filter_exclude'), value: 'exclude' as const },
 ]);
 
 const isLoading = computed(() => Boolean(dialogRefProps.loading?.value || patchZoneConfigLoading.value));
@@ -999,9 +965,9 @@ function addZone(points: [number, number][]): void {
   const stamp = Date.now();
 
   if (activeTab.value === 'motion') {
-    motionZones.value.push({ name: `motion-${stamp}`, points: [...points], filter: 'include', color });
+    motionZones.value.push({ name: `motion-${stamp}`, points: [...points], color });
   } else if (activeTab.value === 'object') {
-    objectZones.value.push({ name: `object-${stamp}`, points: [...points], filter: 'include', type: 'intersect', labels: [], color });
+    objectZones.value.push({ name: `object-${stamp}`, points: [...points], type: 'intersect', labels: [], color });
   } else if (activeTab.value === 'privacy') {
     privacyZones.value.push({ name: `privacy-${stamp}`, points: [...points], dropDetections: true });
   } else {

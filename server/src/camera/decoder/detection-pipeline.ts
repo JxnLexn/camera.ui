@@ -115,7 +115,7 @@ function toRustZones(zones: ZoneConfig): RustDetectionZone[] {
   for (const zone of zones.motion) {
     out.push({
       labels: ['motion'],
-      filter: zone.filter as RustDetectionZone['filter'],
+      filter: 'include' as RustDetectionZone['filter'],
       matchType: 'intersect' as RustDetectionZone['matchType'],
       isPrivacyMask: false,
       points: zone.points.map(([x, y]) => [x, y]),
@@ -124,7 +124,7 @@ function toRustZones(zones: ZoneConfig): RustDetectionZone[] {
   for (const zone of zones.object) {
     out.push({
       labels: zone.labels,
-      filter: zone.filter as RustDetectionZone['filter'],
+      filter: 'include' as RustDetectionZone['filter'],
       matchType: zone.type as RustDetectionZone['matchType'],
       isPrivacyMask: false,
       points: zone.points.map(([x, y]) => [x, y]),
@@ -135,13 +135,12 @@ function toRustZones(zones: ZoneConfig): RustDetectionZone[] {
 }
 
 function objectWhitelist(zones: ObjectZone[]): Set<string> | null {
-  const include = zones.filter((zone) => zone.filter !== 'exclude');
-  if (include.length === 0) return null;
+  if (zones.length === 0) return null;
   // a zone that lists no label constrains where every object counts, not which ones
-  if (include.some((zone) => zone.labels.length === 0)) return null;
+  if (zones.some((zone) => zone.labels.length === 0)) return null;
 
   const labels = new Set<string>();
-  for (const zone of include) {
+  for (const zone of zones) {
     for (const label of zone.labels) labels.add(label.toLowerCase());
   }
   return labels;

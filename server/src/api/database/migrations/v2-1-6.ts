@@ -1,11 +1,13 @@
-import type { CameraZones, DetectionLabel, MotionZone, ObjectZone, Point, PrivacyZone, ZoneFilter, ZoneType } from '@camera.ui/sdk';
+import type { CameraZones, DetectionLabel, MotionZone, ObjectZone, Point, PrivacyZone, ZoneType } from '@camera.ui/sdk';
 import type { Migration, MigrationContext } from './types.js';
+
+type LegacyZoneFilter = 'include' | 'exclude';
 
 interface LegacyZone {
   name: string;
   points: Point[];
   type: ZoneType;
-  filter: ZoneFilter;
+  filter: LegacyZoneFilter;
   labels: DetectionLabel[];
   isPrivacyMask: boolean;
   color: string;
@@ -33,7 +35,7 @@ function splitZones(zones: LegacyZone[]): { motion: MotionZone[]; object: Object
     const objectLabels = labels.filter((label: string) => label !== 'motion');
 
     if (all || labels.includes('motion')) {
-      motion.push({ name: zone.name, points: zone.points, filter: zone.filter, color: zone.color });
+      motion.push({ name: zone.name, points: zone.points, filter: zone.filter, color: zone.color } as MotionZone & { filter: LegacyZoneFilter });
     }
     if (all || objectLabels.length > 0) {
       object.push({
@@ -43,7 +45,7 @@ function splitZones(zones: LegacyZone[]): { motion: MotionZone[]; object: Object
         filter: zone.filter,
         labels: all ? [] : objectLabels,
         color: zone.color,
-      });
+      } as ObjectZone & { filter: LegacyZoneFilter });
     }
   }
 
