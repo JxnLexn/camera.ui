@@ -38,6 +38,7 @@ export interface ContentBaseProps {
   dialogContentClass?: any;
   dialogContentStyle?: any;
   stayActive?: boolean;
+  awaitConfirm?: boolean;
   fullscreen?: boolean;
   draggable?: boolean;
   blockDragOnSelectors?: string[];
@@ -374,6 +375,7 @@ export function useCuiDialog() {
           dialogContentClass: data.dialogContentClass ?? undefined,
           dialogContentStyle: data.dialogContentStyle ?? undefined,
           stayActive: data.stayActive ?? false,
+          awaitConfirm: data.awaitConfirm ?? false,
           fullscreen: data.fullscreen ?? false,
           contentText: (data as any).contentText ?? undefined,
           src: (data as any).src ?? undefined,
@@ -393,7 +395,7 @@ export function useCuiDialog() {
         if (opt?.data?.status === 'confirm') {
           const { status, ...data } = opt.data;
           onConfirm?.(data?.data ?? data);
-        } else {
+        } else if (opt?.data?.status !== 'settled') {
           onCancel?.();
         }
 

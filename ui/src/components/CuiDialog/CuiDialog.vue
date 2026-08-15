@@ -131,6 +131,7 @@ const {
   cancelText,
   confirmText,
   stayActive,
+  awaitConfirm,
   src,
   title,
   fullscreen,
@@ -269,7 +270,10 @@ async function onConfirm() {
       return;
     }
 
-    if (!stayActive?.value) {
+    if (awaitConfirm?.value) {
+      await dialogRef.value.options.onConfirm?.(data);
+      dialogRef.value.close({ status: 'settled', data });
+    } else if (!stayActive?.value) {
       dialogRef.value.close({ status: 'confirm', data });
     } else {
       dialogRef.value.options.onConfirm?.(data);
