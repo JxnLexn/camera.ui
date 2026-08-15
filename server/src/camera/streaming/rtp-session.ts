@@ -84,7 +84,7 @@ export class RtpSession extends SubscribedPublic implements RtpSessionInterface 
       input: {
         options: {
           ...config?.input?.options,
-          user_agent: 'camera.ui RTPSession',
+          user_agent: 'camera.ui rtp session',
         },
       },
     };

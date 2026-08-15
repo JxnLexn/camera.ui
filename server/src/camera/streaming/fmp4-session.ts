@@ -56,7 +56,7 @@ export class Fmp4Session extends SubscribedPublic implements Fmp4SessionInterfac
       input: {
         options: {
           ...config?.input?.options,
-          user_agent: 'camera.ui Fmp4Session',
+          user_agent: 'camera.ui fmp4 session',
         },
       },
     };
