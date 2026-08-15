@@ -35,7 +35,6 @@ import {
   SHARES_ID,
   TOKENS_ID,
   USERS_ID,
-  VIRTUAL_SENSORS_ID,
   WORKER_STATE_ID,
 } from './constants.js';
 import { MigrationRunner } from './migration.js';
@@ -73,7 +72,6 @@ import type {
   DBSettings,
   DBShare,
   DBUser,
-  DBVirtualSensor,
   DBWorkerState,
 } from './types.js';
 
@@ -100,8 +98,6 @@ export class Database {
   public automationStateDB!: DB<unknown, string>;
   public sensorsDB!: DB<DBSensor, string>;
   public sensorHistoryDB!: DB<DBSensorHistoryEntry, string>;
-  // pre-standalone store, read only by the v2.1.0 migration
-  public virtualSensorsDB!: DB<DBVirtualSensor, string>;
   public notificationsDB!: DB<DBNotificationSettings, string>;
   public notificationHistoryDB!: DB<DBNotificationHistory, string>;
   public downloadsDB!: DB<DBDownloadEntry, string>;
@@ -150,7 +146,6 @@ export class Database {
     this.automationStateDB = this.lowdb.openDB({ name: AUTOMATION_STATE_ID });
     this.sensorsDB = this.lowdb.openDB({ name: SENSORS_ID });
     this.sensorHistoryDB = this.lowdb.openDB({ name: SENSOR_HISTORY_ID });
-    this.virtualSensorsDB = this.lowdb.openDB({ name: VIRTUAL_SENSORS_ID });
     this.notificationsDB = this.lowdb.openDB({ name: NOTIFICATIONS_ID });
     this.notificationHistoryDB = this.lowdb.openDB({ name: NOTIFICATION_HISTORY_ID });
     this.downloadsDB = this.lowdb.openDB({ name: DOWNLOADS_ID });
@@ -315,7 +310,7 @@ export class Database {
     const settingsDB = this.settingsDB.get('settings');
     const oldVersion = settingsDB?.version ?? Database.VERSION;
 
-    if (semver.lt(oldVersion, '2.0.0')) {
+    if (semver.lt(oldVersion, '2.1.1')) {
       this.logger.attention('Database version is too old! camera.ui will reset the database and restart!');
 
       this.configService.reset();

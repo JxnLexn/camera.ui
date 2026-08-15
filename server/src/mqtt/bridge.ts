@@ -7,7 +7,6 @@ import { buildCameraDiscovery, buildSensorDiscovery } from './ha-discovery.js';
 
 import type { DetectionEvent, DetectionEventType } from '@camera.ui/sdk';
 import type { CameraUiAPI } from '../api.js';
-import type { Database } from '../api/database/index.js';
 import type { CameraController } from '../camera/controller.js';
 import type {
   CameraEventPayload,
@@ -212,39 +211,6 @@ export class MqttBridge {
     for (const sensor of this.registry.getAllSensors()) {
       if (this.isHaExportable(sensor.data)) this.publishSensorState(sensor.data);
     }
-
-    this.sweepLegacyRetained();
-  }
-
-  // one-time broker cleanup of pre-standalone camera-scoped sensor topics,
-  // keep while pre-2.0.23 installs can upgrade straight to current
-  private sweepLegacyRetained(): void {
-    const dbs = container.resolve<Database>('dbs');
-    const record = dbs.mqttDB.get('mqtt');
-    if (!record || record.legacySensorSweepDone) return;
-
-    const haPrefix = record.haDiscovery.prefix;
-    // camera entity configs that must survive under cameraui_<cameraId>
-    const keepObjectIds = new Set(['status', 'motion', 'snapshot']);
-
-    const unsubscribers = [
-      this.manager.subscribeTrigger(`${this.manager.topics.prefix}/camera/+/sensor/#`, (topic) => {
-        this.manager.publish(topic, '', { retain: true });
-      }),
-      this.manager.subscribeTrigger(`${haPrefix}/+/+/+/config`, (topic) => {
-        const rel = topic.slice(haPrefix.length + 1).split('/');
-        if (rel.length !== 4) return;
-        const [, nodeId, objectId] = rel;
-        if (!nodeId.startsWith('cameraui_') || nodeId.startsWith('cameraui_sensor_')) return;
-        if (keepObjectIds.has(objectId) || objectId.startsWith('detection_')) return;
-        this.manager.publish(topic, '', { retain: true });
-      }),
-    ];
-
-    setTimeout(() => {
-      for (const unsubscribe of unsubscribers) unsubscribe();
-      dbs.commit(dbs.mqttDB, 'mqtt', (current) => (current ? { ...current, legacySensorSweepDone: true } : undefined)).catch(() => {});
-    }, 10_000).unref();
   }
 
   private get bus(): InternalEventBus {

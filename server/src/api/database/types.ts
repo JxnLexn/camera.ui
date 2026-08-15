@@ -139,8 +139,6 @@ export interface DBMqtt {
     enabled: boolean;
     prefix: string;
   };
-  // one-time broker cleanup of pre-standalone camera-scoped sensor topics
-  legacySensorSweepDone: boolean;
 }
 
 export interface ServerOAuthCredentials {
@@ -362,18 +360,6 @@ export interface DBSensorHistoryEntry {
   property: string;
   value: string | number | boolean | null;
   timestamp: number;
-}
-
-// pre-standalone shape, read only by the v2.1.0 migration
-export interface DBVirtualSensor {
-  readonly _id: string;
-  cameraId: string;
-  type: SensorType;
-  name: string;
-  displayName: string;
-  state?: Record<string, unknown>;
-  createdAt: number;
-  updatedAt: number;
 }
 
 export interface DBDownloadEntry {

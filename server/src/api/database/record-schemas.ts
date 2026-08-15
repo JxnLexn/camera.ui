@@ -183,8 +183,6 @@ export const dbMqttSchema = zod.object({
       prefix: zod.string().default('homeassistant'),
     })
     .default({ enabled: false, prefix: 'homeassistant' }),
-  // guards mqtt sweepLegacyRetained, keep while pre-2.0.23 installs can upgrade straight to current
-  legacySensorSweepDone: zod.boolean().default(false),
 });
 
 export const dbCloudSchema = zod.object({

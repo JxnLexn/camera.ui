@@ -15,7 +15,6 @@ export const INSTANCES_ID = 'instances';
 export const AUTOMATIONS_ID = 'automations';
 export const SENSORS_ID = 'sensors';
 export const SENSOR_HISTORY_ID = 'sensor-history';
-export const VIRTUAL_SENSORS_ID = 'virtual-sensors';
 export const NOTIFICATIONS_ID = 'notifications';
 export const NOTIFICATION_HISTORY_ID = 'notification-history';
 export const DOWNLOADS_ID = 'downloads';
