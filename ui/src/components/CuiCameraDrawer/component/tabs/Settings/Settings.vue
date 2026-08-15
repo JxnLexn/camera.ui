@@ -881,6 +881,183 @@
       </AccordionContent>
     </AccordionPanel>
 
+    <AccordionPanel value="notifications">
+      <AccordionHeader class="px-0">
+        <span class="text-color font-normal">{{ $t('components.camera_options.notifications') }}</span>
+      </AccordionHeader>
+      <AccordionContent :pt="{ content: { class: 'px-0' } }">
+        <div class="w-full flex flex-col gap-6">
+          <Message severity="secondary" variant="simple" size="small" class="cui-input-hint">
+            {{ $t('components.camera_options.notifications_hint') }}
+          </Message>
+          <Message v-if="!hasNvrPlugin" severity="secondary" variant="simple" size="small" class="cui-banner cui-banner-warn">
+            <i-mdi:information-outline class="w-4 h-4 shrink-0 inline-block mr-1" />
+            {{ $t('components.camera_options.recording_requires') }}
+          </Message>
+
+          <Field
+            v-slot="{ field, errors }"
+            :model-value="cameraForm.notificationSettings?.enabled ?? true"
+            :value="true"
+            :unchecked-value="false"
+            type="checkbox"
+            name="notificationSettings.enabled"
+            as="div"
+            class="flex flex-col field-gap cui-toggle-switch"
+          >
+            <div class="flex items-center gap-4">
+              <div class="flex flex-col field-switch-gap">
+                <label for="notificationSettings.enabled" class="cui-label-switch">{{ $t('components.form.label.notify_enabled') }}</label>
+                <Message severity="secondary" variant="simple" size="small" class="cui-input-switch-hint">{{ $t('components.form.hint.notify_enabled') }}</Message>
+                <Transition name="fade">
+                  <ErrorMessage name="notificationSettings.enabled" class="cui-input-switch-error" />
+                </Transition>
+              </div>
+              <ToggleSwitch
+                :model-value="cameraForm.notificationSettings?.enabled ?? true"
+                v-bind="field"
+                :invalid="errors.length > 0"
+                :loading="isLoading"
+                class="ml-auto shrink-0"
+                @value-change="(e) => updateNotificationSettings({ enabled: e })"
+              />
+            </div>
+          </Field>
+
+          <template v-if="cameraForm.notificationSettings?.enabled ?? true">
+            <Field
+              v-slot="{ field, errors }"
+              :model-value="cameraForm.notificationSettings?.video ?? false"
+              :value="true"
+              :unchecked-value="false"
+              type="checkbox"
+              name="notificationSettings.video"
+              as="div"
+              class="flex flex-col field-gap cui-toggle-switch"
+            >
+              <div class="flex items-center gap-4">
+                <div class="flex flex-col field-switch-gap">
+                  <label for="notificationSettings.video" class="cui-label-switch">{{ $t('components.form.label.notify_video') }}</label>
+                  <Message severity="secondary" variant="simple" size="small" class="cui-input-switch-hint">{{ $t('components.form.hint.notify_video') }}</Message>
+                  <Transition name="fade">
+                    <ErrorMessage name="notificationSettings.video" class="cui-input-switch-error" />
+                  </Transition>
+                </div>
+                <ToggleSwitch
+                  :model-value="cameraForm.notificationSettings?.video ?? false"
+                  v-bind="field"
+                  :invalid="errors.length > 0"
+                  :loading="isLoading"
+                  class="ml-auto shrink-0"
+                  @value-change="(e) => updateNotificationSettings({ video: e })"
+                />
+              </div>
+            </Field>
+
+            <Field v-slot="{ errors }" :model-value="cameraForm.notificationSettings?.audio" name="notificationSettings.audio" as="div" class="flex flex-col field-gap">
+              <label for="notificationSettings.audio" class="cui-label">{{ $t('components.form.label.notify_audio') }}</label>
+              <MultiSelect
+                :model-value="cameraForm.notificationSettings?.audio ?? []"
+                :invalid="errors.length > 0"
+                :options="notifyAudioOptions"
+                :max-selected-labels="2"
+                :show-toggle-all="false"
+                option-label="label"
+                option-value="value"
+                filter
+                class="w-full min-w-0"
+                @update:model-value="(e) => updateNotificationSettings({ audio: e })"
+              />
+              <Transition name="fade">
+                <ErrorMessage name="notificationSettings.audio" class="cui-input-error" />
+              </Transition>
+              <Message v-if="!errors.length" severity="secondary" variant="simple" size="small" class="cui-input-hint">{{
+                $t('components.form.hint.notify_audio')
+              }}</Message>
+            </Field>
+
+            <Field
+              v-slot="{ errors }"
+              :model-value="cameraForm.notificationSettings?.sensors"
+              name="notificationSettings.sensors"
+              as="div"
+              class="flex flex-col field-gap"
+            >
+              <label for="notificationSettings.sensors" class="cui-label">{{ $t('components.form.label.notify_sensors') }}</label>
+              <MultiSelect
+                :model-value="cameraForm.notificationSettings?.sensors ?? []"
+                :invalid="errors.length > 0"
+                :options="notifySensorOptions"
+                :max-selected-labels="2"
+                :show-toggle-all="false"
+                option-label="label"
+                option-value="value"
+                filter
+                class="w-full min-w-0"
+                @update:model-value="(e) => updateNotificationSettings({ sensors: e })"
+              />
+              <Transition name="fade">
+                <ErrorMessage name="notificationSettings.sensors" class="cui-input-error" />
+              </Transition>
+              <Message v-if="!errors.length" severity="secondary" variant="simple" size="small" class="cui-input-hint">{{
+                $t('components.form.hint.notify_sensors')
+              }}</Message>
+            </Field>
+
+            <Field v-slot="{ errors }" :model-value="cameraForm.notificationSettings?.speed" name="notificationSettings.speed" as="div" class="flex flex-col field-gap">
+              <label for="notificationSettings.speed" class="cui-label">{{ $t('components.form.label.notify_speed') }}</label>
+              <InputGroup>
+                <Select
+                  :model-value="cameraForm.notificationSettings?.speed ?? 'balanced'"
+                  :options="notifySpeeds"
+                  :invalid="errors.length > 0"
+                  :loading="isLoading"
+                  type="text"
+                  @value-change="(e) => updateNotificationSettings({ speed: e })"
+                />
+              </InputGroup>
+              <Transition name="fade">
+                <ErrorMessage name="notificationSettings.speed" class="cui-input-error" />
+              </Transition>
+              <Message v-if="!errors.length" severity="secondary" variant="simple" size="small" class="cui-input-hint">{{
+                $t('components.form.hint.notify_speed')
+              }}</Message>
+            </Field>
+
+            <Field
+              v-slot="{ errors }"
+              :model-value="cameraForm.notificationSettings?.cooldown"
+              name="notificationSettings.cooldown"
+              as="div"
+              class="flex flex-col field-gap"
+            >
+              <label for="notificationSettings.cooldown" class="cui-label">{{ $t('components.form.label.notify_cooldown') }}</label>
+              <InputGroup>
+                <InputNumber
+                  :model-value="cameraForm.notificationSettings?.cooldown ?? 30"
+                  :invalid="errors.length > 0"
+                  :loading="isLoading"
+                  show-buttons
+                  :step="5"
+                  :min="0"
+                  :max="600"
+                  :use-grouping="false"
+                  @value-change="(e) => updateNotificationSettings({ cooldown: e ?? 30 })"
+                  @input="(e) => updateNotificationSettings({ cooldown: (e.value as any) ?? 30 })"
+                />
+              </InputGroup>
+              <Transition name="fade">
+                <ErrorMessage name="notificationSettings.cooldown" class="cui-input-error" />
+              </Transition>
+              <Message v-if="!errors.length" severity="secondary" variant="simple" size="small" class="cui-input-hint">{{
+                $t('components.form.hint.notify_cooldown')
+              }}</Message>
+            </Field>
+          </template>
+        </div>
+      </AccordionContent>
+    </AccordionPanel>
+
     <AccordionPanel value="ptzAutotrack">
       <AccordionHeader class="px-0">
         <span class="text-color font-normal">{{ $t('components.camera_options.ptz_autotrack') }}</span>
@@ -1488,10 +1665,11 @@
 
 <script setup lang="ts">
 import { useSensors } from '@camera.ui/browser';
-import { PluginInterface, SensorType } from '@camera.ui/sdk';
+import { BASE_AUDIO_LABELS, PluginInterface, SensorType } from '@camera.ui/sdk';
 import { ErrorMessage, Field } from 'vee-validate';
 
 import { CamerasQuery } from '@/api/routes/cameras.js';
+import { audioLabelKey, NOTIFY_SENSOR_TYPES, sensorLabelKey } from '@/common/eventLabels.js';
 import AspectRatioDialog from '@/components/CuiDialog/templates/AspectRatio/AspectRatio.vue';
 import CreateRoomDialog from '@/components/CuiDialog/templates/CreateRoom/CreateRoom.vue';
 import ZoneEditorDialog from '@/components/CuiDialog/templates/ZoneEditor/ZoneEditor.vue';
@@ -1501,10 +1679,12 @@ import type { ZoneEditorProps } from '@/components/CuiDialog/templates/ZoneEdito
 import type { VideoStreamingMode } from '@camera.ui/browser';
 import type {
   CameraAspectRatio,
+  CameraNotificationSettings,
   CameraRecordingSettings,
   CameraType,
   FrameWorkerDecoderHardware,
   MotionResolution,
+  NotificationSpeed,
   RecordingMode,
   RecordingSource,
   StreamingRole,
@@ -1550,6 +1730,14 @@ const aspectRatios = ref<CameraAspectRatio[]>(['16:9', '9:16', '8:3', '4:3', '1:
 const motionResolutions = ref<MotionResolution[]>(['low', 'medium', 'high']);
 const recordingModes = ref<RecordingMode[]>(['continuous', 'event', 'adhoc']);
 const recordingSources = ref<RecordingSource[]>(['high', 'mid', 'low']);
+const notifySpeeds = ref<NotificationSpeed[]>(['immediate', 'balanced', 'best']);
+
+const notifyAudioOptions = computed(() => [
+  ...BASE_AUDIO_LABELS.filter((label) => label !== 'doorbell').map((label) => ({ label: t(audioLabelKey(label)), value: label as string })),
+  { label: t('components.camera_options.notify_audio_other'), value: 'other' },
+]);
+
+const notifySensorOptions = computed(() => NOTIFY_SENSOR_TYPES.map((type) => ({ label: t(sensorLabelKey(type)), value: type })));
 
 const decoderHardwareOptions: { label: string; value: FrameWorkerDecoderHardware }[] = [
   { label: 'Auto', value: 'auto' },
@@ -1701,6 +1889,18 @@ function setWorkerDecoderHardware(hardware: FrameWorkerDecoderHardware | 'inheri
 function setWorkerDecoderDevice(device: string) {
   const hardware = cameraForm.value.frameWorkerSettings.workerDecoder?.hardware ?? 'auto';
   cameraForm.value.frameWorkerSettings.workerDecoder = { hardware, device };
+}
+
+function updateNotificationSettings(patch: Partial<CameraNotificationSettings>) {
+  const current: CameraNotificationSettings = cameraForm.value.notificationSettings ?? {
+    enabled: true,
+    video: false,
+    audio: [],
+    sensors: [],
+    cooldown: 30,
+    speed: 'balanced',
+  };
+  cameraForm.value.notificationSettings = { ...current, ...patch };
 }
 
 function updateRecordingSettings(patch: Partial<CameraRecordingSettings>) {

@@ -233,43 +233,12 @@ import { BASE_AUDIO_LABELS, DETECTION_ATTRIBUTES, DETECTION_LABELS, EVENT_TRIGGE
 import IconChevronDown from '~icons/tabler/chevron-down';
 import IconChevronUp from '~icons/tabler/chevron-up';
 
+import { attributeLabelKey, audioLabelKey, sensorLabelKey } from '@/common/eventLabels.js';
 import { resolveEventIcons } from '@/utils/eventIcons.js';
 
 import type { RecordingsFilterSidebarEmits, RecordingsFilterSidebarProps, RecordingsFilterState } from './types.js';
 
 const SIDEBAR_WIDTH = 288;
-
-const AUDIO_LABEL_I18N: Record<string, string> = {
-  doorbell: 'views.recordings.audio_doorbell',
-  glass_break: 'views.recordings.audio_glass_break',
-  siren: 'views.recordings.audio_siren',
-  speaking: 'views.recordings.audio_speaking',
-  gunshot: 'views.recordings.audio_gunshot',
-  dog_bark: 'views.recordings.audio_dog_bark',
-  baby_cry: 'views.recordings.audio_baby_cry',
-  alarm: 'views.recordings.audio_alarm',
-  scream: 'views.recordings.audio_scream',
-  cat: 'views.recordings.audio_cat',
-  car_alarm: 'views.recordings.audio_car_alarm',
-  smoke_alarm: 'views.recordings.audio_smoke_alarm',
-};
-
-const ATTRIBUTE_I18N: Record<string, string> = {
-  face: 'views.recordings.attr_face',
-  license_plate: 'views.recordings.attr_license_plate',
-};
-
-const SENSOR_EVENT_LABELS: Record<string, string> = {
-  motion: 'views.recordings.sensor_motion',
-  audio: 'views.recordings.sensor_audio',
-  contact: 'views.recordings.sensor_contact',
-  doorbell: 'views.recordings.sensor_doorbell',
-  switch: 'views.recordings.sensor_switch',
-  light: 'views.recordings.sensor_light',
-  siren: 'views.recordings.sensor_siren',
-  security_system: 'views.recordings.sensor_security_system',
-  'line-crossing': 'views.recordings.sensor_line_crossing',
-};
 
 const NON_FILTER_LABELS = new Set(['motion', 'audio']);
 
@@ -337,7 +306,7 @@ const otherOption = computed(() => ({
 
 const sensorEventOptions = computed(() =>
   EVENT_TRIGGER_TYPES.map((value) => ({
-    label: t(SENSOR_EVENT_LABELS[value] ?? `views.recordings.sensor_${value}`),
+    label: t(sensorLabelKey(value)),
     value: value as string,
     icon: sensorEventIcons[value] ?? GENERIC_ICON,
   })),
@@ -345,7 +314,7 @@ const sensorEventOptions = computed(() =>
 
 const audioLabelOptions = computed(() =>
   BASE_AUDIO_LABELS.map((label) => ({
-    label: t(AUDIO_LABEL_I18N[label] ?? label),
+    label: t(audioLabelKey(label)),
     value: label,
     icon: DETECTION_ICONS[label] ?? GENERIC_ICON,
   })),
@@ -353,7 +322,7 @@ const audioLabelOptions = computed(() =>
 
 const attributeOptions = computed(() =>
   DETECTION_ATTRIBUTES.map((attr) => ({
-    label: t(ATTRIBUTE_I18N[attr] ?? `views.recordings.attr_${attr}`),
+    label: t(attributeLabelKey(attr)),
     value: attr as string,
     icon: DETECTION_ICONS[attr] ?? GENERIC_ICON,
   })),

@@ -124,6 +124,14 @@ async function onSave() {
       preBuffer: 10,
       sources: ['high', 'mid', 'low'],
     },
+    notificationSettings: {
+      enabled: true,
+      video: false,
+      audio: ['glass_break', 'scream', 'gunshot', 'alarm', 'siren', 'smoke_alarm'],
+      sensors: ['doorbell', 'contact', 'siren', 'security_system', 'smoke', 'gas', 'carbonMonoxide', 'heat', 'leak', 'cold', 'vibration', 'tamper', 'problem'],
+      cooldown: 30,
+      speed: 'balanced',
+    },
     frameWorkerSettings: {
       mainStreamAnalysis: false,
     },

@@ -353,8 +353,8 @@
                 </label>
                 <InputGroup>
                   <MultiSelect
-                    :model-value="labelledZone(selectedZone)?.labels"
-                    :options="spatialLabelOptions"
+                    :model-value="activeTab === 'alert' ? alertLabelModel : labelledZone(selectedZone)?.labels"
+                    :options="activeTab === 'alert' ? alertLabelOptions : spatialLabelOptions"
                     :loading="isLoading"
                     :disabled="selectedZone < 0"
                     :max-selected-labels="2"
@@ -367,6 +367,10 @@
                     type="text"
                     @value-change="
                       (e) => {
+                        if (activeTab === 'alert') {
+                          setAlertLabels(e);
+                          return;
+                        }
                         const zone = labelledZone(selectedZone);
                         if (zone) zone.labels = e ?? [];
                       }
@@ -379,6 +383,51 @@
                     {{ $t('components.zone_editor.alert_conflict', { labels: undetectedAlertLabels.join(', ') }) }}
                   </p>
                 </Transition>
+              </div>
+
+              <div v-if="activeTab === 'alert' && alertZones[selectedZone]?.faces" class="flex flex-col field-gap w-full">
+                <label :for="`zone[${selectedZone}].faces`" class="cui-label">{{ $t('components.zone_editor.alert_faces') }}</label>
+                <InputGroup>
+                  <MultiSelect
+                    :model-value="alertZones[selectedZone]?.faces ?? []"
+                    :options="faceOptions"
+                    :loading="isLoading"
+                    :max-selected-labels="2"
+                    :show-toggle-all="false"
+                    option-label="label"
+                    option-value="value"
+                    filter
+                    show-clear
+                    type="text"
+                    @value-change="
+                      (e) => {
+                        const zone = alertZones[selectedZone];
+                        if (zone) zone.faces = e ?? [];
+                      }
+                    "
+                  />
+                </InputGroup>
+                <p class="cui-input-hint text-pretty">{{ $t('components.zone_editor.alert_faces_info') }}</p>
+              </div>
+
+              <div v-if="activeTab === 'alert' && alertZones[selectedZone]?.plates" class="flex flex-col field-gap w-full">
+                <label :for="`zone[${selectedZone}].plates`" class="cui-label">{{ $t('components.zone_editor.alert_plates') }}</label>
+                <InputGroup>
+                  <AutoComplete
+                    :model-value="alertZones[selectedZone]?.plates ?? []"
+                    multiple
+                    :typeahead="false"
+                    :placeholder="$t('components.zone_editor.alert_plates_placeholder')"
+                    class="w-full"
+                    @update:model-value="
+                      (e) => {
+                        const zone = alertZones[selectedZone];
+                        if (zone) zone.plates = (e as string[]) ?? [];
+                      }
+                    "
+                  />
+                </InputGroup>
+                <p class="cui-input-hint text-pretty">{{ $t('components.zone_editor.alert_plates_info') }}</p>
               </div>
 
               <div v-if="activeTab === 'privacy'" class="flex flex-col field-gap w-full">
@@ -556,6 +605,7 @@
 </template>
 
 <script setup lang="ts">
+import { useFaceStore } from '@camera.ui/nvr';
 import { DETECTION_LABELS } from '@camera.ui/sdk';
 import Draggabilly from 'draggabilly';
 
@@ -565,7 +615,7 @@ import { cameraCreatePatchLines, cameraCreatePatchObjectZones } from '@/schemas/
 import { NON_TRACKED_LABELS } from './types.js';
 
 import type { DialogRefProps } from '@/composables/useCuiDialog.js';
-import type { AlertZone, DetectionLine, LineDirection, MotionZone, ObjectZone, Point, PrivacyFallback, PrivacyZone } from '@camera.ui/sdk';
+import type { AlertZone, DetectionLabel, DetectionLine, LineDirection, MotionZone, ObjectZone, Point, PrivacyFallback, PrivacyZone } from '@camera.ui/sdk';
 import type { ComputedRef } from 'vue';
 import type { CoordsPosition, EditorPolygon, LabelGroup, ZoneEditorProps, ZoneEditorTab } from './types.js';
 
@@ -575,6 +625,7 @@ const props = defineProps<ZoneEditorProps>();
 
 const toast = useCuiToast();
 const { t } = useI18n();
+const faceStore = useFaceStore();
 
 const dialogRefProps = inject<DialogRefProps>('dialogRefProps')!;
 
@@ -619,12 +670,19 @@ const playgroundSize = useElementSize(playgroundContainerRef);
 const zoneNameSchema = cameraCreatePatchObjectZones.element.shape.name;
 const lineNameSchema = cameraCreatePatchLines.element.shape.name;
 
-const polygons = computed(() => {
-  if (activeTab.value === 'motion') return motionZones.value;
-  if (activeTab.value === 'object') return objectZones.value;
-  if (activeTab.value === 'privacy') return privacyZones.value;
-  return alertZones.value;
-}) as ComputedRef<EditorPolygon[]>;
+const ALERT_FACES = '__faces__';
+const ALERT_PLATES = '__plates__';
+const FACE_ANY_KNOWN = '__known__';
+const FACE_UNKNOWN = 'unknown';
+
+function polygonsFor(tab: ZoneEditorTab): EditorPolygon[] {
+  if (tab === 'motion') return motionZones.value as EditorPolygon[];
+  if (tab === 'object') return objectZones.value as EditorPolygon[];
+  if (tab === 'privacy') return privacyZones.value as EditorPolygon[];
+  return alertZones.value as EditorPolygon[];
+}
+
+const polygons = computed(() => polygonsFor(activeTab.value)) as ComputedRef<EditorPolygon[]>;
 
 const tabHasLabels = computed(() => activeTab.value === 'object' || activeTab.value === 'alert');
 
@@ -638,7 +696,9 @@ const undetectedAlertLabels = computed(() => {
   const detected = new Set(include.flatMap((zone) => zone.labels));
   return (alertZones.value[selectedZone.value]?.labels ?? []).filter((label) => !detected.has(label));
 });
+
 const tabHasFilter = computed(() => activeTab.value === 'motion' || activeTab.value === 'object');
+
 const polygonDashed = computed(() => activeTab.value === 'alert' || activeTab.value === 'motion');
 
 function labelledZone(index: number): ObjectZone | AlertZone | undefined {
@@ -682,8 +742,6 @@ const selectedLineNameError = computed(() => {
   return result.success ? '' : (result.error.issues[0]?.message ?? '');
 });
 
-// The actual interactive area is the playground minus 10px padding on each side.
-// Coordinate math must use these dimensions (not playgroundSize which includes padding).
 const contentWidth = computed(() => Math.max(0, playgroundSize.width.value - 20));
 const contentHeight = computed(() => Math.max(0, playgroundSize.height.value - 20));
 
@@ -695,8 +753,6 @@ const tabOptions = computed(() => [
   { label: t('components.zone_editor.tab_lines'), value: 'lines' as const },
 ]);
 
-// motion has its own tab and audio has no geometry, so neither can be picked
-// on a zone or a line
 const spatialLabelOptions = computed<LabelGroup[]>(() => {
   const filteredLabels = DETECTION_LABELS.filter((label) => !NON_TRACKED_LABELS.includes(label));
 
@@ -709,6 +765,32 @@ const spatialLabelOptions = computed<LabelGroup[]>(() => {
     },
   ];
 });
+
+const alertLabelOptions = computed<LabelGroup[]>(() => [
+  ...spatialLabelOptions.value,
+  {
+    label: t('components.zone_editor.alert_attributes'),
+    items: [
+      { label: t('components.zone_editor.alert_faces'), value: ALERT_FACES },
+      { label: t('components.zone_editor.alert_plates'), value: ALERT_PLATES },
+    ],
+  },
+]);
+
+const alertLabelModel = computed<string[]>(() => {
+  const zone = alertZones.value[selectedZone.value];
+  if (!zone) return [];
+  const selected: string[] = [...zone.labels];
+  if (zone.faces) selected.push(ALERT_FACES);
+  if (zone.plates) selected.push(ALERT_PLATES);
+  return selected;
+});
+
+const faceOptions = computed(() => [
+  { label: t('components.zone_editor.alert_face_unknown'), value: FACE_UNKNOWN },
+  { label: t('components.zone_editor.alert_face_any_known'), value: FACE_ANY_KNOWN },
+  ...faceStore.knownFaces.value.map((face) => ({ label: face.name, value: face.name })),
+]);
 
 const alertMatchOptions = computed(() => [
   { label: t('components.zone_editor.match_anchor'), value: 'anchor' as const },
@@ -742,16 +824,6 @@ const filterOptions = computed(() => [
   { label: t('components.zone_editor.filter_exclude'), value: 'exclude' as const },
 ]);
 
-function setMatch(value: 'anchor' | 'intersect' | 'contain'): void {
-  if (activeTab.value === 'alert') {
-    const zone = alertZones.value[selectedZone.value];
-    if (zone) zone.match = value;
-    return;
-  }
-  const zone = objectZones.value[selectedZone.value];
-  if (zone && value !== 'anchor') zone.type = value;
-}
-
 const isLoading = computed(() => Boolean(dialogRefProps.loading?.value || patchZoneConfigLoading.value));
 
 const playgroundClasses = computed(() => {
@@ -767,6 +839,33 @@ const playgroundClasses = computed(() => {
 
   return classes.join(' ');
 });
+
+function setMatch(value: 'anchor' | 'intersect' | 'contain'): void {
+  if (activeTab.value === 'alert') {
+    const zone = alertZones.value[selectedZone.value];
+    if (zone) zone.match = value;
+    return;
+  }
+  const zone = objectZones.value[selectedZone.value];
+  if (zone && value !== 'anchor') zone.type = value;
+}
+
+function setAlertLabels(next: string[] | undefined): void {
+  const zone = alertZones.value[selectedZone.value];
+  if (!zone) return;
+
+  const chosen = next ?? [];
+  const wantsFaces = chosen.includes(ALERT_FACES);
+  const wantsPlates = chosen.includes(ALERT_PLATES);
+  const labels = chosen.filter((value) => value !== ALERT_FACES && value !== ALERT_PLATES) as DetectionLabel[];
+
+  if (wantsFaces && !labels.includes('person')) labels.push('person');
+  if (wantsPlates && !labels.includes('vehicle')) labels.push('vehicle');
+
+  zone.labels = labels;
+  zone.faces = wantsFaces ? (zone.faces ?? []) : undefined;
+  zone.plates = wantsPlates ? (zone.plates ?? []) : undefined;
+}
 
 function updateCoordinatesFromZones() {
   if (!polygons.value) return;
@@ -911,6 +1010,11 @@ function addHandle(e: MouseEvent): void {
     currentZone.value = polygons.value.length - 1;
   }
 
+  if (!polygons.value[zoneIndex]) {
+    currentZone.value = undefined;
+    return;
+  }
+
   polygons.value[zoneIndex].points.push([x, y]);
 
   // Refresh coords to ensure draggies are correctly displayed
@@ -960,8 +1064,6 @@ function startCustomizing(): void {
     return;
   }
 
-  // a new zone covers everything: "applies to the whole camera" is the common
-  // wish and costs no drawing, dragging the corners narrows it
   addZone(WHOLE_IMAGE);
   const zoneIndex = polygons.value.length - 1;
   selectedZone.value = zoneIndex;
@@ -971,7 +1073,7 @@ function startCustomizing(): void {
   nextTick(() => draggablesRef.value?.forEach((el) => makeDraggable(el)));
 }
 
-function finishCustomizing(inEdit: boolean): void {
+function finishCustomizing(inEdit: boolean, tab: ZoneEditorTab = activeTab.value): void {
   if (currentZone.value === undefined) {
     customizing.value = false;
     return;
@@ -979,20 +1081,20 @@ function finishCustomizing(inEdit: boolean): void {
 
   customizing.value = inEdit || false;
   const zoneIndex = currentZone.value;
+  currentZone.value = undefined;
 
-  if (!polygons.value[zoneIndex] || !polygons.value[zoneIndex].points) {
+  const zones = polygonsFor(tab);
+  if (!zones[zoneIndex]?.points) {
     return;
   }
 
-  if (polygons.value[zoneIndex].points.length < 3) {
-    polygons.value.splice(zoneIndex, 1);
+  if (zones[zoneIndex].points.length < 3) {
+    zones.splice(zoneIndex, 1);
     updateCoordinatesFromZones();
-  } else {
+  } else if (tab === activeTab.value) {
     draggablesRef.value?.forEach((el) => makeDraggable(el));
     selectedZone.value = zoneIndex;
   }
-
-  currentZone.value = undefined;
 }
 
 function editZone(): void {
@@ -1003,6 +1105,11 @@ function editZone(): void {
 function removeZone(): void {
   if (selectedZone.value === -1 || !polygons.value.length) {
     return;
+  }
+
+  if (currentZone.value === selectedZone.value) {
+    currentZone.value = undefined;
+    customizing.value = false;
   }
 
   polygons.value.splice(selectedZone.value, 1);
@@ -1386,7 +1493,7 @@ watch(
     }
 
     if (previous && previous !== tab) {
-      finishCustomizing(false);
+      finishCustomizing(false, previous);
       updateCoordinatesFromZones();
       nextTick(() => {
         resetHandles();

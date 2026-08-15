@@ -26,6 +26,26 @@ export const DEFAULT_RECORDING_SETTINGS: zod.infer<typeof recordingSettingsSchem
   sources: ['high', 'mid', 'low'],
 };
 
+export const notificationSettingsSchema = zod
+  .object({
+    enabled: zod.boolean().default(true),
+    video: zod.boolean().default(false),
+    audio: zod.string().trim().min(1).array().default([]),
+    sensors: zod.string().trim().min(1).array().default([]),
+    cooldown: zod.number().min(0).max(600).default(30),
+    speed: zod.enum(['immediate', 'balanced', 'best']).default('balanced'),
+  })
+  .strict();
+
+export const DEFAULT_NOTIFICATION_SETTINGS: zod.infer<typeof notificationSettingsSchema> = {
+  enabled: true,
+  video: false,
+  audio: ['glass_break', 'scream', 'gunshot', 'alarm', 'siren', 'smoke_alarm'],
+  sensors: ['doorbell', 'contact', 'siren', 'security_system', 'smoke', 'gas', 'carbonMonoxide', 'heat', 'leak', 'cold', 'vibration', 'tamper', 'problem'],
+  cooldown: 30,
+  speed: 'balanced',
+};
+
 export const detectionLabelSchema = zod.string().trim().min(1, 'Detection label is required') as zod.ZodType<DetectionLabel>;
 
 export const pointsSchema = zod.tuple([zod.number(), zod.number()]);
@@ -69,6 +89,8 @@ export const alertZoneSchema = zod
     name: zod.string().trim().min(1, 'Zone Name is required'),
     points: pointsSchema.array().min(3, 'At least 3 points are required'),
     labels: detectionLabelSchema.array(),
+    faces: zod.string().trim().min(1).array().optional(),
+    plates: zod.string().trim().min(1).array().optional(),
     match: zod.union([zod.literal('anchor'), zod.literal('intersect'), zod.literal('contain')]).default('contain'),
     color: zod
       .string()
@@ -496,6 +518,7 @@ export const createCameraBaseSchema = zod
     }),
     ptzAutotrack: ptzAutotrackSettingsSchema.default(DEFAULT_PTZ_AUTOTRACK_SETTINGS),
     recordingSettings: recordingSettingsSchema.default(DEFAULT_RECORDING_SETTINGS),
+    notificationSettings: notificationSettingsSchema.default(DEFAULT_NOTIFICATION_SETTINGS),
     frameWorkerSettings: frameWorkerSettingsSchema.default({
       mainStreamAnalysis: false,
     }),
@@ -560,6 +583,7 @@ export const patchCameraSchema = zod
     detectionSettings: detectionSettingsSchema.partial().optional(),
     ptzAutotrack: ptzAutotrackSettingsSchema.partial().optional(),
     recordingSettings: recordingSettingsSchema.partial().optional(),
+    notificationSettings: notificationSettingsSchema.partial().optional(),
     frameWorkerSettings: frameWorkerSettingsSchema.partial().optional(),
   })
   .strict()

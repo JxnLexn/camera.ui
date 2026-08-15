@@ -646,6 +646,7 @@ export class CameraController extends CameraDevice implements CameraDeviceInterf
             'detectionSettings',
             'ptzAutotrack',
             'recordingSettings',
+            'notificationSettings',
             'zones',
             'frameWorkerSettings',
             'interfaceSettings',

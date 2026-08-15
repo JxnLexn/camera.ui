@@ -13,6 +13,7 @@ import type {
   CameraImplementation,
   CameraInformation,
   CameraPluginInfo,
+  CameraNotificationSettings,
   CameraRecordingSettings,
   CameraSource,
   CameraType,
@@ -132,6 +133,10 @@ export abstract class CameraDevice extends Subscribed implements CameraDeviceInt
 
   get recordingSettings(): CameraRecordingSettings {
     return structuredClone(this.cameraSubject.getValue().recordingSettings);
+  }
+
+  get notificationSettings(): CameraNotificationSettings {
+    return structuredClone(this.cameraSubject.getValue().notificationSettings);
   }
 
   get frameWorkerSettings(): CameraFrameWorkerSettings {
