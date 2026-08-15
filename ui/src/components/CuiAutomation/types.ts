@@ -545,6 +545,15 @@ export const CAMERA_CONTROL_PROPERTY_DEFINITIONS: CameraControlPropertyDefinitio
     min: 0,
     max: 1,
     step: 0.05,
+    defaultValue: '0.3',
+  },
+  {
+    key: 'detectionSettings.licensePlate.ocrConfidence',
+    labelKey: 'components.automation_nodes.camera_prop_plate_ocr_confidence',
+    inputType: 'number',
+    min: 0,
+    max: 1,
+    step: 0.05,
     defaultValue: '0.9',
   },
   {

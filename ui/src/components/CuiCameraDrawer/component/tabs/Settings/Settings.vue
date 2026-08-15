@@ -652,6 +652,42 @@
 
           <Field
             v-slot="{ errors }"
+            :model-value="cameraForm.detectionSettings.licensePlate?.ocrConfidence"
+            name="detectionSettings.licensePlate.ocrConfidence"
+            as="div"
+            class="flex flex-col field-gap"
+          >
+            <label for="detectionSettings.licensePlate.ocrConfidence" class="cui-label">{{ $t('components.form.label.plate_ocr_confidence') }}</label>
+            <InputGroup>
+              <InputNumber
+                :model-value="cameraForm.detectionSettings.licensePlate?.ocrConfidence"
+                :invalid="errors.length > 0"
+                :loading="isLoading"
+                show-buttons
+                :step="0.01"
+                :max-fraction-digits="2"
+                :min="0"
+                :max="1"
+                mode="decimal"
+                :use-grouping="false"
+                @value-change="(e) => (cameraForm.detectionSettings.licensePlate = { ...cameraForm.detectionSettings.licensePlate, ocrConfidence: e ?? undefined })"
+                @input="
+                  (e) => (cameraForm.detectionSettings.licensePlate = { ...cameraForm.detectionSettings.licensePlate, ocrConfidence: (e.value as any) ?? undefined })
+                "
+              />
+            </InputGroup>
+
+            <Transition name="fade">
+              <ErrorMessage name="detectionSettings.licensePlate.ocrConfidence" class="cui-input-error" />
+            </Transition>
+
+            <Message v-if="!errors.length" severity="secondary" variant="simple" size="small" class="cui-input-hint">{{
+              $t('components.form.hint.plate_ocr_confidence')
+            }}</Message>
+          </Field>
+
+          <Field
+            v-slot="{ errors }"
             :model-value="cameraForm.detectionSettings.licensePlate?.minLength"
             name="detectionSettings.licensePlate.minLength"
             as="div"

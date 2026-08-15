@@ -91,7 +91,7 @@ export class SecondaryStage {
     }
 
     if (results.licensePlate?.detections) {
-      const plateMinConfidence = settings.licensePlate?.confidence ?? 0;
+      const plateMinConfidence = settings.licensePlate?.ocrConfidence ?? 0;
       const plateMinLength = settings.licensePlate?.minLength ?? MIN_PLATE_LENGTH;
       const plates = results.licensePlate.detections.filter((d) => {
         if (!d.plateText || normalizePlateText(d.plateText).length < plateMinLength) return false;

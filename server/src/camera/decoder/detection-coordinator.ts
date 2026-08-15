@@ -686,7 +686,7 @@ export class DetectionCoordinator {
       faceEmbeddingModel: cs.faceEmbeddingModel,
       plates: cs.licensePlate?.detections ?? [],
       plateVoting: this.plugins.get(SensorType.LicensePlate)?.requiresFrames === true,
-      plateMinConfidence: this.config.detectionSettings.licensePlate?.confidence,
+      plateMinConfidence: this.config.detectionSettings.licensePlate?.ocrConfidence,
       plateMinLength: this.config.detectionSettings.licensePlate?.minLength,
       faceMinConfidence: this.config.detectionSettings.face?.confidence,
       classifiers: cs.classifiers ? Object.values(cs.classifiers).flatMap((c) => c.detections) : [],
