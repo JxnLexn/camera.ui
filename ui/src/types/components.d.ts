@@ -70,6 +70,7 @@ declare module 'vue' {
     ConfigTriggerWebhook: typeof import('./../components/CuiAutomation/config/ConfigTriggerWebhook.vue')['default']
     ConfirmCamera: typeof import('./../components/CuiDialog/templates/ConfirmCamera/ConfirmCamera.vue')['default']
     ConfirmPopup: typeof import('primevue/confirmpopup')['default']
+    ConnectionDetails: typeof import('./../components/CuiDialog/templates/ConnectionDetails/ConnectionDetails.vue')['default']
     ConnectionSchema: typeof import('./../components/CuiDialog/templates/ConnectionSchema/ConnectionSchema.vue')['default']
     CreateApiToken: typeof import('./../components/CuiDialog/templates/CreateApiToken/CreateApiToken.vue')['default']
     CreateRoom: typeof import('./../components/CuiDialog/templates/CreateRoom/CreateRoom.vue')['default']

@@ -17,6 +17,19 @@
                   connectionInfo.currentConnection.address
                 }}</Message>
               </div>
+              <Button
+                v-tooltip.left="{ value: $t('components.connection_details.title') }"
+                rounded
+                text
+                severity="secondary"
+                class="ml-auto shrink-0"
+                :aria-label="$t('components.connection_details.title')"
+                @click="openConnectionDetails"
+              >
+                <template #icon>
+                  <i-mdi:information-outline class="w-5 h-5" />
+                </template>
+              </Button>
             </div>
           </template>
         </Card>
@@ -637,6 +650,7 @@ import LanIcon from '~icons/mdi/lan';
 import { RemoteQuery } from '@/api/routes/remote.js';
 import { ServerQuery } from '@/api/routes/server.js';
 import { CLOUD_SERVICE_URL, PROXY_SERVICE_HOST } from '@/common/constants.js';
+import ConnectionDetailsDialog from '@/components/CuiDialog/templates/ConnectionDetails/ConnectionDetails.vue';
 import { copyToClipboard, deepToRaw } from '@/common/utils.js';
 import { isCapacitor, isInCloudSession } from '@/connection/index.js';
 import { remotePatchSchema } from '@/schemas/remote.schema.js';
@@ -644,6 +658,7 @@ import { serverPatchSchema } from '@/schemas/server.schema.js';
 
 import type { PatchRemoteInput } from '@/schemas/remote.schema.js';
 import type { PatchServerInput } from '@/schemas/server.schema.js';
+import type { ConnectionDetailsProps } from '@/components/CuiDialog/templates/ConnectionDetails/types.js';
 import type { DBCloudflareMode, DBRemote, DBRemoteDirectMode, DBServer } from '@shared/types';
 
 const serverQuery = new ServerQuery();
@@ -822,6 +837,20 @@ const connectionIconColor = computed(() => {
   if (type === 'local') return 'text-primary';
   return 'text-success';
 });
+
+function openConnectionDetails(): void {
+  dialog.openComponentDialog<ConnectionDetailsProps>(ConnectionDetailsDialog, {
+    data: {
+      title: t('components.connection_details.title'),
+      confirmText: t('components.connection_details.copy'),
+      cancelText: t('components.form.button.close'),
+      contentProps: {
+        currentType: connectionTypeLabel.value,
+        currentAddress: connectionInfo.value?.currentConnection.address ?? '',
+      },
+    },
+  });
+}
 
 async function onUpdateServerName() {
   const name = serverNameInput.value.trim();

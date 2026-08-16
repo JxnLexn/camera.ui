@@ -1,5 +1,4 @@
 import type { Logger } from '@camera.ui/logger';
-import type { NavLayoutSettings } from '@shared/types';
 import type {
   ConnectionJournal,
   ConnectionPhase,
@@ -16,7 +15,9 @@ import type { HttpTransport } from '@camera.ui/transport/transports/http';
 import type { NatsTransport } from '@camera.ui/transport/transports/nats';
 import type { SocketioTransport } from '@camera.ui/transport/transports/socketio';
 import type { WsTransport } from '@camera.ui/transport/transports/ws';
+import type { NavLayoutSettings } from '@shared/types';
 import type { ComputedRef, Ref, ShallowRef } from 'vue';
+import type { ConnectionAttemptLog } from './attempts.js';
 
 export type ConnectionMode = 'direct' | 'cloud';
 
@@ -56,6 +57,7 @@ export interface ConnectionOptions {
 export interface Connection {
   readonly kernel: Kernel;
   readonly journal: ConnectionJournal;
+  readonly attempts: ConnectionAttemptLog;
   readonly phase: ShallowRef<ConnectionPhase>;
   readonly signal: ShallowRef<ConnectionSignal>;
   readonly target: Ref<ConnectionTarget | null>;

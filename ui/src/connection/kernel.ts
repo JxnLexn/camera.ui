@@ -15,6 +15,7 @@ import {
 } from '@camera.ui/transport';
 import axios from 'axios';
 
+import { createConnectionAttemptLog } from './attempts.js';
 import { createTransports } from './transports.js';
 
 import type { ConnectionPhase, ConnectionSignal, ConnectionTarget, Persistence, ReducerContext, TokenLifecycle } from '@camera.ui/transport';
@@ -31,6 +32,7 @@ export function createConnection(options: ConnectionOptions): Connection {
   const refreshLockKey = options.storageNamespace ? `${REFRESH_LOCK_KEY}:${options.storageNamespace}` : REFRESH_LOCK_KEY;
 
   const journal = createConnectionJournal();
+  const attempts = createConnectionAttemptLog();
 
   function diag(scope: string, msg: string, detail?: unknown, level: 'debug' | 'warn' | 'error' = 'debug'): void {
     journal.record(scope, msg, detail);
@@ -359,15 +361,22 @@ export function createConnection(options: ConnectionOptions): Connection {
       probe: options.callbacks.probe,
       prefer: (ep) => ep.mode === 'direct-lan',
       lastTarget: () => target.value ?? restoredTarget ?? persistence.peek(),
-      onDiscoverStart: () => diag('probe', 'discover start'),
+      onDiscoverStart: () => {
+        attempts.roundStarted();
+        diag('probe', 'discover start');
+      },
       onDiscoverSuccess: (pool) => diag('probe', `discover OK — pool=${pool.length}`),
       onDiscoverError: (err) => {
         captureRetryAfter(err);
         diag('probe', 'discover FAILED', err, 'error');
       },
-      onProbeStart: (ep) => diag('probe', `probe ${ep.url}`),
+      onProbeStart: (ep) => {
+        attempts.probeStarted(ep.url, ep.mode);
+        diag('probe', `probe ${ep.url}`);
+      },
       onProbeSuccess: (ep) => {
         lastReachableEndpoint.value = ep.url;
+        attempts.probeSucceeded(ep.url);
         diag('probe', `probe OK — ${ep.url}`);
       },
       onProbeError: (ep, err) => {
@@ -382,9 +391,13 @@ export function createConnection(options: ConnectionOptions): Connection {
         if (kind === 'needs-auth' || kind === 'fatal') {
           lastReachableEndpoint.value = ep.url;
         }
+        attempts.probeFailed(ep.url, `${kind}: ${msg}`);
         diag('probe', `probe FAIL ${ep.url} — [${kind}] ${msg}`, undefined, 'warn');
       },
-      onAllFailed: (reason) => diag('probe', `all probes failed — ${reason}`, undefined, 'error'),
+      onAllFailed: (reason) => {
+        attempts.roundFailed(reason);
+        diag('probe', `all probes failed — ${reason}`, undefined, 'error');
+      },
     }),
   );
 
@@ -461,6 +474,7 @@ export function createConnection(options: ConnectionOptions): Connection {
   return {
     kernel,
     journal,
+    attempts,
     phase,
     signal,
     target,

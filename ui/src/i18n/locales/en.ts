@@ -1,6 +1,24 @@
 /* eslint-disable @stylistic/max-len */
 export default {
   components: {
+    connection_details: {
+      title: 'Connection details',
+      current: 'In use',
+      server_view: 'What the server sees',
+      no_target: 'Not connected',
+      last_attempt: 'Last attempt',
+      no_attempts: 'No connection attempt recorded yet.',
+      mode_lan: 'Local',
+      mode_wan: 'Internet',
+      outcome_connected: 'connected',
+      outcome_timeout: 'no answer in time',
+      outcome_superseded: 'stopped, another one was faster',
+      outcome_pending: 'running',
+      outcome_failed: 'failed',
+      copy: 'Copy details',
+      copied: 'Details copied',
+      copy_failed: 'Could not copy the details',
+    },
     automation_import: {
       title: 'Import Automation',
       import: 'Import',
