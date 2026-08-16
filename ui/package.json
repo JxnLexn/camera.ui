@@ -34,9 +34,9 @@
   "dependencies": {
     "@aparajita/capacitor-biometric-auth": "^10.0.0",
     "@aparajita/capacitor-secure-storage": "^8.0.0",
-    "@camera.ui/browser": "~0.0.168",
+    "@camera.ui/browser": "~0.0.169",
     "@camera.ui/common": "~0.0.53",
-    "@camera.ui/nvr": "~0.0.93",
+    "@camera.ui/nvr": "~0.0.94",
     "@camera.ui/rpc": "~1.0.11",
     "@camera.ui/sdk": "~1.2.26",
     "@camera.ui/transport": "~0.0.25",
