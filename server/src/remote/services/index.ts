@@ -84,7 +84,9 @@ export class RemoteAccessService {
 
     this.remoteConfig = next;
 
-    if (directConfigChanged) {
+    // tearing down mid-login kills the cloudflared process that is waiting for
+    // the user to authorize in the browser, and the login cannot be resumed
+    if (directConfigChanged && !this.cloudflareService.managed.busy) {
       this.teardownActive();
     }
     await this.reconcile();
@@ -114,7 +116,10 @@ export class RemoteAccessService {
   }
 
   public managedConnect(hostname: string): void {
-    this.cloudflareService.managed.connect(hostname);
+    this.cloudflareService.managed
+      .connect(hostname)
+      .catch((err: any) => this.logger.error('Cloudflare managed connect failed:', err?.message ?? err))
+      .finally(() => this.adoptManagedTunnel());
   }
 
   public async managedCancel(): Promise<void> {
@@ -127,6 +132,15 @@ export class RemoteAccessService {
 
   public async managedLogout(): Promise<void> {
     await this.cloudflareService.managed.logout();
+  }
+
+  private adoptManagedTunnel(): void {
+    if (!this.cloudflareService.managed.runningUrl) return;
+    this.stopFallbackWatch();
+    this.cloudflareService.stopOwnTunnel();
+    this.activeMode = 'cloudflare';
+    this.override = { active: true, fallback: false };
+    this.logger.log('Cloudflare tunnel is up, leaving the Quick Tunnel:', this.cloudflareService.managed.runningUrl);
   }
 
   private async doReconcile(): Promise<void> {
@@ -186,7 +200,9 @@ export class RemoteAccessService {
 
   private async targetWorks(target: string | null): Promise<boolean> {
     if (this.remoteConfig.directMode === 'cloudflare') {
-      return this.cloudflareService.connections.whenRegistered(TUNNEL_REGISTER_TIMEOUT_MS);
+      const cloudflare = this.cloudflareService;
+      const connections = this.remoteConfig.cloudflare?.mode === 'managed' ? cloudflare.managed.connections : cloudflare.connections;
+      return connections.whenRegistered(TUNNEL_REGISTER_TIMEOUT_MS);
     }
     if (!target) return false;
     if (await this.waitReachable(target)) return true;
@@ -240,6 +256,9 @@ export class RemoteAccessService {
 
   private ensureMode(mode: DBRemoteDirectMode): void {
     if (this.activeMode === mode && this.isActiveRunning()) {
+      return;
+    }
+    if (this.cloudflareService.managed.busy) {
       return;
     }
     this.teardownActive();

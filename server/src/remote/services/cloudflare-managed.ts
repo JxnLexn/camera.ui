@@ -9,11 +9,11 @@ import { container } from 'tsyringe';
 import { RemoteService } from '../../api/services/remote.service.js';
 import { isShuttingDown } from '../../shutdown-state.js';
 import { cloudflaredBinaryPath, ensureCloudflaredBinary } from './cloudflaredBinary.js';
+import { TunnelConnections } from './tunnelConnections.js';
 
 import type { Logger } from '@camera.ui/common';
 import type { ChildProcess } from 'node:child_process';
 import type { ConfigService } from '../../services/config/index.js';
-import type { TunnelConnections } from './tunnelConnections.js';
 
 export type ManagedTunnelState = 'idle' | 'awaiting_login' | 'creating_tunnel' | 'setting_dns' | 'running';
 
@@ -42,10 +42,9 @@ export class CloudflareManagedService {
   private runProcess?: ChildProcess;
   private stepProcess?: ChildProcess;
 
-  constructor(
-    private logger: Logger,
-    private connections: TunnelConnections,
-  ) {
+  public readonly connections = new TunnelConnections();
+
+  constructor(private logger: Logger) {
     this.configService = container.resolve<ConfigService>('configService');
     this.remoteService = new RemoteService();
 
@@ -128,6 +127,7 @@ export class CloudflareManagedService {
     this.stepProcess = undefined;
     this.runProcess?.kill('SIGKILL');
     this.runProcess = undefined;
+    this.connections.reset();
     this._state = 'idle';
     this._loginUrl = null;
   }

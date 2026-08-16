@@ -9,8 +9,8 @@ import { container } from 'tsyringe';
 import { RemoteService } from '../../api/services/remote.service.js';
 import { isShuttingDown } from '../../shutdown-state.js';
 import { CloudflareManagedService } from './cloudflare-managed.js';
-import { TunnelConnections } from './tunnelConnections.js';
 import { cloudflaredBinaryPath, ensureCloudflaredBinary } from './cloudflaredBinary.js';
+import { TunnelConnections } from './tunnelConnections.js';
 
 import type { Logger } from '@camera.ui/common';
 import type { ChildProcess } from 'node:child_process';
@@ -49,7 +49,7 @@ export class CloudflareService {
     this.api = container.resolve<CameraUiAPI>('api');
     this.configService = container.resolve<ConfigService>('configService');
     this.remoteService = new RemoteService();
-    this.managed = new CloudflareManagedService(logger, this.connections);
+    this.managed = new CloudflareManagedService(logger);
 
     const configDir = this.configService.STORAGE_PATH;
     this.cloudflarePath = join(configDir, '.cloudflare');
@@ -122,6 +122,13 @@ export class CloudflareService {
     this.manuallyKilled = true;
     this.managed.stop();
     this.reset();
+  }
+
+  public stopOwnTunnel(): void {
+    if (!this.cloudflaredProcess) return;
+    this.manuallyKilled = true;
+    this.reset();
+    this.manuallyKilled = false;
   }
 
   private async ensureCloudflaredInstalled(): Promise<void> {

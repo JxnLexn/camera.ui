@@ -27,9 +27,9 @@ export class TunnelConnections {
   }
 
   public reset(): void {
+    // waiters keep their own deadline: a restart in between is normal and must
+    // not be read as "this tunnel will never come up"
     this.connections.clear();
-    for (const waiter of [...this.waiters]) waiter(false);
-    this.waiters.clear();
   }
 
   public whenRegistered(timeoutMs: number): Promise<boolean> {
