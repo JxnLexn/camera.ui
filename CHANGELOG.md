@@ -2,6 +2,66 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.1.9]
+
+### Added
+
+- **Object zones can switch off recognition per area.** A zone can now count people and cars without identifying them: pick the area, drop "Recognize faces" and "Read plates", and nothing there is matched against your enrolled faces or read as a plate. Nothing from that area lands in your face list or on an event. Existing zones keep recognizing as before.
+
+- **Alert zones decide which faces and plates notify you.** A zone can now name the people it pushes for, with entries for unknown faces and for anyone enrolled, and the same for license plates. Nothing selected keeps notifying for everyone, as before.
+
+- **Camera notification settings are in the camera.** Push notifications, video in push, sounds, sensors, cooldown and speed sit in the camera settings next to the recording options now, translated and in one place. They start on the defaults, so have a look after the update.
+
+- **Camview decides how the picture sits in the card.** A new button in rearrange mode offers three choices: keep the aspect ratio and live with the black bars, stretch the picture over the whole card, or crop it to fit. The choice is remembered per view and applies to live and playback alike.
+
+- **Apps can reach the server by name on your network.** A new "Local address" under Network takes something like `https://camera.home.lan`, for a reverse proxy or just a nicer name. Apps try it first on the local network and fall back to the IP when it does not answer. Camera streams keep using the IP addresses next to it, so leave those alone.
+
+- **The connection status says how it got there.** An info button next to it opens the details: which way is in use, which addresses were tried, how long each took and why they failed. Handy when the app connects over the internet although the server sits in the same network. One button copies the whole thing for a support message.
+
+- **Resizing a card shows its size.** While dragging the handle, the card's pixel size sits in its top left corner.
+
+### Changed
+
+- **The camera metrics show what detection actually costs.** The Cameras tab has its own detection table now: decoding, scaling and tracking, and the way to the detection plugin and back, each per camera. A second view lists the time spent inside every detector, from motion and objects to faces, plates and CLIP, and names the model and the device it runs on. Numbers can be reset, and a benchmark loads the detector with test frames across the cameras you pick and reports detections per second.
+
+- **Line crossing dropped the package label.** Lines that only watched for packages are removed on update.
+
+- **Detection confidence is set on the camera only.** The ML plugins no longer carry their own confidence thresholds. Object, face and plate detection follow the value in the camera's detection settings, and a change applies immediately. Needs the matching plugin update.
+
+- **The face match threshold is set per camera.** It used to sit in the NVR plugin and applied to every camera at once. It now sits in the camera's detection settings under the face confidence, so a camera that looks down the street can demand more certainty than the one at the door. If you had changed the value in the plugin, set it again here. Needs the camera-ui-nvr update.
+
+- **License plates got a second setting.** Finding a plate in the picture and reading its text are two different jobs, so each has its own confidence now. Your current value stays on the reading side, where it always applied.
+
+- **The AI no longer invents names and plates.** It read them off the picture, so a description could name a plate the plate recognition never confirmed. It now only uses what was actually recognized. Needs the camera-ui-nvr update.
+
+- **Zones dropped the include/exclude mode.** Every zone now simply means "only what is inside here counts", which is what almost everyone used it for. Zones that were set to exclude are removed on update, so if you had one muting an area, check that camera. To keep an area out of detection entirely, use a privacy zone with detections dropped.
+
+- **Rearranging camview is calmer.** Every card now carries a faint outline so you can see the slots, and the motion glow stays off while you are moving cards around.
+
+- **Update notifications name the version and say when it is a beta.** They used to read "New camera.ui update available" and nothing else.
+
+### Fixed
+
+- **A working tunnel is no longer swapped for a throwaway one.** camera.ui checked its own public address by calling it from the server, which fails on setups where the machine cannot route back to itself, for example with split DNS or a router without hairpin NAT. A Cloudflare tunnel now reports its own connections instead, and a custom domain is only given up when it stops resolving publicly.
+
+- **A named Cloudflare tunnel comes back on its own.** If the tunnel was briefly unreachable, camera.ui switched to a Quick Tunnel and stayed there until a restart. Only a custom domain was ever checked again. Both are now.
+
+- **Connecting your own Cloudflare domain gets used once it is up.** After the browser login the tunnel started correctly, but camera.ui kept handing out the temporary Quick Tunnel address next to it and left both running. It now switches over as soon as the tunnel connects. Setting it up while a Quick Tunnel was running could also cut the browser login short before you had a chance to authorize.
+
+- **Zones stay on the picture.** In a wide dialog the editor let you draw into the black next to the image, and those points ended up somewhere else than where you put them. The drawing area is now the picture itself. Zones drawn that way sit a little off, so give them a look.
+
+- **Detection types are translated everywhere.** In the zone editor and the camera automations they showed up in English regardless of the language.
+
+- **Drawing zones no longer gets stuck.** Deleting a zone while drawing it, or switching to another zone type in between, left the editor in a state where clicks did nothing, and it could remove a zone from the tab you switched to.
+
+- **Camview keeps every camera in its template slot.** In a template that was not filled completely, the cameras slid up to the top and the lower rows refused to take a card, as if something invisible sat there.
+
+- **Running a beta with the beta channel switched off no longer leaves you stuck.** The sidebar showed a dot for the newer beta, the system page offered nothing to install.
+
+- **Cameras that report motion themselves no longer miss the first seconds.** With a Reolink or Eufy sensor the detection had to open the stream first and only saw the scene a second or three later, long enough for a car to be gone again. It now looks at the picture right away, as long as Hot mode is on for the source.
+
+- **The picture in a push is no longer a narrow square for android.** It arrived cut to a square and shrank the notification, then jumped to full size as soon as the clip frames loaded. It now has the same shape as the frames. Needs the camera-ui-nvr plugin update.
+
 ## [2.1.8]
 
 ### Added
