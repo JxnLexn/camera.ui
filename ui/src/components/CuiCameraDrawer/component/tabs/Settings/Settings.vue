@@ -1418,7 +1418,7 @@
               <Message severity="secondary" variant="simple" size="small" class="cui-input-hint">{{ $t('components.form.hint.ptz_autotrack_max_target_size') }}</Message>
             </Field>
 
-            <Field :model-value="ptzActiveHoursEnabled" name="ptzAutotrack.activeHours" as="div" class="flex flex-col field-gap">
+            <Field :model-value="cameraForm.ptzAutotrack?.activeHours" name="ptzAutotrack.activeHours" as="div" class="flex flex-col field-gap">
               <div class="flex flex-row items-center gap-3">
                 <div class="flex flex-col">
                   <label class="cui-label-switch">{{ $t('components.form.label.ptz_autotrack_active_hours') }}</label>
@@ -1912,11 +1912,14 @@ function togglePtzActiveHours(enabled: boolean): void {
 }
 
 function setPtzActiveHours(key: 'from' | 'to', date: Date | null): void {
-  const hours = cameraForm.value.ptzAutotrack?.activeHours;
-  if (!hours || !date) return;
-  hours[key] = `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
-  // the window is read in the timezone it was set in, so keep it current
-  hours.timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const autotrack = cameraForm.value.ptzAutotrack;
+  const hours = autotrack?.activeHours;
+  if (!autotrack || !hours || !date) return;
+  autotrack.activeHours = {
+    ...hours,
+    [key]: `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`,
+    timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+  };
 }
 
 const triggerableSensors = computed(() => allSensors.value.filter((s) => TRIGGERABLE_TYPES.has(s.type)).map((s) => ({ label: s.displayName.value, value: s.id })));
