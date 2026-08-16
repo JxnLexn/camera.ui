@@ -184,7 +184,7 @@ export class RemoteAccessService {
   }
 
   private startFallbackWatch(): void {
-    if (this.fallbackWatch || this.remoteConfig.directMode !== 'customDomain') return;
+    if (this.fallbackWatch || !this.configuredTargetUrl()) return;
     this.fallbackWatch = setInterval(() => this.recheckFallback(), FALLBACK_RECHECK_MS);
     this.fallbackWatch.unref();
   }
