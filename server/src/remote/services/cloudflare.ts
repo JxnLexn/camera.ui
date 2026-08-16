@@ -9,6 +9,7 @@ import { container } from 'tsyringe';
 import { RemoteService } from '../../api/services/remote.service.js';
 import { isShuttingDown } from '../../shutdown-state.js';
 import { CloudflareManagedService } from './cloudflare-managed.js';
+import { TunnelConnections } from './tunnelConnections.js';
 import { cloudflaredBinaryPath, ensureCloudflaredBinary } from './cloudflaredBinary.js';
 
 import type { Logger } from '@camera.ui/common';
@@ -20,6 +21,7 @@ import type { ConfigService } from '../../services/config/index.js';
 
 export class CloudflareService {
   public readonly managed: CloudflareManagedService;
+  public readonly connections = new TunnelConnections();
 
   private api: CameraUiAPI;
   private configService: ConfigService;
@@ -47,7 +49,7 @@ export class CloudflareService {
     this.api = container.resolve<CameraUiAPI>('api');
     this.configService = container.resolve<ConfigService>('configService');
     this.remoteService = new RemoteService();
-    this.managed = new CloudflareManagedService(logger);
+    this.managed = new CloudflareManagedService(logger, this.connections);
 
     const configDir = this.configService.STORAGE_PATH;
     this.cloudflarePath = join(configDir, '.cloudflare');
@@ -149,6 +151,8 @@ export class CloudflareService {
 
     this.cloudflaredProcess?.kill('SIGKILL');
     this.cloudflaredProcess = undefined;
+
+    this.connections.reset();
 
     this.cloudflareUrl = null;
     this.currentArgs = [];
@@ -261,6 +265,8 @@ export class CloudflareService {
   }
 
   private analyzeLogLine(line: string): void {
+    this.connections.observe(line);
+
     const match = /(https:\/\/[a-z0-9-]+\.trycloudflare\.com)/.exec(line);
     if (match && !this.cloudflareUrl) {
       this.logger.log('Cloudflare URL detected:', match[1]);

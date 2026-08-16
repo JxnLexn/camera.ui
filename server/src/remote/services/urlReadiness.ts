@@ -8,7 +8,7 @@ const CHECK_INTERVAL_GROWTH = 1.5;
 const WARN_AFTER_MS = 120_000;
 const MAX_WATCHERS = 4;
 
-type DnsAnswer = 'yes' | 'no' | 'unknown';
+export type DnsAnswer = 'yes' | 'no' | 'unknown';
 
 interface WatchHandle {
   cancelled: boolean;
@@ -69,11 +69,14 @@ export class UrlReadinessGate {
     let warned = false;
 
     for (;;) {
-      const dns = await queryPublicDns(hostname);
+      const dns = await publicDnsAnswer(hostname);
       if (handle.cancelled) return;
 
-      // 'unknown' = DoH itself unreachable — don't block, let the probe decide.
-      if (dns !== 'no' && (await probeHealth(url))) {
+      // public DNS answering IS the gate: the point is that clients must not
+      // look the name up too early. Reaching the URL from here is a different
+      // question and fails on setups where the host cannot route to itself.
+      // 'unknown' = DoH itself unreachable, then the probe is all we have.
+      if (dns === 'yes' || (dns === 'unknown' && (await probeHealth(url)))) {
         if (handle.cancelled) return;
         this.readyUrls.add(url);
         this.logger.log('Remote URL is publicly reachable:', url);
@@ -97,7 +100,7 @@ function normalizeUrl(url: string): string {
   return url.replace(/\/+$/, '');
 }
 
-async function queryPublicDns(hostname: string): Promise<DnsAnswer> {
+export async function publicDnsAnswer(hostname: string): Promise<DnsAnswer> {
   const endpoints = ['https://cloudflare-dns.com/dns-query', 'https://dns.google/resolve'];
 
   for (const endpoint of endpoints) {

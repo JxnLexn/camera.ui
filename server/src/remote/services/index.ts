@@ -3,7 +3,7 @@ import { sleep } from '@camera.ui/common/utils';
 import { RemoteService } from '../../api/services/remote.service.js';
 import { CloudflareService } from './cloudflare.js';
 import { CustomDomainService } from './customDomain.js';
-import { UrlReadinessGate } from './urlReadiness.js';
+import { publicDnsAnswer, UrlReadinessGate } from './urlReadiness.js';
 
 import type { Logger } from '@camera.ui/common';
 import type { DBRemote, DBRemoteDirectMode } from '../../api/database/types.js';
@@ -15,6 +15,8 @@ import type { CloudflareManagedService, ManagedTunnelStatus } from './cloudflare
 type ActiveMode = 'cloudflare' | 'cloudflareQuick' | 'customDomain' | null;
 
 const FALLBACK_RECHECK_MS = 60_000;
+const TUNNEL_REGISTER_TIMEOUT_MS = 30_000;
+const TUNNEL_RETRY_MS = 600_000;
 
 export class RemoteAccessService {
   private remoteService: RemoteService;
@@ -169,8 +171,7 @@ export class RemoteAccessService {
 
     this.ensureMode(cfg.directMode);
     const target = this.configuredTargetUrl();
-    const reachable = target ? await this.waitReachable(target) : false;
-    if (reachable) {
+    if (await this.targetWorks(target)) {
       this.override = { active: true, fallback: false };
       return;
     }
@@ -183,9 +184,29 @@ export class RemoteAccessService {
     this.startFallbackWatch();
   }
 
+  private async targetWorks(target: string | null): Promise<boolean> {
+    if (this.remoteConfig.directMode === 'cloudflare') {
+      return this.cloudflareService.connections.whenRegistered(TUNNEL_REGISTER_TIMEOUT_MS);
+    }
+    if (!target) return false;
+    if (await this.waitReachable(target)) return true;
+
+    // a custom domain has no such signal, so the probe stays. A name that does
+    // not resolve publicly is proof it is dead; a failing probe on a resolvable
+    // name is not, and giving up there would swap a working domain for a
+    // throwaway quick tunnel URL
+    try {
+      return (await publicDnsAnswer(new URL(target).hostname)) !== 'no';
+    } catch {
+      return false;
+    }
+  }
+
   private startFallbackWatch(): void {
     if (this.fallbackWatch || !this.configuredTargetUrl()) return;
-    this.fallbackWatch = setInterval(() => this.recheckFallback(), FALLBACK_RECHECK_MS);
+    // retrying a named tunnel costs the quick tunnel its URL, so it is rare
+    const interval = this.remoteConfig.directMode === 'cloudflare' ? TUNNEL_RETRY_MS : FALLBACK_RECHECK_MS;
+    this.fallbackWatch = setInterval(() => this.recheckFallback(), interval);
     this.fallbackWatch.unref();
   }
 
@@ -197,7 +218,19 @@ export class RemoteAccessService {
 
   private async recheckFallback(): Promise<void> {
     const target = this.configuredTargetUrl();
-    if (!target || !(await this.probeUrl(target)).ok) return;
+    if (!target) return;
+
+    // nothing serves the named hostname while the quick tunnel holds cloudflared,
+    // so probing it would fail forever. Starting it again is the only test, and
+    // reconcile falls back once more if it still does not register
+    if (this.remoteConfig.directMode === 'cloudflare') {
+      this.logger.log('Trying the configured Cloudflare tunnel again, the Quick Tunnel URL changes if it still fails.');
+      this.teardownActive();
+      await this.reconcile();
+      return;
+    }
+
+    if (!(await this.probeUrl(target)).ok) return;
 
     this.logger.log(`Configured direct target ${target} is reachable again, leaving the Cloudflare Quick Tunnel.`);
     this.stopFallbackWatch();
