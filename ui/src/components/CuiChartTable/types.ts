@@ -52,6 +52,8 @@ export interface TableHeaderCategory extends TableHeaderBase {
   chipProps?: ChipProps;
   suffix?: string;
   tooltip?: (item: any) => string | undefined;
+  badge?: (item: any) => string | undefined;
+  badgeTooltip?: (item: any) => string | undefined;
 }
 
 export type TableHeader = TableHeaderCategory | TableHeaderAction | TableHeaderChart | TableHeaderIndicator;

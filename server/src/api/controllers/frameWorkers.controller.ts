@@ -1,24 +1,27 @@
-import { orderBy, PromiseTimeout } from '@camera.ui/common/utils';
-import { readdirSync, readFileSync } from 'fs';
-import * as si from 'systeminformation';
+import { orderBy } from '@camera.ui/common/utils';
 import { container } from 'tsyringe';
 
 import { ConfigService } from '../../services/config/index.js';
+import { collectSystemInfo } from '../../utils/system-info.js';
+import { WorkerCapability } from '../../workers/types.js';
 
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { CameraUiAPI } from '../../api.js';
-import type { BenchmarkSystem, ObjectBenchmarkResult, ObjectBenchmarkRun } from '../../camera/decoder/types.js';
+import type { BenchmarkHost, ObjectBenchmarkResult, ObjectBenchmarkRun } from '../../camera/decoder/types.js';
 import type { PluginManager } from '../../plugins/index.js';
+import type { WorkerManager } from '../../workers/manager.js';
 import type { AuthLoginRequest, FrameWorker, FrameWorkerParamsNameRequest, PaginationRequest } from '../types/index.js';
 
 export class FrameWorkersController {
   private api: CameraUiAPI;
   private pluginManager: PluginManager;
+  private workerManager: WorkerManager;
   private benchmarkRun?: Promise<ObjectBenchmarkRun | null>;
 
   constructor(private app: FastifyInstance) {
     this.api = container.resolve<CameraUiAPI>('api');
     this.pluginManager = container.resolve<PluginManager>('pluginManager');
+    this.workerManager = container.resolve<WorkerManager>('workerManager');
   }
 
   public list(_req: FastifyRequest<AuthLoginRequest & PaginationRequest>, reply: FastifyReply): FastifyReply | FrameWorker[] {
@@ -85,20 +88,22 @@ export class FrameWorkersController {
   }
 
   private async runBenchmark(cameras: string[] | undefined, iterations: number, concurrency: number): Promise<ObjectBenchmarkRun | null> {
-    const workers = this.api.getCameras().map((cameraController) => cameraController.frameWorker);
-    const selection = cameras?.length ? workers.filter((worker) => cameras.includes(worker.name)) : workers;
+    const controllers = this.api.getCameras();
+    const selection = cameras?.length ? controllers.filter((controller) => cameras.includes(controller.frameWorker.name)) : controllers;
 
     try {
-      await Promise.all(workers.map((worker) => worker.pauseForBenchmark(true)));
+      await Promise.all(controllers.map((controller) => controller.frameWorker.pauseForBenchmark(true)));
 
-      const startedAt = Date.now();
       const results = await Promise.all(
-        selection.map(async (worker) => {
+        selection.map(async (controller): Promise<ObjectBenchmarkResult | null> => {
+          const worker = controller.frameWorker;
           const result = await worker.runObjectBenchmark(iterations, concurrency);
-          return result ? { ...result, camera: worker.name, plugin: this.pluginName(result.plugin) } : null;
+          if (!result) return null;
+
+          const remote = worker.isRemoteWorker ? this.workerManager.getRemoteProcess(WorkerCapability.FrameDecoding, controller.id) : undefined;
+          return { ...result, camera: worker.name, plugin: this.pluginName(result.plugin), worker: remote?.worker };
         }),
       );
-      const totalMs = Date.now() - startedAt;
       const measured = results.filter((result): result is ObjectBenchmarkResult => result !== null);
       if (measured.length === 0) return null;
 
@@ -106,61 +111,35 @@ export class FrameWorkersController {
       const handlerMs = measured.reduce((sum, result) => sum + result.handlerMs * result.iterations, 0);
 
       return {
-        system: await this.benchmarkSystem(),
+        hosts: await this.benchmarkHosts(measured),
         total: {
           cameras: measured.length,
           iterations: done,
           failed: measured.reduce((sum, result) => sum + result.failed, 0),
           concurrency: concurrency * measured.length,
-          totalMs,
-          perSecond: totalMs > 0 ? Math.round((done / (totalMs / 1000)) * 10) / 10 : 0,
+          totalMs: Math.max(...measured.map((result) => result.totalMs)),
+          perSecond: Math.round(measured.reduce((sum, result) => sum + result.perSecond, 0) * 10) / 10,
           handlerMs: done > 0 ? Math.round((handlerMs / done) * 10) / 10 : 0,
         },
         cameras: measured,
       };
     } finally {
-      await Promise.all(workers.map((worker) => worker.pauseForBenchmark(false)));
+      await Promise.all(controllers.map((controller) => controller.frameWorker.pauseForBenchmark(false)));
     }
   }
 
-  private async benchmarkSystem(): Promise<BenchmarkSystem> {
-    const [cpu, memory, os, graphics] = await Promise.all([
-      si.cpu(),
-      si.mem(),
-      si.osInfo(),
-      PromiseTimeout(si.graphics(), 5000, undefined, 'graphics lookup timed out').catch(() => undefined),
-    ]);
-    const gpu = graphics?.controllers.map((controller) => [controller.vendor, controller.model].filter(Boolean).join(' ').trim()).filter(Boolean);
+  private async benchmarkHosts(measured: ObjectBenchmarkResult[]): Promise<BenchmarkHost[]> {
+    const hosts: BenchmarkHost[] = [];
 
-    return {
-      cpu: [cpu.manufacturer, cpu.brand].filter(Boolean).join(' '),
-      cores: cpu.cores,
-      memoryGb: Math.round((memory.total / 1024 ** 3) * 10) / 10,
-      gpu: gpu?.length ? gpu.join(', ') : this.drmGpus(),
-      os: [os.distro, os.release, `(${os.platform} ${os.arch})`].filter(Boolean).join(' '),
-      version: ConfigService.RUNNING_VERSION,
-    };
-  }
-
-  private drmGpus(): string | undefined {
-    const vendors: Record<string, string> = { 8086: 'Intel', '10de': 'NVIDIA', 1002: 'AMD', '1af4': 'Virtio' };
-
-    try {
-      const cards = readdirSync('/sys/class/drm').filter((entry) => /^card\d+$/.test(entry));
-      const names = cards
-        .map((card) => {
-          const uevent = readFileSync(`/sys/class/drm/${card}/device/uevent`, 'utf8');
-          const driver = /DRIVER=(.+)/.exec(uevent)?.[1];
-          const pciId = /PCI_ID=([0-9A-Fa-f]{4}):([0-9A-Fa-f]{4})/.exec(uevent);
-          if (!pciId) return undefined;
-          return [vendors[pciId[1].toLowerCase()] ?? pciId[1], driver, `[${pciId[1]}:${pciId[2]}]`].filter(Boolean).join(' ');
-        })
-        .filter((name): name is string => Boolean(name));
-
-      return names.length ? [...new Set(names)].join(', ') : undefined;
-    } catch {
-      return undefined;
+    if (measured.some((result) => !result.worker)) {
+      hosts.push({ system: await collectSystemInfo(ConfigService.RUNNING_VERSION) });
     }
+
+    for (const name of new Set(measured.map((result) => result.worker).filter((worker): worker is string => Boolean(worker)))) {
+      hosts.push({ worker: name, system: this.workerManager.getWorkerByName(name)?.system });
+    }
+
+    return hosts;
   }
 
   private pluginName(pluginId: string): string {

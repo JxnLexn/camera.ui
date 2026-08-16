@@ -37,15 +37,18 @@
         </Button>
       </div>
 
-      <CuiDataTable :value="pages[page].rows" :pt="tablePtOptions" striped-rows :show-headers="false" class="w-full">
+      <CuiDataTable :value="pages[page].rows" :rows="pages[page].rows.length" :pt="tablePtOptions" striped-rows :show-headers="false" class="w-full">
         <Column field="label">
           <template #body="{ data }">
-            <span class="text-color">{{ data.label }}</span>
+            <span :class="['text-color', { 'font-semibold': data.host }]">{{ data.label }}</span>
           </template>
         </Column>
         <Column field="value" style="text-align: right">
           <template #body="{ data }">
-            <span class="font-medium">{{ data.value }}</span>
+            <span v-if="data.details?.length" v-tooltip.left="{ value: data.details.join(' · ') }" class="font-medium underline decoration-dotted">
+              {{ data.value }}
+            </span>
+            <span v-else class="font-medium">{{ data.value }}</span>
           </template>
         </Column>
       </CuiDataTable>
@@ -57,7 +60,7 @@
 import { FrameWorkerQuery } from '@/api/routes/frameWorkers.js';
 
 import type { CustomDialogComponent, DialogRefProps } from '@/composables/useCuiDialog.js';
-import type { ObjectBenchmarkResult, ObjectBenchmarkRun } from '@shared/types';
+import type { BenchmarkHost, ObjectBenchmarkResult, ObjectBenchmarkRun } from '@shared/types';
 import type { DataTablePassThroughOptions } from 'primevue';
 import type { DetectionBenchmarkProps } from './types.js';
 
@@ -85,25 +88,39 @@ const pages = computed(() => {
   if (!run) return [];
 
   const overview = [
-    { label: t('views.metrics.bench_cpu'), value: `${run.system.cpu} (${run.system.cores})` },
-    { label: t('views.metrics.bench_gpu'), value: run.system.gpu ?? '-' },
-    { label: t('views.metrics.bench_memory'), value: `${run.system.memoryGb} GB` },
-    { label: t('views.metrics.bench_os'), value: run.system.os },
-    { label: t('views.metrics.bench_version'), value: run.system.version },
+    ...run.hosts.map(hostRow),
     { label: t('views.metrics.bench_cameras'), value: String(run.total.cameras) },
     { label: t('views.metrics.bench_calls'), value: `${run.total.iterations}${run.total.failed > 0 ? ` (+${run.total.failed} ✗)` : ''}` },
     { label: t('views.metrics.bench_concurrency'), value: String(run.total.concurrency) },
     { label: t('views.metrics.bench_duration'), value: `${(run.total.totalMs / 1000).toFixed(1)} s` },
     { label: t('views.metrics.bench_rate'), value: `${run.total.perSecond}/s` },
-    { label: t('views.metrics.bench_per_camera'), value: `${Math.round((run.total.perSecond / Math.max(1, run.total.cameras)) * 10) / 10}/s` },
+    ...(run.hosts.length > 1
+      ? []
+      : [{ label: t('views.metrics.bench_per_camera'), value: `${Math.round((run.total.perSecond / Math.max(1, run.total.cameras)) * 10) / 10}/s` }]),
     { label: t('views.metrics.bench_handler'), value: `${run.total.handlerMs} ms` },
   ];
 
   return [{ title: t('views.metrics.benchmark_total'), rows: overview }, ...run.cameras.map((camera) => ({ title: camera.camera, rows: cameraRows(camera) }))];
 });
 
+function hostRow(host: BenchmarkHost) {
+  const system = host.system;
+  const details = system
+    ? [
+        `${t('views.metrics.bench_cpu')}: ${system.cpu} (${system.cores})`,
+        `${t('views.metrics.bench_gpu')}: ${system.gpu ?? '-'}`,
+        `${t('views.metrics.bench_memory')}: ${system.memoryGb} GB`,
+        `${t('views.metrics.bench_os')}: ${system.os}`,
+        `${t('views.metrics.bench_version')}: ${system.version}`,
+      ]
+    : [];
+
+  return { label: t('views.metrics.bench_host'), value: host.worker ?? t('views.metrics.bench_host_server'), host: true, details };
+}
+
 function cameraRows(camera: ObjectBenchmarkResult) {
   return [
+    { label: t('views.metrics.bench_host'), value: camera.worker ?? t('views.metrics.bench_host_server'), host: true },
     { label: t('views.metrics.col_object'), value: camera.plugin },
     { label: t('views.metrics.bench_runtime'), value: camera.runtime ?? '-' },
     ...(camera.models ?? []).map((model) => ({
@@ -124,7 +141,8 @@ function toggle(camera: string) {
 }
 
 async function copyResult() {
-  const asText = (entry: (typeof pages.value)[number]) => [entry.title, ...entry.rows.map((row) => `${row.label}: ${row.value}`)].join('\n');
+  const asText = (entry: (typeof pages.value)[number]) =>
+    [entry.title, ...entry.rows.flatMap((row) => [`${row.label}: ${row.value}`, ...(('details' in row && row.details) || [])])].join('\n');
   const text = page.value === 0 ? pages.value.map(asText).join('\n\n---\n\n') : asText(pages.value[page.value]);
 
   await copy(text);

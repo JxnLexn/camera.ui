@@ -1,3 +1,5 @@
+import type { SystemInfo } from '../utils/system-info.js';
+
 export enum WorkerCapability {
   FrameDecoding = 'frameDecoding',
   PluginHost = 'pluginHost',
@@ -33,6 +35,17 @@ export interface WorkloadSpec<C extends WorkerCapability = WorkerCapability> {
 
 export function workloadKey(capability: WorkerCapability, id: string): string {
   return `${capability}:${id}`;
+}
+
+export interface WorkerProcessRef {
+  capability: WorkerCapability;
+  id: string;
+  pid: number;
+}
+
+export interface WorkerProcessSample extends WorkerProcessRef {
+  cpuLoad: string;
+  memLoad: string;
 }
 
 export type RemotePluginState = 'installing' | 'retrying' | 'running';
@@ -74,10 +87,12 @@ export interface WorkerInfo {
   versionMismatch?: boolean;
   update?: WorkerUpdateState;
   platform?: WorkerPlatform;
+  system?: SystemInfo;
   pid?: number;
   cpuLoad?: string;
   memLoad?: string;
   plugins?: RemotePluginStatus[];
+  processes?: WorkerProcessSample[];
   health?: WorkerHealthInfo;
 }
 
@@ -89,10 +104,12 @@ export interface WorkerHeartbeat {
   capabilities: WorkerCapability[];
   version: string;
   platform: WorkerPlatform;
+  system?: SystemInfo;
   pid: number;
   cpuLoad: string;
   memLoad: string;
   plugins?: RemotePluginStatus[];
+  processes?: WorkerProcessSample[];
   update: WorkerUpdateState;
 }
 

@@ -8,6 +8,7 @@ import { WorkersService } from '../api/services/workers.service.js';
 import { NamespaceManager } from '../rpc/namespaces.js';
 import { ConfigService } from '../services/config/index.js';
 import { canRequestServerUpdate, requestServerUpdate } from '../utils/ipc.js';
+import { collectSystemInfo } from '../utils/system-info.js';
 import { FrameDecodingHandler } from './capabilities/frame-decoding.js';
 import { PluginHostHandler } from './capabilities/plugin-host.js';
 import { WorkerCapability, workloadKey } from './types.js';
@@ -15,8 +16,18 @@ import { WorkerCapability, workloadKey } from './types.js';
 import type { LogEntry, LoggerOptions } from '@camera.ui/common/logger';
 import type { Promisify, RPCClient } from '@camera.ui/rpc';
 import type { NATS } from '../rpc/server.js';
+import type { SystemInfo } from '../utils/system-info.js';
 import type { CapabilityHandler } from './capabilities/handler.js';
-import type { WorkerAgentRPC, WorkerHealthInfo, WorkerHeartbeat, WorkerManagerRPC, WorkerSyncResponse, WorkloadSpec } from './types.js';
+import type {
+  WorkerAgentRPC,
+  WorkerHealthInfo,
+  WorkerHeartbeat,
+  WorkerManagerRPC,
+  WorkerProcessRef,
+  WorkerProcessSample,
+  WorkerSyncResponse,
+  WorkloadSpec,
+} from './types.js';
 
 const SYNC_INTERVAL_MS = 5_000;
 
@@ -47,6 +58,8 @@ export class WorkerAgent implements WorkerAgentRPC {
 
   private cpuLoad = '0.00';
   private memLoad = '0.00';
+  private processSamples: WorkerProcessSample[] = [];
+  private system?: SystemInfo;
 
   private updating = false;
   private updateError?: string;
@@ -136,6 +149,13 @@ export class WorkerAgent implements WorkerAgentRPC {
     this.unsubscribeSync = await this.proxy.subscribe(NamespaceManager.workerSync(this.agentId), () => {
       this.syncCycle();
     });
+
+    // the graphics lookup can take seconds, the heartbeat carries it once it is there
+    collectSystemInfo(ConfigService.RUNNING_VERSION)
+      .then((info) => {
+        this.system = info;
+      })
+      .catch(() => {});
 
     this.syncCycle();
     this.syncInterval = setInterval(() => this.syncCycle(), SYNC_INTERVAL_MS);
@@ -326,10 +346,12 @@ export class WorkerAgent implements WorkerAgentRPC {
       capabilities: this.capabilities,
       version: ConfigService.RUNNING_VERSION,
       platform: { os: process.platform, arch: process.arch },
+      system: this.system,
       pid: process.pid,
       cpuLoad: this.cpuLoad,
       memLoad: this.memLoad,
       plugins: this.pluginHostHandler?.getPluginStatuses(),
+      processes: this.processSamples,
       update: {
         updatable: canRequestServerUpdate(),
         updating: this.updating,
@@ -340,10 +362,10 @@ export class WorkerAgent implements WorkerAgentRPC {
 
   private async sampleMetrics(): Promise<void> {
     try {
-      const pids = new Set<number>([process.pid]);
+      const owned = new Map<number, WorkerProcessRef>();
       for (const handler of this.handlers.values()) {
-        for (const pid of handler.getActiveProcessIds()) {
-          pids.add(pid);
+        for (const ref of handler.getActiveProcesses()) {
+          owned.set(ref.pid, ref);
         }
       }
 
@@ -351,15 +373,25 @@ export class WorkerAgent implements WorkerAgentRPC {
 
       let cpu = 0;
       let mem = 0;
+      const samples: WorkerProcessSample[] = [];
+
       for (const proc of all.list) {
-        if (pids.has(proc.pid)) {
-          cpu += proc.cpu || 0;
-          mem += proc.mem || 0;
+        const ref = owned.get(proc.pid);
+        if (!ref && proc.pid !== process.pid) {
+          continue;
+        }
+
+        cpu += proc.cpu || 0;
+        mem += proc.mem || 0;
+
+        if (ref) {
+          samples.push({ ...ref, cpuLoad: (proc.cpu || 0).toFixed(2), memLoad: (proc.mem || 0).toFixed(2) });
         }
       }
 
       this.cpuLoad = Math.min(cpu, 100).toFixed(2);
       this.memLoad = Math.min(mem, 100).toFixed(2);
+      this.processSamples = samples;
     } catch {
       // keep last sample
     }

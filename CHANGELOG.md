@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.1.10]
+
+### Fixed
+
+- **Metrics show what runs on a worker.** A camera or plugin handed to a worker disappeared from the metrics tables, detection numbers included. Both are listed again, with the worker's name next to them and their load taken from that machine. The benchmark also names the machine a camera ran on and lists its hardware, instead of showing the server's for everything.
+
 ## [2.1.9]
 
 ### Added

@@ -43,6 +43,7 @@ export interface WorkerPerfStats {
 
 export interface ProcessInfo {
   name: string;
+  worker?: string;
   pid?: number;
   cpuLoad: string;
   memLoad: string;

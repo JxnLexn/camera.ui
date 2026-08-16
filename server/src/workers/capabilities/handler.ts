@@ -1,4 +1,4 @@
-import type { CapabilitySpec, WorkerCapability } from '../types.js';
+import type { CapabilitySpec, WorkerCapability, WorkerProcessRef } from '../types.js';
 
 export interface CapabilityHandler<C extends WorkerCapability = WorkerCapability> {
   readonly capability: C;
@@ -6,5 +6,5 @@ export interface CapabilityHandler<C extends WorkerCapability = WorkerCapability
   stop(id: string): Promise<void>;
   stopAll(): Promise<void>;
   getActiveWorkIds(): string[];
-  getActiveProcessIds(): number[];
+  getActiveProcesses(): WorkerProcessRef[];
 }

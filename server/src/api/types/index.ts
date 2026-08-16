@@ -63,7 +63,7 @@ import type {
 } from '../schemas/users.schema.js';
 import type { RegisterDeviceInput } from '../services/notifications.service.js';
 
-export type { ObjectBenchmarkResult, ObjectBenchmarkRun } from '../../camera/decoder/types.js';
+export type { BenchmarkHost, BenchmarkSystem, ObjectBenchmarkResult, ObjectBenchmarkRun } from '../../camera/decoder/types.js';
 
 export interface BusboyFileStream extends Readable {
   truncated: boolean;

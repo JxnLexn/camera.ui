@@ -16,7 +16,7 @@ import type { LogEntry, Logger } from '@camera.ui/common/logger';
 import type { IPackageJson } from '../../api/types/index.js';
 import type { BasePluginRuntime, RuntimePlugin } from '../../plugins/runtime/base.js';
 import type { ConfigService } from '../../services/config/index.js';
-import type { RemotePluginConfig, RemotePluginState, RemotePluginStatus } from '../types.js';
+import type { RemotePluginConfig, RemotePluginState, RemotePluginStatus, WorkerProcessRef } from '../types.js';
 import type { CapabilityHandler } from './handler.js';
 
 const PROVISION_RETRY_MS = 30_000;
@@ -90,15 +90,15 @@ export class PluginHostHandler implements CapabilityHandler<WorkerCapability.Plu
     return Array.from(this.plugins.keys());
   }
 
-  public getActiveProcessIds(): number[] {
-    const pids: number[] = [];
-    for (const managed of this.plugins.values()) {
+  public getActiveProcesses(): WorkerProcessRef[] {
+    const refs: WorkerProcessRef[] = [];
+    for (const [id, managed] of this.plugins) {
       const pid = managed.runtime?.getPID();
-      if (pid) {
-        pids.push(pid);
+      if (pid && pid > 0) {
+        refs.push({ capability: this.capability, id, pid });
       }
     }
-    return pids;
+    return refs;
   }
 
   public getPluginStatuses(): RemotePluginStatus[] {

@@ -2,6 +2,8 @@ import { cpus, loadavg, platform } from 'node:os';
 import { currentLoad, mem, processes } from 'systeminformation';
 import { container } from 'tsyringe';
 
+import { WorkerCapability } from '../../../workers/types.js';
+
 import type { Namespace, Server, Socket } from 'socket.io';
 import type { Systeminformation } from 'systeminformation';
 import type { CameraUiAPI } from '../../../api.js';
@@ -9,6 +11,7 @@ import type { FrameWorkerPerfSnapshot } from '../../../camera/decoder/types.js';
 import type { Go2Rtc } from '../../../go2rtc/index.js';
 import type { PluginManager } from '../../../plugins/index.js';
 import type { NATS } from '../../../rpc/server.js';
+import type { WorkerManager } from '../../../workers/manager.js';
 import type { AllProcesses, ProcessInfo, ProcessType, ServerProcesses, SocketNsp, WorkerDetectorStats, WorkerPerfStats, WorkerProcesses } from '../types.js';
 
 export class MetricsNamespace {
@@ -23,6 +26,7 @@ export class MetricsNamespace {
   private pluginManager: PluginManager;
   private go2rtc: Go2Rtc;
   private natsServer: NATS;
+  private workerManager: WorkerManager;
 
   private history = {
     system: [] as ProcessInfo[],
@@ -47,6 +51,7 @@ export class MetricsNamespace {
     this.pluginManager = container.resolve<PluginManager>('pluginManager');
     this.go2rtc = container.resolve<Go2Rtc>('go2rtc');
     this.natsServer = container.resolve<NATS>('natsServer');
+    this.workerManager = container.resolve<WorkerManager>('workerManager');
 
     if (platform() === 'freebsd') {
       // eslint-disable-next-line @typescript-eslint/unbound-method
@@ -221,6 +226,11 @@ export class MetricsNamespace {
     const pluginProcesses = Object.fromEntries(
       plugins
         .map(([name, plugin]) => {
+          if (plugin.worker.isRemoteWorker) {
+            const remote = this.remoteProcessInfo(WorkerCapability.PluginHost, name, name, 'plugin', currentTime);
+            return remote ? [name, remote] : undefined;
+          }
+
           const proc = processList.find((p) => p.pid === plugin.worker.getPID());
           return proc ? [name, createProcessInfo(proc, name, 'plugin')] : undefined;
         })
@@ -231,10 +241,18 @@ export class MetricsNamespace {
     const frameWorkerProcesses = Object.fromEntries(
       cameraControllers
         .map((controller) => {
-          const proc = processList.find((p) => p.pid === controller.frameWorker.getPID());
-          if (!proc) return null;
-          const name = controller.frameWorker.name;
-          const info = createProcessInfo(proc, name, 'frameworker');
+          const frameWorker = controller.frameWorker;
+          const name = frameWorker.name;
+          let info: ProcessInfo | undefined;
+
+          if (frameWorker.isRemoteWorker) {
+            info = this.remoteProcessInfo(WorkerCapability.FrameDecoding, controller.id, name, 'frameworker', currentTime);
+          } else {
+            const proc = processList.find((p) => p.pid === frameWorker.getPID());
+            info = proc ? createProcessInfo(proc, name, 'frameworker') : undefined;
+          }
+
+          if (!info) return null;
           if (this.workerPerf[name]) info.perf = this.workerPerf[name];
           return [name, info];
         })
@@ -247,6 +265,23 @@ export class MetricsNamespace {
       nats: natsProcess ? createProcessInfo(natsProcess, 'nats', 'core') : this.defaultProcessInfo('nats', 'core'),
       plugins: pluginProcesses,
       workers: frameWorkerProcesses,
+    };
+  }
+
+  // a workload on a remote worker has no local process: cpu/memory come from
+  // the agent's heartbeat, and the row stays even before the first sample
+  private remoteProcessInfo(capability: WorkerCapability, id: string, name: string, type: ProcessType, timestamp: number): ProcessInfo | undefined {
+    const remote = this.workerManager.getRemoteProcess(capability, id);
+    if (!remote) return undefined;
+
+    return {
+      name,
+      type,
+      worker: remote.worker,
+      pid: remote.sample?.pid ?? -1,
+      cpuLoad: remote.sample?.cpuLoad ?? '0.00',
+      memLoad: remote.sample?.memLoad ?? '0.00',
+      timestamp,
     };
   }
 

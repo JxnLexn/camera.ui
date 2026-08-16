@@ -1,6 +1,7 @@
 import { SensorType } from '@camera.ui/sdk';
 
 import type { BoundingBox, LoadedModel, MotionResolution, StreamingRole } from '@camera.ui/sdk';
+import type { SystemInfo } from '../../utils/system-info.js';
 
 export type PixelFormat = 'yuv420p' | 'rgb24' | 'nv12';
 
@@ -36,6 +37,7 @@ export interface WorkerToMainMessage {
 
 export interface ObjectBenchmarkResult {
   camera: string;
+  worker?: string;
   plugin: string;
   sensorId: string;
   runtime?: string;
@@ -49,17 +51,15 @@ export interface ObjectBenchmarkResult {
   handlerMs: number;
 }
 
-export interface BenchmarkSystem {
-  cpu: string;
-  cores: number;
-  memoryGb: number;
-  gpu?: string;
-  os: string;
-  version: string;
+export type BenchmarkSystem = SystemInfo;
+
+export interface BenchmarkHost {
+  worker?: string;
+  system?: BenchmarkSystem;
 }
 
 export interface ObjectBenchmarkRun {
-  system: BenchmarkSystem;
+  hosts: BenchmarkHost[];
   total: {
     cameras: number;
     iterations: number;

@@ -17,6 +17,7 @@ import type { ServerNamespace } from '../api/websocket/nsp/server.js';
 import type { WorkersNamespace } from '../api/websocket/nsp/workers.js';
 import type { ProxyServer } from '../rpc/index.js';
 import type { LogManager } from '../services/logger/logManager.js';
+import type { SystemInfo } from '../utils/system-info.js';
 import type {
   RemoteCameraConfig,
   RemotePluginConfig,
@@ -24,6 +25,7 @@ import type {
   WorkerAgentRPC,
   WorkerHeartbeat,
   WorkerInfo,
+  WorkerProcessSample,
   WorkerSyncResponse,
   WorkloadSpec,
 } from './types.js';
@@ -319,6 +321,31 @@ export class WorkerManager {
     return worker.plugins?.find((plugin) => plugin.id === pluginName)?.state;
   }
 
+  public getRemoteProcess(capability: WorkerCapability, id: string): { worker: string; system?: SystemInfo; sample?: WorkerProcessSample } | undefined {
+    const agentId = capability === WorkerCapability.FrameDecoding ? this.getAssignment(id) : this.getPluginAssignment(id);
+    if (!agentId) {
+      return undefined;
+    }
+
+    const worker = this.workers.get(agentId);
+    if (!worker) {
+      return undefined;
+    }
+
+    return {
+      worker: worker.name,
+      system: worker.system,
+      sample: worker.processes?.find((process) => process.capability === capability && process.id === id),
+    };
+  }
+
+  public getWorkerByName(name: string): WorkerInfo | undefined {
+    for (const worker of this.workers.values()) {
+      if (worker.name === name) return worker;
+    }
+    return undefined;
+  }
+
   public async renameWorker(agentId: string, name: string): Promise<void> {
     await this.workersService.renameWorker(agentId, name);
 
@@ -529,10 +556,12 @@ export class WorkerManager {
       version: heartbeat.version,
       versionMismatch,
       platform: heartbeat.platform,
+      system: heartbeat.system,
       pid: heartbeat.pid,
       cpuLoad: heartbeat.cpuLoad,
       memLoad: heartbeat.memLoad,
       plugins: heartbeat.plugins,
+      processes: heartbeat.processes,
       update: heartbeat.update,
     };
 

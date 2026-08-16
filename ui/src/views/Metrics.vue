@@ -326,6 +326,8 @@ const headers = computed<(type: 'system' | 'core' | 'frameworker' | 'plugins') =
         props: {
           class: 'font-bold text-color',
         },
+        badge: (item: ProcessInfo) => item.worker,
+        badgeTooltip: (item: ProcessInfo) => (item.worker ? t('views.metrics.tip_worker', { name: item.worker }) : undefined),
       },
       {
         type: 'category',
@@ -454,6 +456,8 @@ const analysisHeaders = computed<TableHeader[]>(() => {
       class: 'w-56 min-w-56 max-w-56',
     },
     props: { class: 'font-bold text-color' },
+    badge: (item: ProcessInfo) => item.worker,
+    badgeTooltip: (item: ProcessInfo) => (item.worker ? t('views.metrics.tip_worker', { name: item.worker }) : undefined),
   };
 
   if (showInference.value) {

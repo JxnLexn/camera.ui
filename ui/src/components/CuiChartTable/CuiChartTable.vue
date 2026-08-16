@@ -40,15 +40,21 @@
                     <Badge v-tooltip="{ value: header.tooltip?.(data) }" :style="{ background: header.color?.(data) ?? 'gray' }" />
                   </div>
 
-                  <div v-else-if="isHeaderCategory(header)" v-tooltip="{ value: header.tooltip?.(data) }" v-bind="header.props" class="w-fit">
+                  <div v-else-if="isHeaderCategory(header)" v-tooltip="{ value: header.tooltip?.(data) }" class="w-fit flex flex-wrap items-center gap-1.5">
                     <Chip v-if="header.asChip" v-bind="header.chipProps">
                       <span>{{ header.altName ? header.altName : typeof header.field === 'string' ? data[header.field] : header.field(data) }}</span>
                       <span v-if="header.suffix">{{ header.suffix }}</span>
                     </Chip>
-                    <span v-else>
+                    <span v-else v-bind="header.props">
                       <span>{{ header.altName ? header.altName : typeof header.field === 'string' ? data[header.field] : header.field(data) }}</span>
                       <span v-if="header.suffix">{{ header.suffix }}</span>
                     </span>
+                    <Chip
+                      v-if="header.badge?.(data)"
+                      v-tooltip="{ value: header.badgeTooltip?.(data) }"
+                      :label="header.badge?.(data)"
+                      class="text-xs font-normal shrink-0"
+                    />
                   </div>
 
                   <div v-else-if="isHeaderChart(header) && chartData && chartData[`${data.name}_${header.for}`]" v-bind="header.props">

@@ -9,7 +9,7 @@ import type { LogEntry } from '@camera.ui/common/logger';
 import type { ChildProcess } from 'node:child_process';
 import type { NATS } from '../../rpc/server.js';
 import type { ConfigService } from '../../services/config/index.js';
-import type { RemoteCameraConfig } from '../types.js';
+import type { RemoteCameraConfig, WorkerProcessRef } from '../types.js';
 import type { CapabilityHandler } from './handler.js';
 
 interface ManagedCamera {
@@ -96,15 +96,15 @@ export class FrameDecodingHandler implements CapabilityHandler<WorkerCapability.
     return Array.from(this.cameras.keys());
   }
 
-  public getActiveProcessIds(): number[] {
-    const pids: number[] = [];
-    for (const managed of this.cameras.values()) {
+  public getActiveProcesses(): WorkerProcessRef[] {
+    const refs: WorkerProcessRef[] = [];
+    for (const [id, managed] of this.cameras) {
       const pid = managed.frameWorkerProcess?.pid;
       if (pid) {
-        pids.push(pid);
+        refs.push({ capability: this.capability, id, pid });
       }
     }
-    return pids;
+    return refs;
   }
 
   private forkFrameWorker(config: RemoteCameraConfig): ChildProcess {
