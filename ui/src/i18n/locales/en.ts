@@ -11,6 +11,7 @@ export default {
       mode_lan: 'Local',
       mode_wan: 'Internet',
       outcome_connected: 'connected',
+      outcome_reachable: 'reachable, not used',
       outcome_timeout: 'no answer in time',
       outcome_superseded: 'stopped, another one was faster',
       outcome_pending: 'running',

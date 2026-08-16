@@ -19,7 +19,7 @@
 
       <div v-else class="flex flex-col gap-2">
         <div v-for="row in rows" :key="row.url" class="flex items-start gap-3">
-          <span class="mt-1.5 w-2 h-2 rounded-full shrink-0" :class="dotClass(row.outcome)" />
+          <span class="mt-1.5 w-2 h-2 rounded-full shrink-0" :class="dotClass(row)" />
           <div class="flex flex-col min-w-0">
             <span class="text-sm text-color">
               {{ row.modeLabel }}
@@ -41,7 +41,6 @@ import { ApiQuery } from '@/api/routes/api.js';
 import { copyToClipboard } from '@/common/utils.js';
 import { getConnection, isConnectionBooted } from '@/connection/instance.js';
 
-import type { AttemptOutcome } from '@/connection/attempts.js';
 import type { AttemptRow, ConnectionDetailsProps } from './types.js';
 
 const props = defineProps<ConnectionDetailsProps>();
@@ -70,9 +69,13 @@ const rows = computed<AttemptRow[]>(
     })) ?? [],
 );
 
-function dotClass(outcome: AttemptOutcome): string {
-  if (outcome === 'connected') return 'bg-green-500';
-  if (outcome === 'failed') return 'bg-red-500';
+function isInUse(row: AttemptRow): boolean {
+  return row.outcome === 'connected' && row.url === targetUrl.value;
+}
+
+function dotClass(row: AttemptRow): string {
+  if (isInUse(row)) return 'bg-green-500';
+  if (row.outcome === 'failed') return 'bg-red-500';
   return 'bg-neutral-400';
 }
 
@@ -82,7 +85,8 @@ function formatDuration(row: AttemptRow): string {
 }
 
 function outcomeLabel(row: AttemptRow): string {
-  if (row.outcome === 'connected') return t('components.connection_details.outcome_connected');
+  if (isInUse(row)) return t('components.connection_details.outcome_connected');
+  if (row.outcome === 'connected') return t('components.connection_details.outcome_reachable');
   if (row.outcome === 'superseded') return t('components.connection_details.outcome_superseded');
   if (row.outcome === 'pending') return t('components.connection_details.outcome_pending');
   if (row.reason?.includes('timeout')) return t('components.connection_details.outcome_timeout');
@@ -99,7 +103,7 @@ async function onConfirm(): Promise<void | null> {
     '',
   ];
   for (const row of rows.value) {
-    lines.push(`${row.outcome === 'connected' ? '+' : '-'} ${row.modeLabel} ${row.url} ${formatDuration(row)} ${outcomeLabel(row)}`);
+    lines.push(`${isInUse(row) ? '+' : '-'} ${row.modeLabel} ${row.url} ${formatDuration(row)} ${outcomeLabel(row)}`);
   }
   if (round.value?.reason) lines.push('', round.value.reason);
 
