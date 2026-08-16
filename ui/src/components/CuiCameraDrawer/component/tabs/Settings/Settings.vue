@@ -324,7 +324,7 @@
             </Field>
           </div>
 
-          <span class="section-title mt-2">{{ $t('components.camera_options.sensor_type_motion') }}</span>
+          <span class="section-chip mt-2">{{ $t('components.camera_options.sensor_type_motion') }}</span>
 
           <Field
             v-slot="{ errors }"
@@ -384,7 +384,7 @@
             }}</Message>
           </Field>
 
-          <span class="section-title mt-2">{{ $t('components.camera_options.sensor_type_object') }}</span>
+          <span class="section-chip mt-2">{{ $t('components.camera_options.sensor_type_object') }}</span>
 
           <Field
             v-slot="{ errors }"
@@ -479,7 +479,7 @@
             </div>
           </Field>
 
-          <span class="section-title mt-2">{{ $t('components.camera_options.sensor_type_audio') }}</span>
+          <span class="section-chip mt-2">{{ $t('components.camera_options.sensor_type_audio') }}</span>
 
           <Field
             v-slot="{ errors }"
@@ -578,7 +578,7 @@
             }}</Message>
           </Field>
 
-          <span class="section-title mt-2">{{ $t('components.camera_options.sensor_type_face') }}</span>
+          <span class="section-chip mt-2">{{ $t('components.camera_options.sensor_type_face') }}</span>
 
           <Field
             v-slot="{ errors }"
@@ -648,7 +648,7 @@
             }}</Message>
           </Field>
 
-          <span class="section-title mt-2">{{ $t('components.camera_options.sensor_type_licensePlate') }}</span>
+          <span class="section-chip mt-2">{{ $t('components.camera_options.sensor_type_licensePlate') }}</span>
 
           <Field
             v-slot="{ errors }"
@@ -752,7 +752,7 @@
             }}</Message>
           </Field>
 
-          <span class="section-title mt-2">{{ $t('components.camera_options.sensors') }}</span>
+          <span class="section-chip mt-2">{{ $t('components.camera_options.sensors') }}</span>
 
           <Field
             v-slot="{ errors }"

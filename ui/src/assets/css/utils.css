@@ -32,6 +32,13 @@
   color: var(--text-muted-color);
 }
 
+/* section-title as a pill, for panels with enough sections that a muted line stops separating them */
+.section-chip {
+  @apply self-start text-[0.7rem] font-semibold uppercase tracking-wider select-none rounded-full px-2.5 py-1;
+  background: var(--border-color-inner);
+  color: var(--text-color);
+}
+
 /* ===== UTILITIES ===== */
 
 .flipped-h {
