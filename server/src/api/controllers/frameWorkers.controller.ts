@@ -1,4 +1,4 @@
-import { orderBy } from '@camera.ui/common/utils';
+import { orderBy, PromiseTimeout } from '@camera.ui/common/utils';
 import { readdirSync, readFileSync } from 'fs';
 import * as si from 'systeminformation';
 import { container } from 'tsyringe';
@@ -124,7 +124,12 @@ export class FrameWorkersController {
   }
 
   private async benchmarkSystem(): Promise<BenchmarkSystem> {
-    const [cpu, memory, os, graphics] = await Promise.all([si.cpu(), si.mem(), si.osInfo(), si.graphics().catch(() => undefined)]);
+    const [cpu, memory, os, graphics] = await Promise.all([
+      si.cpu(),
+      si.mem(),
+      si.osInfo(),
+      PromiseTimeout(si.graphics(), 5000, undefined, 'graphics lookup timed out').catch(() => undefined),
+    ]);
     const gpu = graphics?.controllers.map((controller) => [controller.vendor, controller.model].filter(Boolean).join(' ').trim()).filter(Boolean);
 
     return {
