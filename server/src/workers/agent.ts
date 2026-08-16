@@ -51,6 +51,7 @@ export class WorkerAgent implements WorkerAgentRPC {
   private syncInFlight = false;
   private syncQueued = false;
   private isClosed = false;
+  private masterAnswers = true;
 
   private closeHandler?: () => Promise<void>;
   private unsubscribeSync?: () => void;
@@ -280,7 +281,16 @@ export class WorkerAgent implements WorkerAgentRPC {
       } catch {
         // Master unreachable — keep running the current workloads and try
         // again on the next cycle. Convergence resumes when it is back.
+        if (this.masterAnswers) {
+          this.masterAnswers = false;
+          this.logger.warn('Master stopped answering the heartbeat, keeping the current workloads');
+        }
         return;
+      }
+
+      if (!this.masterAnswers) {
+        this.masterAnswers = true;
+        this.logger.log('Master answers again');
       }
 
       await this.reconcile(response?.workloads ?? []);

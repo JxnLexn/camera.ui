@@ -36,6 +36,8 @@ import { WorkerAgent } from './workers/agent.js';
 import { WorkerManager } from './workers/manager.js';
 import { ensureWorkerPaired } from './workers/pairing.js';
 
+const MASTER_LINK_TIMEOUT_MS = 15_000;
+
 class CameraUi {
   public readonly logger: LoggerService;
 
@@ -314,7 +316,7 @@ class CameraUiWorker {
     this.agent = new WorkerAgent();
     await this.agent.start();
 
-    this.logger.log('Worker is ready and connected to master');
+    await this.reportMasterLink();
   }
 
   public async close(): Promise<void> {
@@ -331,6 +333,25 @@ class CameraUiWorker {
       processes.map((p) => p.pid),
       { force: true, silent: true },
     );
+  }
+
+  private async reportMasterLink(): Promise<void> {
+    const master = this.configService.config.worker?.master;
+    const leaf = this.proxy.server.leaf;
+
+    if (await leaf.whenConnected(MASTER_LINK_TIMEOUT_MS)) {
+      this.logger.log('Worker is ready and connected to master');
+    } else {
+      this.logger.error(`Worker is running but has no link to master ${master}: ${leaf.lastError ?? 'no answer'}`);
+    }
+
+    leaf.onChange = (connected) => {
+      if (connected) {
+        this.logger.log(`Link to master ${master} is up`);
+      } else {
+        this.logger.warn(`Link to master ${master} is down, retrying`);
+      }
+    };
   }
 }
 

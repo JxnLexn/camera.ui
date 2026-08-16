@@ -10,6 +10,7 @@ import { container } from 'tsyringe';
 
 import { RUNTIME_STATUS } from '../services/config/types.js';
 import { isShuttingDown } from '../shutdown-state.js';
+import { LeafConnection } from './leafConnection.js';
 
 import type { Logger } from '@camera.ui/common/logger';
 import type { ChildProcess } from 'node:child_process';
@@ -38,6 +39,8 @@ export interface LeafNodeRemoteConfig {
 }
 
 export class NATS {
+  public readonly leaf = new LeafConnection();
+
   private readonly clusterAmount = 0;
 
   private _serverPort!: number;
@@ -374,6 +377,7 @@ export class NATS {
 
     await Promise.all(promises);
     this.leafAcceptorProcess = undefined;
+    this.leaf.reset();
 
     this.stdoutLine?.close();
     this.stderrLine?.close();
@@ -675,6 +679,8 @@ export class NATS {
 
   private processLogger(line: string): void {
     const blankLine = strip(line.replace(/\[(\d+)\] (\d{4}\/\d{2}\/\d{2} \d{2}:\d{2}:\d{2}\.\d{6}) /, ''));
+
+    this.leaf.observe(blankLine);
 
     if (this.isIgnorableString(blankLine)) {
       return;
