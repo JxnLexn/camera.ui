@@ -566,7 +566,9 @@ export class DetectionCoordinator {
             // plate secondaries run on the subject instead of the whole scene
             // (processExternal only adapts the shape, external boxes get no real tracking)
             const objectDetections = this.pipeline.processExternal(objects.detections);
-            await this.runSecondariesAndThumbnails({ frame: handle.frame, scaler: this.frameScaler, isMainStream: false }, objectDetections, results);
+            const analysis: AnalysisFrame = { frame: handle.frame, scaler: this.frameScaler, isMainStream: false };
+            await this.runSecondariesAndThumbnails(analysis, objectDetections, results);
+            await this.captureExternalMoment(objectDetections, analysis, results.timestamp);
             this.ingestResultsForAllSecondaries(results);
             const snapshot = this.buildSnapshot();
             if (results.thumbnails && results.thumbnails.length > 0) {
@@ -1698,6 +1700,30 @@ export class DetectionCoordinator {
     if (!subject) return;
     if (!this.eventManager.wantsMoment(MOMENT_RANK_OBJECT, bestScore, analysis.isMainStream ? 'main' : 'low', at)) return;
     await this.captureMoment(subject, bestScore, trigger, result.tracked, analysis, at);
+  }
+
+  private async captureExternalMoment(detections: Detection[], analysis: AnalysisFrame, at: number): Promise<void> {
+    let subject: Detection | undefined;
+    let bestScore = 0;
+    for (const detection of detections) {
+      const box = detection.box;
+      if (!box) continue;
+      const score = detection.confidence * Math.sqrt(box.width * box.height);
+      if (score > bestScore) {
+        bestScore = score;
+        subject = detection;
+      }
+    }
+    if (!subject) return;
+    if (!this.eventManager.wantsMoment(MOMENT_RANK_OBJECT, bestScore, 'low', at)) return;
+
+    const target: MomentTarget = { subject: subject.box, base: unionBox(detections.map((d) => d.box).filter(Boolean)) };
+    const rendered = await this.renderMoment(target, analysis);
+    if (!rendered) return;
+
+    this.eventManager.offerMoment({ strip: rendered.strip, card: rendered.card, capturedAt: at, score: bestScore, rank: MOMENT_RANK_OBJECT, stream: 'low' });
+    // debugging
+    await this.recordMoment(target, rendered, analysis, `${subject.label}-external`, bestScore, 'external', at);
   }
 
   private async captureMoment(subject: WorldObject, score: number, trigger: string, tracked: TrackedDetection[], analysis: AnalysisFrame, at: number): Promise<void> {
