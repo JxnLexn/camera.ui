@@ -1519,6 +1519,8 @@ export default {
       fine_scrubbing: 'Feinsteuerung',
       filter: 'Filter',
       pick_date: 'Datum wählen',
+      date_apply: 'Springen',
+      date_cancel: 'Abbrechen',
       filter_events: 'Ereignisse',
       filter_cameras: 'Kameras',
       filter_zone: 'Zone',
