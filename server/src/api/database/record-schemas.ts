@@ -3,11 +3,11 @@ import * as zod from 'zod';
 
 import { pointsSchema } from '../schemas/cameras.schema.js';
 import {
+  camviewCardFitSchema,
   camviewViewSizeSchema,
   camviewViewTypeSchema,
   sensorShortcutTypeSchema,
   userLanguageSchema,
-  camviewCardFitSchema,
   userPreferencesCamviewViewsLayoutCameras,
 } from '../schemas/users.schema.js';
 
@@ -132,6 +132,7 @@ export const dbSettingsSchema = zod.object({
 
 export const dbServerSchema = zod.object({
   serverAddresses: zod.string().array().default([]),
+  localUrl: zod.string().default(''),
 });
 
 export const dbRemoteSchema = zod.object({

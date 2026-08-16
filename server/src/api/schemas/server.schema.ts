@@ -9,6 +9,10 @@ export const updateServerSchema = zod
 export const patchServerSchema = zod
   .object({
     serverAddresses: zod.union([zod.ipv4().trim(), zod.ipv6().trim()]).array().default([]),
+    localUrl: zod
+      .union([zod.literal(''), zod.url({ protocol: /^https?$/ })])
+      .default('')
+      .transform((value) => value.replace(/\/+$/, '')),
   })
   .strict();
 

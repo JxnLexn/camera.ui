@@ -1038,6 +1038,10 @@ export default {
         source_detected_protocol: 'Detected protocol: {protocol}',
         source_urls: 'Add more than one URL to let go2rtc combine codecs (e.g. video from one, audio from another) for optimal playback',
         streaming_mode: "Stream transport protocol for the user interface. In 'auto' mode, the best mode is automatically selected",
+        server_addresses:
+          "Which of this machine's IP addresses apps may use, and where camera streams are offered. Empty means all of them. A VPN address left out here breaks streaming over that VPN.",
+        local_url:
+          'A name your network resolves, for example behind a reverse proxy. Apps prefer it over the plain IP when it answers. It needs a certificate matching the name and must pass WebSocket connections through. Camera streams keep using the IP addresses above.',
         streaming_source: 'Camera source used for the stream — choose high, mid, or low resolution',
         system_preference: 'System setting for the user interface',
         type_and_enter: 'Type and press Enter',
@@ -1155,6 +1159,7 @@ export default {
         select_cameras: 'Select cameras',
         serial_number: 'Serial number',
         server_addresses: 'Server addresses',
+        local_url: 'Local address',
         server_version: 'Server version',
         settings: 'Settings',
         show_bottombar_on_mobile: 'Show bottombar on mobile',
@@ -2437,7 +2442,7 @@ export default {
       locale: 'Locale',
       network: 'Network',
       network_info:
-        "Select which of this server's own IP addresses are used for local connections. Apps and browsers use these addresses to reach the server and its streams on your network. Leave empty to use all addresses.",
+        'How apps and browsers reach this server on your network. The addresses also decide where camera streams are offered, the local address only decides what the apps talk to.',
       status_info: 'Shows whether this server is registered with camera.ui cloud for remote access.',
       server_name: 'Server Name',
       server_name_info: 'Set a custom name for this server. This name is displayed in the cloud dashboard and helps you identify this server.',

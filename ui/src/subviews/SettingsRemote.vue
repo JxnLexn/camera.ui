@@ -626,6 +626,32 @@
                   <Transition name="fade">
                     <ErrorMessage name="serverAddresses" class="cui-input-error" />
                   </Transition>
+
+                  <Message v-if="!errors.length" severity="secondary" variant="simple" size="small" class="cui-input-hint">{{
+                    $t('components.form.hint.server_addresses')
+                  }}</Message>
+                </Field>
+
+                <Field v-slot="{ field, errors }" :model-value="serverInfoForm.localUrl" name="localUrl" as="div" class="flex flex-col field-gap">
+                  <label for="localUrl" class="cui-label">{{ $t('components.form.label.local_url') }}</label>
+                  <InputGroup>
+                    <InputText
+                      v-bind="field"
+                      :model-value="serverInfoForm.localUrl"
+                      :invalid="errors.length > 0"
+                      :loading="isLoading"
+                      placeholder="https://camera.home.lan"
+                      @value-change="(e) => (serverInfoForm!.localUrl = e)"
+                    />
+                  </InputGroup>
+
+                  <Transition name="fade">
+                    <ErrorMessage name="localUrl" class="cui-input-error" />
+                  </Transition>
+
+                  <Message v-if="!errors.length" severity="secondary" variant="simple" size="small" class="cui-input-hint">{{
+                    $t('components.form.hint.local_url')
+                  }}</Message>
                 </Field>
 
                 <Button type="submit" :loading="isLoading" class="cui-button-medium ml-auto" :label="$t('components.form.button.save')" />
@@ -1180,6 +1206,7 @@ watch(
       serverInfoForm.value = {
         ...serverInfoRaw,
         serverAddresses: (serverInfoRaw.serverAddresses || []).filter(Boolean),
+        localUrl: serverInfoRaw.localUrl ?? '',
       };
     }
   },

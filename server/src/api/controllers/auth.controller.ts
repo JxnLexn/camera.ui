@@ -729,6 +729,11 @@ export class AuthController {
       .filter((addr) => selectedAddresses.length === 0 || selectedAddresses.includes(addr.address))
       .map((addr) => buildHttpsUrl(addr.address, port));
 
+    // one more local candidate, never a go2rtc filter entry: those compare against
+    // IP literals, a hostname there would gather no candidate at all
+    const localUrl = this.serverService.info().localUrl?.trim();
+    if (localUrl) internalAddresses.unshift(localUrl);
+
     const remoteStatus = this.remoteAccessManager.getStatus();
     const externalAddresses: string[] = [];
     if (remoteStatus.externalUrl) externalAddresses.push(remoteStatus.externalUrl);

@@ -77,6 +77,7 @@ export class ServerController {
       const serverInfo: ServerInfo = {
         availableAddresses: networkAddresses,
         serverAddresses: info.serverAddresses ?? [],
+        localUrl: info.localUrl ?? '',
       };
 
       return reply.code(200).send(serverInfo);

@@ -91,6 +91,7 @@ export interface DBWorkerPairing {
 
 export interface DBServer {
   serverAddresses: string[];
+  localUrl?: string;
 }
 
 export type DBRemoteDirectMode = 'cloudflare' | 'customDomain';

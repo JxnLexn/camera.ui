@@ -1052,6 +1052,10 @@ export default {
         source_url: "Fügen Sie die komplette Stream-URL inklusive Protokoll ein, z. B. rtsp://user:pass{'@'}192.168.1.50:554/stream",
         source_detected_protocol: 'Erkanntes Protokoll: {protocol}',
         source_urls: 'Fügen Sie mehrere URLs hinzu, damit go2rtc Codecs kombinieren kann (z. B. Video aus der einen, Audio aus der anderen) für optimale Wiedergabe',
+        server_addresses:
+          'Welche IP-Adressen dieser Maschine Apps benutzen dürfen und wo Kamera-Streams angeboten werden. Leer bedeutet alle. Eine hier fehlende VPN-Adresse verhindert Streaming über dieses VPN.',
+        local_url:
+          'Ein Name, den Ihr Netzwerk auflöst, etwa hinter einem Reverse Proxy. Apps bevorzugen ihn gegenüber der reinen IP, sobald er antwortet. Er braucht ein passendes Zertifikat und muss WebSocket-Verbindungen durchlassen. Kamera-Streams laufen weiter über die Adressen oben.',
         streaming_mode: "Stream Transport Protokoll für die Benutzeroberfläche. In 'auto' wird der beste Modus automatisch ausgewählt",
         streaming_source: 'Kameraquelle für den Stream — wählen Sie hohe, mittlere oder niedrige Auflösung',
         system_preference: 'Systemeinstellung für die Benutzeroberfläche',
@@ -1170,6 +1174,7 @@ export default {
         select_cameras: 'Kameras auswählen',
         serial_number: 'Seriennummer',
         server_addresses: 'Server-Adressen',
+        local_url: 'Lokale Adresse',
         server_version: 'Server-Version',
         settings: 'Einstellungen',
         show_bottombar_on_mobile: 'Bottombar auf Mobilgeräten anzeigen',
@@ -2458,7 +2463,7 @@ export default {
       locale: 'Sprache',
       network: 'Netzwerk',
       network_info:
-        'Wählen Sie aus, welche IP-Adressen dieses Servers für lokale Verbindungen verwendet werden. Apps und Browser erreichen den Server und seine Streams im Netzwerk über diese Adressen. Leer lassen, um alle Adressen zu verwenden.',
+        'Wie Apps und Browser diesen Server im Netzwerk erreichen. Die Adressen bestimmen auch, wo Kamera-Streams angeboten werden, die lokale Adresse nur, womit die Apps sprechen.',
       status_info: 'Zeigt an, ob dieser Server bei der camera.ui Cloud für den Fernzugriff registriert ist.',
       server_name: 'Servername',
       server_name_info:

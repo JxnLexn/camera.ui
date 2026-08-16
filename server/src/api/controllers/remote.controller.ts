@@ -174,6 +174,9 @@ export class RemoteController {
         .filter((addr) => selected.length === 0 || selected.includes(addr.address))
         .map((addr) => buildHttpsUrl(addr.address, port));
 
+      const localUrl = this.serverService.info().localUrl?.trim();
+      if (localUrl) internalAddresses.unshift(localUrl);
+
       const cloudAddress = remoteInfo.enabled ? PROXY_SERVICE_URL : null;
 
       const info: ConnectionInfo = {
