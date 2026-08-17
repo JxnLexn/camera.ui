@@ -3,7 +3,7 @@ import type { Migration, MigrationContext } from './types.js';
 async function dropPackageFromLines(ctx: MigrationContext): Promise<void> {
   await ctx.db.camerasDB.transaction(() => {
     for (const { key, value: camera } of ctx.db.camerasDB.getRange()) {
-      const lines = camera.zones?.lines;
+      const lines = camera.zones?.lines as { labels?: string[] }[] | undefined;
       if (!Array.isArray(lines) || lines.length === 0) continue;
 
       const kept = lines.filter((line) => !(Array.isArray(line.labels) && line.labels.length === 1 && line.labels[0] === 'package'));
@@ -16,7 +16,7 @@ async function dropPackageFromLines(ctx: MigrationContext): Promise<void> {
       }
 
       if (!touched) continue;
-      camera.zones.lines = kept;
+      camera.zones.lines = kept as typeof camera.zones.lines;
       ctx.db.camerasDB.put(key, camera);
       ctx.logger.log(`Camera "${camera.name}": line crossing no longer offers packages`);
     }
