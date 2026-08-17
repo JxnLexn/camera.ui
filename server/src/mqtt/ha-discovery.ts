@@ -19,7 +19,6 @@ const DETECTION_LABEL_ICONS: Record<string, string> = {
   person: 'mdi:account',
   vehicle: 'mdi:car',
   animal: 'mdi:paw',
-  package: 'mdi:package-variant-closed',
 };
 
 export function buildCameraDiscovery(topics: MqttTopics, haPrefix: string, camera: Camera, hasObjectDetection: boolean): DiscoveryMessage[] {

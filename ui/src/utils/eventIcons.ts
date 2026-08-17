@@ -28,7 +28,6 @@ import IconLicense from '~icons/tabler/license';
 import IconLock from '~icons/tabler/lock';
 import IconMessage from '~icons/tabler/message';
 import IconMoodCry from '~icons/tabler/mood-cry';
-import IconPackage from '~icons/tabler/package';
 import IconPlug from '~icons/tabler/plug';
 import IconPuzzle from '~icons/tabler/puzzle';
 import IconShieldLock from '~icons/tabler/shield-lock';
@@ -44,7 +43,6 @@ const icons: Record<string, Component> = {
   person: IconUser,
   vehicle: IconCar,
   animal: IconDog,
-  package: IconPackage,
   audio: IconVolume,
   // Detection attributes
   face: IconFaceId,

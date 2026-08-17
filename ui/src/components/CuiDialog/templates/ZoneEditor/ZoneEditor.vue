@@ -750,9 +750,7 @@ const spatialLabelOptions = computed<LabelGroup[]>(() => {
   ];
 });
 
-const lineLabelOptions = computed<LabelGroup[]>(() =>
-  spatialLabelOptions.value.map((group) => ({ ...group, items: group.items.filter((item) => item.value !== 'package') })),
-);
+const lineLabelOptions = spatialLabelOptions;
 
 const objectLabelOptions = computed<LabelGroup[]>(() => [
   ...spatialLabelOptions.value,
@@ -1321,7 +1319,7 @@ function addLine(): void {
       [60, 70],
     ],
     direction: 'both' as LineDirection,
-    labels: ['person', 'vehicle', 'animal', 'package'],
+    labels: ['person', 'vehicle', 'animal'],
     color: getRandomHexColor(),
   });
   selectedLine.value = detectionLines.value.length - 1;

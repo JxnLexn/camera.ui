@@ -5,7 +5,7 @@ export interface CuiCameraEventsProps {
   cameras?: DBCamera[];
 }
 
-export type EventType = 'motion' | 'person' | 'face' | 'vehicle' | 'animal' | 'package' | 'audio' | 'license_plate' | (string & {});
+export type EventType = 'motion' | 'person' | 'face' | 'vehicle' | 'animal' | 'audio' | 'license_plate' | (string & {});
 
 export interface CameraEventProps {
   event: RecordedEvent;
