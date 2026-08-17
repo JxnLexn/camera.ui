@@ -44,6 +44,12 @@ function slug(value: string): string {
   );
 }
 
+function roundBoxes(boxes?: BoundingBox[]): number[][] | undefined {
+  if (!boxes || boxes.length === 0) return undefined;
+  const r = (v: number): number => Math.round(v * 1000) / 1000;
+  return boxes.map((b) => [r(b.x), r(b.y), r(b.width), r(b.height)]);
+}
+
 function stamp(at: number): string {
   const d = new Date(at);
   const p = (n: number, width = 2): string => String(n).padStart(width, '0');
@@ -98,6 +104,21 @@ class DetectionRecorder {
 
   public perf(perf: Record<string, unknown>): void {
     this.line({ perf: { ...perf, tMs: Date.now() } });
+  }
+
+  public zoom(entry: { kind: 'object' | 'assist'; anchors?: BoundingBox[]; tracks?: BoundingBox[]; windows: BoundingBox[] }): void {
+    if (!this.active) return;
+    this.line({
+      zoom: {
+        tMs: Date.now(),
+        kind: entry.kind,
+        anchors: roundBoxes(entry.anchors),
+        tracks: roundBoxes(entry.tracks),
+        windows: roundBoxes(entry.windows),
+        stream: this.source,
+        frame: [this.frameWidth, this.frameHeight],
+      },
+    });
   }
 
   public moment(moment: RecordedMoment): void {

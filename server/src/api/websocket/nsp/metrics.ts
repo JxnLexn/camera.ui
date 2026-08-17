@@ -178,6 +178,8 @@ export class MetricsNamespace {
       mainStreamEnabled: snapshot.mainStreamEnabled,
       frameAnalysis: snapshot.frameAnalysis,
       activePercent: snapshot.uptimeMs > 0 ? Math.min(100, Math.round((snapshot.loopMs / snapshot.uptimeMs) * 100)) : 0,
+      zoomPercent: snapshot.objectCount > 0 ? Math.min(100, Math.round((snapshot.zoomTicks / snapshot.objectCount) * 100)) : 0,
+      zoomWindows: snapshot.zoomTicks > 0 ? round(snapshot.zoomWindows / snapshot.zoomTicks) : 0,
       objectsPerFrame: per(snapshot.objects, frames),
       hitPercent: frames > 0 ? Math.round((snapshot.framesWithObjects / frames) * 100) : 0,
       switches: snapshot.switches,

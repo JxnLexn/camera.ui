@@ -192,6 +192,42 @@ export class BufferedSource implements AnalysisSource {
     return undefined;
   }
 
+  public async decodeOldestKeyframe(): Promise<Frame | null> {
+    if (!this.videoStream || this.buffer.length === 0 || !this.buffer[0].packet.isKeyframe) return null;
+
+    const cloned = this.buffer[0].packet.clone();
+    if (!cloned) return null;
+
+    let decoder: Decoder | undefined;
+    let frame: Frame | undefined;
+    try {
+      decoder = await Decoder.create(this.videoStream, { hardware: this.hwContext ?? undefined, exitOnError: false });
+      await decoder.decode(cloned);
+      await decoder.decode(null);
+      let received;
+      while ((received = await decoder.receive())) {
+        frame?.[Symbol.dispose]?.();
+        frame = received;
+      }
+      if (!frame) return null;
+
+      const normalized = await this.normalize(frame);
+      frame = undefined;
+      return normalized;
+    } catch (error) {
+      this.logger.debug('Oldest keyframe decode failed:', error);
+      frame?.[Symbol.dispose]?.();
+      return null;
+    } finally {
+      try {
+        decoder?.[Symbol.dispose]();
+      } catch {
+        // ignore
+      }
+      cloned.free();
+    }
+  }
+
   public async snapshotJpeg(maxWidth: number, quality?: number, maxAgeMs = 500): Promise<Buffer | null> {
     const frame = await this.decodeNewest(maxAgeMs);
     if (!frame) return null;

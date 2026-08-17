@@ -19,4 +19,5 @@ export interface AnalysisSource {
   nextFrame(lastId: number): Promise<FrameSnap | undefined>;
   getFrame(maxAgeMs: number): Promise<FrameHandle | null>;
   takeDecodeStats(): { ms: number; frames: number };
+  decodeOldestKeyframe?(): Promise<Frame | null>;
 }

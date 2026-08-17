@@ -47,6 +47,7 @@ export interface LetterboxGeometry {
   innerHeight: number;
   targetWidth: number;
   targetHeight: number;
+  window?: { x: number; y: number; width: number; height: number };
 }
 
 export interface LetterboxedFrame {
@@ -124,20 +125,59 @@ export class FrameScaler {
   }
 
   public static undoLetterbox(detections: Detection[], geometry: LetterboxGeometry): Detection[] {
-    if (geometry.padX === 0 && geometry.padY === 0 && geometry.innerWidth === geometry.targetWidth && geometry.innerHeight === geometry.targetHeight) {
+    const identity = geometry.padX === 0 && geometry.padY === 0 && geometry.innerWidth === geometry.targetWidth && geometry.innerHeight === geometry.targetHeight;
+    if (identity && !geometry.window) {
       return detections;
     }
 
     const clamp = (value: number): number => Math.min(1, Math.max(0, value));
+    const window = geometry.window ?? { x: 0, y: 0, width: 1, height: 1 };
 
     return detections.map((detection) => {
-      const x = clamp((detection.box.x * geometry.targetWidth - geometry.padX) / geometry.innerWidth);
-      const y = clamp((detection.box.y * geometry.targetHeight - geometry.padY) / geometry.innerHeight);
-      const width = clamp((detection.box.width * geometry.targetWidth) / geometry.innerWidth);
-      const height = clamp((detection.box.height * geometry.targetHeight) / geometry.innerHeight);
+      const cropX = clamp((detection.box.x * geometry.targetWidth - geometry.padX) / geometry.innerWidth);
+      const cropY = clamp((detection.box.y * geometry.targetHeight - geometry.padY) / geometry.innerHeight);
+      const cropWidth = clamp((detection.box.width * geometry.targetWidth) / geometry.innerWidth);
+      const cropHeight = clamp((detection.box.height * geometry.targetHeight) / geometry.innerHeight);
 
-      return { ...detection, box: { x, y, width: Math.min(width, 1 - x), height: Math.min(height, 1 - y) } };
+      const x = clamp(window.x + cropX * window.width);
+      const y = clamp(window.y + cropY * window.height);
+      const width = Math.min(cropWidth * window.width, 1 - x);
+      const height = Math.min(cropHeight * window.height, 1 - y);
+
+      return { ...detection, box: { x, y, width, height } };
     });
+  }
+
+  public async cropToSpec(frame: Frame, window: { x: number; y: number; width: number; height: number }, spec: VideoInputSpec): Promise<LetterboxedFrame | null> {
+    const crop = this.quantizeCrop(
+      {
+        x: Math.round(window.x * frame.width),
+        y: Math.round(window.y * frame.height),
+        width: Math.round(window.width * frame.width),
+        height: Math.round(window.height * frame.height),
+      },
+      frame.width,
+      frame.height,
+      2,
+    );
+
+    const scaler = this.getScaler(crop.width, spec.width);
+    const data = await scaler.toBuffer(frame, { crop, resize: { width: spec.width, height: spec.height }, format: spec.format });
+    const scaled: ScaledFrame = { data, width: spec.width, height: spec.height, format: spec.format };
+
+    return {
+      padded: scaled,
+      inner: scaled,
+      geometry: {
+        ...this.identityGeometry(spec),
+        window: {
+          x: crop.x / frame.width,
+          y: crop.y / frame.height,
+          width: crop.width / frame.width,
+          height: crop.height / frame.height,
+        },
+      },
+    };
   }
 
   public async scaleProportional(frame: Frame, maxWidth: number, format: ScaledFormat = 'gray'): Promise<ScaledFrame | null> {

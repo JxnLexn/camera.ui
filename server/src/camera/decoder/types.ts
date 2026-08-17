@@ -103,6 +103,8 @@ export interface FrameWorkerPerfCounters {
   faces: number;
   plates: number;
   framesWithObjects: number;
+  zoomTicks: number;
+  zoomWindows: number;
 }
 
 export const DETECTOR_METRIC_TYPES = [SensorType.Motion, SensorType.Object, SensorType.Face, SensorType.LicensePlate, SensorType.Classifier, SensorType.Clip] as const;

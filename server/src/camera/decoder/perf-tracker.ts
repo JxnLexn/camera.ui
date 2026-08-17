@@ -37,6 +37,8 @@ export class PerfTracker {
   public faces = 0;
   public plates = 0;
   public framesWithObjects = 0;
+  public zoomTicks = 0;
+  public zoomWindows = 0;
 
   // stamped by the plugin itself, per sensor type: the wall-clock counters above
   // still hold the whole round trip
@@ -138,6 +140,8 @@ export class PerfTracker {
       clipCount: this.clipCount,
       classifierMs: this.classifierMs,
       classifierCount: this.classifierCount,
+      zoomTicks: this.zoomTicks,
+      zoomWindows: this.zoomWindows,
       secondaryMs: this.secondaryMs,
       objects: this.objects,
       faces: this.faces,

@@ -35,6 +35,8 @@ export interface WorkerPerfStats {
   mainStreamEnabled: boolean;
   frameAnalysis: boolean;
   activePercent: number;
+  zoomPercent: number;
+  zoomWindows: number;
   objectsPerFrame: number;
   hitPercent: number;
   switches: number;

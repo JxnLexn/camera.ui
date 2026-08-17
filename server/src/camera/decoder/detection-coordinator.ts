@@ -10,11 +10,13 @@ import { AudioDetectionLoop } from './audio-loop.js';
 import { CascadeManager } from './cascade-manager.js';
 import { detectionRecord } from './debug/detection-record.js';
 import { DetectionPipeline } from './detection-pipeline.js';
+import { DetectionWindow, mergeWindowDetections, planWindowsOnce, TRACK_PAD } from './detection-window.js';
 import { DwellManager } from './dwell-manager.js';
 import { DetectionEventManager, MOMENT_RANK_ATTRIBUTE, MOMENT_RANK_OBJECT } from './event-manager.js';
 import { EventThumbnailer } from './event-thumbnailer.js';
 import { FrameScaler } from './frame-scaler.js';
 import { directionBetween, directionOf, MOMENT_FORMATS, MOMENT_QUALITY, momentWindow, unionBox } from './moment-crop.js';
+import { MotionLocalizer } from './motion-localizer.js';
 import { PerfTracker } from './perf-tracker.js';
 import { normalizePlateText } from './plate-vote.js';
 import { isVideoInputSpec, modelIdentity, PluginRegistry } from './plugin-registry.js';
@@ -48,6 +50,7 @@ import type {
   PtzAutotrackSettings,
   TrackedDetection,
   VideoFrameData,
+  VideoInputSpec,
   ZoneLabel,
 } from '@camera.ui/sdk';
 import type { Frame } from 'node-av/lib';
@@ -152,6 +155,13 @@ export class DetectionCoordinator {
   private benchmarkRunning = false;
 
   private hqUpgrade?: AnalysisFrame;
+  private localizer: MotionLocalizer;
+  private lastLocalizeAt = 0;
+  private anchorBoxes: BoundingBox[] = [];
+  private trackAnchorBoxes: BoundingBox[] = [];
+  private farewellBoxes: BoundingBox[] = [];
+  private lastTrackedById = new Map<number, BoundingBox>();
+  private detectionWindow = new DetectionWindow();
   private mainStreamActive = false;
   private idleSince = 0;
   private lastMotionAt = 0;
@@ -213,6 +223,7 @@ export class DetectionCoordinator {
     // a hot source buffers from the start, the loop only decides what is analysed
     if (config.streamHot) this.frameSource.start();
     this.frameScaler = new FrameScaler(null, logger, this.privacy);
+    this.localizer = new MotionLocalizer();
     this.pipeline = new DetectionPipeline(this.pipelineZones(), config.detectionSettings);
     this.secondaries = new SecondaryStage(this, this.plugins, this.pipeline, this.frameScaler, this.proxy, this.perf, logger);
 
@@ -278,6 +289,7 @@ export class DetectionCoordinator {
     this.cascadeUnsubscribe = this.cascade.onChange((event) => {
       if (event.type === 'activated') {
         this.startAdHocVideoLoopIfNeeded();
+        this.seedLocalizerReference();
       } else {
         this.stopAdHocVideoLoopIfIdle();
         this.handleCascadeDeactivated();
@@ -558,41 +570,47 @@ export class DetectionCoordinator {
         if (!handle) return;
         try {
           const results: DetectionResults = { timestamp: Date.now() };
-          const objects = await this.runObjectAssist(handle.frame, rawExternal);
-          this.ingestAssistedObjects(sensorId, objects);
+          // anchors may have switched analysis to the main stream: the assist
+          // windows and secondary crops should see those native pixels
+          const analysis = await this.acquireAnalysisFrame(handle.frame);
+          try {
+            const objects = await this.runObjectAssist(analysis.frame, rawExternal, analysis.scaler);
+            this.ingestAssistedObjects(sensorId, objects);
 
-          if (objects.assisted) {
-            // real boxes: crop the object like the frame pipeline, so face and
-            // plate secondaries run on the subject instead of the whole scene
-            // (processExternal only adapts the shape, external boxes get no real tracking)
-            const objectDetections = this.pipeline.processExternal(objects.detections);
-            const analysis: AnalysisFrame = { frame: handle.frame, scaler: this.frameScaler, isMainStream: false };
-            await this.runSecondariesAndThumbnails(analysis, objectDetections, results);
-            await this.captureExternalMoment(objectDetections, analysis, results.timestamp);
-            this.ingestResultsForAllSecondaries(results);
-            const snapshot = this.buildSnapshot();
-            if (results.thumbnails && results.thumbnails.length > 0) {
-              snapshot.thumbnails = results.thumbnails;
+            if (objects.assisted) {
+              // real boxes: crop the object like the frame pipeline, so face and
+              // plate secondaries run on the subject instead of the whole scene
+              // (processExternal only adapts the shape, external boxes get no real tracking)
+              const objectDetections = this.pipeline.processExternal(objects.detections);
+              await this.runSecondariesAndThumbnails(analysis, objectDetections, results);
+              await this.captureExternalMoment(objectDetections, analysis, results.timestamp);
+              this.ingestResultsForAllSecondaries(results);
+              const snapshot = this.buildSnapshot();
+              if (results.thumbnails && results.thumbnails.length > 0) {
+                snapshot.thumbnails = results.thumbnails;
+              }
+              this.eventManager.processResults(snapshot);
+            } else {
+              const sceneJpeg = await this.secondaries.detectFullFrame(analysis.frame, results);
+              try {
+                results.thumbnails = await this.secondaries.generateThumbnails(analysis.frame, analysis.scaler, results);
+              } catch (error) {
+                this.logger.error('Thumbnail generation error:', error);
+              }
+              this.ingestResultsForAllSecondaries(results);
+              const snapshot = this.buildSnapshot();
+              if (results.thumbnails && results.thumbnails.length > 0) {
+                snapshot.thumbnails = results.thumbnails;
+              }
+              if (sceneJpeg) snapshot.eventThumbnail = sceneJpeg;
+              const wantsEventThumb = this.eventManager.needsThumbnail() || this.snapshotWillStartEvent(snapshot);
+              this.eventManager.processResults(snapshot);
+              if (wantsEventThumb) {
+                this.thumbnailer.upgradeEventThumbnailAsync();
+              }
             }
-            this.eventManager.processResults(snapshot);
-          } else {
-            const sceneJpeg = await this.secondaries.detectFullFrame(handle.frame, results);
-            try {
-              results.thumbnails = await this.secondaries.generateThumbnails(handle.frame, this.frameScaler, results);
-            } catch (error) {
-              this.logger.error('Thumbnail generation error:', error);
-            }
-            this.ingestResultsForAllSecondaries(results);
-            const snapshot = this.buildSnapshot();
-            if (results.thumbnails && results.thumbnails.length > 0) {
-              snapshot.thumbnails = results.thumbnails;
-            }
-            if (sceneJpeg) snapshot.eventThumbnail = sceneJpeg;
-            const wantsEventThumb = this.eventManager.needsThumbnail() || this.snapshotWillStartEvent(snapshot);
-            this.eventManager.processResults(snapshot);
-            if (wantsEventThumb) {
-              this.thumbnailer.upgradeEventThumbnailAsync();
-            }
+          } finally {
+            if (analysis.frame !== handle.frame) analysis.frame[Symbol.dispose]?.();
           }
         } finally {
           await handle[Symbol.asyncDispose]();
@@ -666,15 +684,14 @@ export class DetectionCoordinator {
     return this.plugins.has(sensorType);
   }
 
-  private externalObjectSpanActive(): boolean {
-    // the registry holds frame-based providers only; a smart-camera object
-    // sensor (Reolink AI, ONVIF) lives in the feeding set, and its dwell is
-    // what keeps the span open between its report edges
-    if (this.plugins.get(SensorType.Object)?.requiresFrames) return false;
-    for (const [sensorId, sensorType] of this.feedingSensors) {
-      if (sensorType === SensorType.Object && this.dwell.isActive(sensorId)) return true;
-    }
-    return false;
+  private get windowAnchorsWanted(): boolean {
+    return this.plugins.get(SensorType.Object)?.requiresFrames === true || this.plugins.hasEligibleObjectAssist();
+  }
+
+  private get windowWantsMainStream(): boolean {
+    if (!this.cascade.isActive) return false;
+    if (this.anchorBoxes.length === 0 && this.trackAnchorBoxes.length === 0) return false;
+    return this.windowAnchorsWanted;
   }
 
   private get cascadeEnabled(): boolean {
@@ -698,7 +715,22 @@ export class DetectionCoordinator {
     return w / h;
   }
 
+  private externalObjectSpanActive(): boolean {
+    // the registry holds frame-based providers only; a smart-camera object
+    // sensor (Reolink AI, ONVIF) lives in the feeding set, and its dwell is
+    // what keeps the span open between its report edges
+    if (this.plugins.get(SensorType.Object)?.requiresFrames) return false;
+    for (const [sensorId, sensorType] of this.feedingSensors) {
+      if (sensorType === SensorType.Object && this.dwell.isActive(sensorId)) return true;
+    }
+    return false;
+  }
+
   private handleCascadeDeactivated(): void {
+    this.anchorBoxes = [];
+    this.farewellBoxes = [];
+    this.detectionWindow.reset();
+
     // clear cascade-gated buffer slots, keep motion/audio
     const cs = this.currentDetectionState;
     cs.object = undefined;
@@ -1206,6 +1238,8 @@ export class DetectionCoordinator {
           this.frameScaler.updateHardwareContext(this.frameSource.hardwareContext);
           this.frameScaler.clearCache();
           this.thumbnailer.sync(this.mainStreamAnalysisWanted);
+          this.localizer.reset();
+          this.detectionWindow.reset();
         }
 
         // motion always reads the low stream: switching its input resolution
@@ -1302,7 +1336,7 @@ export class DetectionCoordinator {
   }
 
   private updateStreamState(): void {
-    if (this.worldSpans.size > 0 || this.eventManager.hasActiveSegment()) {
+    if (this.worldSpans.size > 0 || this.eventManager.hasActiveSegment() || this.windowWantsMainStream) {
       this.idleSince = 0;
       if (!this.mainStreamActive && this.mainStreamAvailable) {
         this.mainStreamActive = true;
@@ -1358,6 +1392,7 @@ export class DetectionCoordinator {
       if (!this.loopRunning) return;
       if (motionFrame) {
         this.lastMotionAt = t0;
+        if (this.windowAnchorsWanted) this.feedLocalizer(motionFrame, t0, ptzSuppressed);
         try {
           const motionInferStart = Date.now();
           const result = await motionPlugin.proxy.detectMotion(motionFrame);
@@ -1385,6 +1420,16 @@ export class DetectionCoordinator {
       // no frame-based motion plugin, the cascade is the only motion-equivalent signal
       motionDetected = true;
       results.cascadeTriggered = true;
+
+      // the localizer scales its own gray here, nobody else needed one
+      const localizeDue = t0 - this.lastLocalizeAt >= MOTION_INTERVAL_MS - TICK_SLACK_MS;
+      if (localizeDue && this.windowAnchorsWanted) {
+        const scaleStart = Date.now();
+        const gray = await this.scaleForMotionInput(motionRawFrame);
+        this.perf.scaleMs += Date.now() - scaleStart;
+        if (!this.loopRunning) return;
+        if (gray) this.feedLocalizer(gray, t0, ptzSuppressed);
+      }
     }
 
     // detected is re-derived after zone filtering, the plugin's own flag is ignored
@@ -1401,30 +1446,16 @@ export class DetectionCoordinator {
     const shouldDetectObjects = objectPlugin?.requiresFrames === true && (ptzSuppressed || !this.cascadeEnabled || this.cascade.isActive);
 
     if (shouldDetectObjects) {
-      const scaleStart = Date.now();
-      const objectFrame = await this.scaleForObject(analysis.frame, analysis.scaler);
-      this.perf.scaleMs += Date.now() - scaleStart;
-      if (!this.loopRunning) return;
-      if (objectFrame) {
-        try {
-          const inferStart = Date.now();
-          const result = await PromiseTimeout(
-            objectPlugin.proxy.detectObjects(objectFrame.model),
-            DETECT_TIMEOUT_MS,
-            undefined,
-            `Object detection timed out after ${DETECT_TIMEOUT_MS}ms`,
-          );
-          this.perf.objectMs += Date.now() - inferStart;
-          this.perf.objectCount++;
-          if (!this.loopRunning) return;
-
+      try {
+        const detected = await this.runObjectDetection(objectPlugin, analysis, results.motion?.detections ?? []);
+        if (!this.loopRunning) return;
+        if (detected) {
           this.trackDetectionCadence();
 
           // run the pipeline even on empty frames so Norfair advances its
           // Kalman state; the pose delta keeps predictions stable across pans
           const poseDelta = this.ptzAutotracker.consumePoseDelta();
           const postStart = Date.now();
-          const detected = FrameScaler.undoLetterbox(ensureDetectionBoxes(result.detections), objectFrame.geometry);
           const pipelineResult = this.pipeline.process(detected, poseDelta);
           this.perf.postMs += Date.now() - postStart;
           // the tick that opens a span analysed the low stream (the switch lands
@@ -1462,16 +1493,27 @@ export class DetectionCoordinator {
             return cx > -0.1 && cx < 1.1 && cy > -0.1 && cy < 1.1;
           });
           objectDetections = visibleTracks.filter((t) => !t.trackLost);
-          results.object = { ...result, detections: visibleTracks };
+          results.object = { detected: objectDetections.length > 0, detections: visibleTracks };
           if (pipelineResult.crossings.length > 0) results.lineCrossings = pipelineResult.crossings;
 
           // incl. extrapolated tracks, otherwise a single missed detector
           // frame flips the autotracker into LOST/REACQUIRE churn
           this.ptzAutotracker.handleObjectDetections(pipelineResult.tracked);
-        } catch (error) {
-          if (!this.loopRunning || isNoRespondersError(error)) return;
-          this.logger.error('Object detection error:', error);
+
+          // live tracks anchor the next tick's window; a track that just died
+          // gets one farewell look at its last position
+          this.trackAnchorBoxes = objectDetections.map((t) => t.box);
+          for (const id of pipelineResult.removed) {
+            const last = this.lastTrackedById.get(id);
+            if (last) this.farewellBoxes.push(last);
+          }
+          this.lastTrackedById = new Map(
+            pipelineResult.tracked.filter((t): t is TrackedDetection & { trackId: number } => t.trackId !== undefined).map((t) => [t.trackId, t.box]),
+          );
         }
+      } catch (error) {
+        if (!this.loopRunning || isNoRespondersError(error)) return;
+        this.logger.error('Object detection error:', error);
       }
     }
 
@@ -1859,10 +1901,43 @@ export class DetectionCoordinator {
   private async scaleForMotion(rawFrame: Frame): Promise<VideoFrameData | undefined> {
     const motionPlugin = this.plugins.get(SensorType.Motion);
     if (!motionPlugin?.requiresFrames) return undefined;
+    return this.scaleForMotionInput(rawFrame);
+  }
 
+  private async scaleForMotionInput(rawFrame: Frame): Promise<VideoFrameData | undefined> {
     const maxWidth = MOTION_WIDTH_MAP[this.motionResolution];
     const scaled = await this.frameScaler.scaleProportional(rawFrame, maxWidth, 'gray');
     return scaled ? this.frameScaler.toVideoFrameData(scaled) : undefined;
+  }
+
+  private feedLocalizer(gray: VideoFrameData, t0: number, ptzSuppressed: boolean): void {
+    this.lastLocalizeAt = t0;
+
+    const data = Buffer.isBuffer(gray.data) ? gray.data : Buffer.from(gray.data);
+    const boxes = this.localizer.localize({ data, width: gray.width, height: gray.height });
+
+    // during ego-motion the diff is garbage, feeding keeps the reference alive
+    this.anchorBoxes = ptzSuppressed ? [] : boxes;
+  }
+
+  private async seedLocalizerReference(): Promise<void> {
+    if (!this.windowAnchorsWanted || !this.frameSource.decodeOldestKeyframe) return;
+
+    try {
+      const frame = await this.frameSource.decodeOldestKeyframe();
+      if (!frame) return;
+      try {
+        const gray = await this.scaleForMotionInput(frame);
+        if (gray) {
+          const data = Buffer.isBuffer(gray.data) ? gray.data : Buffer.from(gray.data);
+          this.localizer.seedReference({ data, width: gray.width, height: gray.height });
+        }
+      } finally {
+        frame[Symbol.dispose]?.();
+      }
+    } catch (error) {
+      this.logger.debug('Localizer reference seed failed:', error);
+    }
   }
 
   private trackDetectionCadence(): void {
@@ -1901,6 +1976,60 @@ export class DetectionCoordinator {
     return this.scaleFrameForPlugin(rawFrame, objectPlugin, scaler);
   }
 
+  private async runObjectDetection(objectPlugin: RegisteredPlugin, analysis: AnalysisFrame, pluginMotionBoxes: Detection[]): Promise<Detection[] | undefined> {
+    const inputSpec = objectPlugin.modelSpec?.input;
+    const motionAnchors = [...this.anchorBoxes, ...pluginMotionBoxes.map((d) => d.box).filter((box): box is BoundingBox => box !== undefined), ...this.farewellBoxes];
+    this.farewellBoxes = [];
+
+    const windows = isVideoInputSpec(inputSpec)
+      ? this.detectionWindow.plan(motionAnchors, this.trackAnchorBoxes, analysis.frame.width, analysis.frame.height, inputSpec.width)
+      : null;
+
+    if (windows && windows.length > 0) {
+      this.perf.zoomTicks++;
+      this.perf.zoomWindows += windows.length;
+      detectionRecord.zoom({ kind: 'object', anchors: motionAnchors, tracks: this.trackAnchorBoxes, windows });
+      const inferStart = Date.now();
+      const perWindow = await Promise.all(
+        windows.map((window) => this.detectInWindow(objectPlugin, analysis.frame, analysis.scaler, window, inputSpec as VideoInputSpec)),
+      );
+      this.perf.objectMs += Date.now() - inferStart;
+      this.perf.objectCount++;
+      return mergeWindowDetections(perWindow.flat());
+    }
+
+    const scaleStart = Date.now();
+    const objectFrame = await this.scaleForObject(analysis.frame, analysis.scaler);
+    this.perf.scaleMs += Date.now() - scaleStart;
+    if (!objectFrame || !this.loopRunning) return undefined;
+
+    const inferStart = Date.now();
+    const result = await PromiseTimeout(
+      objectPlugin.proxy.detectObjects(objectFrame.model),
+      DETECT_TIMEOUT_MS,
+      undefined,
+      `Object detection timed out after ${DETECT_TIMEOUT_MS}ms`,
+    );
+    this.perf.objectMs += Date.now() - inferStart;
+    this.perf.objectCount++;
+    return FrameScaler.undoLetterbox(ensureDetectionBoxes(result.detections), objectFrame.geometry);
+  }
+
+  private async detectInWindow(plugin: RegisteredPlugin, frame: Frame, scaler: FrameScaler, window: BoundingBox, spec: VideoInputSpec): Promise<Detection[]> {
+    const scaleStart = Date.now();
+    const cropped = await scaler.cropToSpec(frame, window, spec);
+    this.perf.scaleMs += Date.now() - scaleStart;
+    if (!cropped) return [];
+
+    const result = await PromiseTimeout(
+      plugin.proxy.detectObjects(scaler.toVideoFrameData(cropped.padded, 'model')),
+      DETECT_TIMEOUT_MS,
+      undefined,
+      `Object detection timed out after ${DETECT_TIMEOUT_MS}ms`,
+    );
+    return FrameScaler.undoLetterbox(ensureDetectionBoxes(result.detections), cropped.geometry);
+  }
+
   private async scaleFrameForPlugin(rawFrame: Frame, plugin: RegisteredPlugin, scaler: FrameScaler = this.frameScaler): Promise<PluginFrame | undefined> {
     const inputSpec = plugin.modelSpec?.input;
     if (!isVideoInputSpec(inputSpec)) return undefined;
@@ -1924,22 +2053,18 @@ export class DetectionCoordinator {
     this.ingestDetectionResult(SensorType.Object, sensorId, refiltered);
   }
 
-  private async runObjectAssist(frame: Frame, reported: Detection[]): Promise<{ detections: Detection[]; assisted: boolean }> {
+  private async runObjectAssist(frame: Frame, reported: Detection[], scaler: FrameScaler = this.frameScaler): Promise<{ detections: Detection[]; assisted: boolean }> {
     if (!this.plugins.hasEligibleObjectAssist()) {
       return { detections: reported, assisted: false };
     }
     const assist = this.plugins.get(SensorType.ObjectAssist)!;
 
-    const scaled = await this.scaleFrameForPlugin(frame, assist);
-    if (!scaled) return { detections: reported, assisted: false };
-
     try {
       const inferStart = Date.now();
-      const result = await PromiseTimeout(assist.proxy.detectObjects(scaled.model), DETECT_TIMEOUT_MS, undefined, `Object assist timed out after ${DETECT_TIMEOUT_MS}ms`);
+      const boxed = await this.assistDetections(assist, frame, scaler, reported);
       this.perf.assistMs += Date.now() - inferStart;
       this.perf.assistCount++;
       const reportedLabels = new Set(reported.map((d) => d.label.toLowerCase()));
-      const boxed = FrameScaler.undoLetterbox(ensureDetectionBoxes(result?.detections ?? []), scaled.geometry);
       const found = boxed.filter((d) => reportedLabels.size === 0 || reportedLabels.has(d.label.toLowerCase()));
       if (found.length === 0) return { detections: reported, assisted: false };
       this.perf.objects += found.length;
@@ -1949,5 +2074,25 @@ export class DetectionCoordinator {
       this.logger.debug('Object assist failed:', error);
       return { detections: reported, assisted: false };
     }
+  }
+
+  private async assistDetections(assist: RegisteredPlugin, frame: Frame, scaler: FrameScaler, reported: Detection[]): Promise<Detection[]> {
+    const inputSpec = assist.modelSpec?.input;
+    const reportedBoxes = reported.map((d) => d.box).filter((box): box is BoundingBox => box !== undefined);
+
+    if (isVideoInputSpec(inputSpec) && reportedBoxes.length > 0) {
+      const windows = planWindowsOnce(reportedBoxes, TRACK_PAD, frame.width, frame.height, inputSpec.width);
+      if (windows.length > 0) {
+        detectionRecord.zoom({ kind: 'assist', anchors: reportedBoxes, windows });
+        const perWindow = await Promise.all(windows.map((window) => this.detectInWindow(assist, frame, scaler, window, inputSpec)));
+        return mergeWindowDetections(perWindow.flat());
+      }
+    }
+
+    const scaled = await this.scaleFrameForPlugin(frame, assist, scaler);
+    if (!scaled) return [];
+
+    const result = await PromiseTimeout(assist.proxy.detectObjects(scaled.model), DETECT_TIMEOUT_MS, undefined, `Object assist timed out after ${DETECT_TIMEOUT_MS}ms`);
+    return FrameScaler.undoLetterbox(ensureDetectionBoxes(result?.detections ?? []), scaled.geometry);
   }
 }
