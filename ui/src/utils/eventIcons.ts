@@ -3,6 +3,8 @@ import IconFaceId from '~icons/mdi/face-recognition';
 import IconHeat from '~icons/mdi/fire';
 import IconGas from '~icons/mdi/gas-cylinder';
 import IconCoGas from '~icons/mdi/molecule-co';
+import IconGarage from '~icons/mdi/garage';
+import IconOccupancy from '~icons/mdi/motion-sensor';
 import IconTamper from '~icons/mdi/shield-alert-outline';
 import IconSmoke from '~icons/mdi/smoke-detector';
 import IconCold from '~icons/mdi/snowflake';
@@ -23,9 +25,11 @@ import IconDoor from '~icons/tabler/door';
 import IconFlame from '~icons/tabler/flame';
 import IconGlassOff from '~icons/tabler/glass-off';
 import IconLicense from '~icons/tabler/license';
+import IconLock from '~icons/tabler/lock';
 import IconMessage from '~icons/tabler/message';
 import IconMoodCry from '~icons/tabler/mood-cry';
 import IconPackage from '~icons/tabler/package';
+import IconPlug from '~icons/tabler/plug';
 import IconPuzzle from '~icons/tabler/puzzle';
 import IconShieldLock from '~icons/tabler/shield-lock';
 import IconSpeakerphone from '~icons/tabler/speakerphone';
@@ -62,6 +66,10 @@ const icons: Record<string, Component> = {
   vibration: IconVibration,
   tamper: IconTamper,
   problem: IconProblem,
+  occupancy: IconOccupancy,
+  power: IconPlug,
+  lock: IconLock,
+  garage: IconGarage,
   // Special filter for classifier-produced types
   other: IconPuzzle,
   // Audio labels

@@ -210,8 +210,8 @@ import { CamerasQuery } from '@/api/routes/cameras.js';
 import { UsersQuery } from '@/api/routes/users.js';
 import CameraEventDialog from '@/components/CuiDialog/templates/CameraStreamEvent/CameraStreamEvent.vue';
 import ExportRecordings from '@/components/CuiDialog/templates/ExportRecordings/ExportRecordings.vue';
-import CuiMenu from '@/components/CuiMenu/CuiMenu.vue';
 import { boxOverlapsRegions } from '@/components/CuiGridSearch/utils.js';
+import CuiMenu from '@/components/CuiMenu/CuiMenu.vue';
 import RecordingsFilterSidebar from '@/components/CuiRecordings/RecordingsFilterSidebar.vue';
 
 import type { CameraStreamEventProps } from '@/components/CuiDialog/templates/CameraStreamEvent/types.js';
@@ -392,8 +392,17 @@ const episodeGridItems = computed<UngroupedItem[]>(() => {
   eventStore.storeVersion.value;
   const f = filters.value;
   if (f.gridRegions.length > 0) return [];
+  const contentFiltered =
+    f.search.trim() !== '' || f.eventTypes.length > 0 || f.audioLabels.length > 0 || f.hasAttributes.length > 0 || f.sensorEvents.length > 0 || f.minConfidence !== 0.5;
+  if (contentFiltered) return [];
+
   const scope = cameraIds.value.length > 0 ? cameraIds.value : allCameraIds.value;
   let cutoff = f.timeRange && TIME_RANGE_MS[f.timeRange] ? Date.now() - TIME_RANGE_MS[f.timeRange] : 0;
+  let rangeEndMs = Infinity;
+  if (f.timeRange === 'custom' && f.customDateRange) {
+    cutoff = Math.max(cutoff, f.customDateRange[0].getTime());
+    rangeEndMs = f.customDateRange[1].getTime();
+  }
 
   if (hasMore.value) {
     let oldest = Infinity;
@@ -407,6 +416,7 @@ const episodeGridItems = computed<UngroupedItem[]>(() => {
   for (const episode of eventStore.getEpisodes()) {
     if (!episode.description) continue;
     if (cutoff && episode.endTime < cutoff) continue;
+    if (episode.startTime > rangeEndMs) continue;
     if (scope.length > 0 && !episode.members.some((m) => scope.includes(m.cameraId))) continue;
     items.push({ event: undefined as unknown as RecordedEvent, key: `episode:${episode.id}`, episode });
   }

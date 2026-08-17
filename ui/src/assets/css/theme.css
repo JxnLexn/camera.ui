@@ -372,6 +372,8 @@
   --timeline-sys-warning-border: rgb(245, 158, 11);
   --timeline-sys-error-bg: rgba(239, 68, 68, 0.1);
   --timeline-sys-error-border: rgb(239, 68, 68);
+  --timeline-sys-degraded-bg: rgba(139, 92, 246, 0.1);
+  --timeline-sys-degraded-border: rgb(139, 92, 246);
 
   /* TopNavbar Item */
   --cui-topnavbar-item-bg: transparent;
@@ -494,6 +496,8 @@
   --timeline-sys-warning-border: rgb(245, 158, 11);
   --timeline-sys-error-bg: rgba(239, 68, 68, 0.1);
   --timeline-sys-error-border: rgb(239, 68, 68);
+  --timeline-sys-degraded-bg: rgba(139, 92, 246, 0.1);
+  --timeline-sys-degraded-border: rgb(139, 92, 246);
 
   /* TopNavbar Item */
   --cui-topnavbar-item-bg: transparent;
