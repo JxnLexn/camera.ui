@@ -1804,7 +1804,6 @@ export class DetectionCoordinator {
     // legible one frames the shot, the rest stay their own attribute tiles
     let best: AttributeMomentCandidate | undefined;
     let bestScore = -1;
-    let bestCard: Buffer | undefined;
     for (const candidate of candidates) {
       const cut = results.thumbnails?.find((t) => t.label === candidate.label);
       // a subject cut off by the frame edge makes a poor card
@@ -1817,7 +1816,6 @@ export class DetectionCoordinator {
       if (score > bestScore) {
         bestScore = score;
         best = candidate;
-        bestCard = cut?.jpeg;
       }
     }
 
@@ -1825,13 +1823,15 @@ export class DetectionCoordinator {
     // and re-encoding for a picture that loses anyway is pure cost
     if (!best || !this.eventManager.wantsMoment(MOMENT_RANK_ATTRIBUTE, bestScore, analysis.isMainStream ? 'main' : 'low', at)) return;
 
+    // the card frames the whole person with the face as its center, not the
+    // bare face box: the zoomed face already exists as an attribute tile, and
+    // a misdetected "face" zoomed to card size ruins the event picture
     const target: MomentTarget = {
       subject: best.box,
+      base: best.parentBox ?? best.box,
       hint: best.parentBox ? directionBetween(best.box, best.parentBox) : undefined,
     };
-    // the attribute tile was cut from this frame with this very target, so the
-    // card is already encoded; only the 16:9 companion is still missing
-    const rendered = await this.renderMoment(target, analysis, bestCard);
+    const rendered = await this.renderMoment(target, analysis);
     if (!rendered) return;
 
     const stream = analysis.isMainStream ? 'main' : 'low';

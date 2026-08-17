@@ -65,13 +65,18 @@ function containment(a: BoundingBox, b: BoundingBox): number {
 export function mergeWindowDetections(detections: Detection[]): Detection[] {
   const kept: Detection[] = [];
   for (const detection of [...detections].sort((a, b) => b.confidence - a.confidence)) {
-    const duplicate = kept.some(
-      (other) =>
-        other.label === detection.label &&
-        other.box !== undefined &&
-        detection.box !== undefined &&
-        (iou(other.box, detection.box) >= 0.5 || containment(other.box, detection.box) >= 0.7),
-    );
+    const duplicate = kept.some((other) => {
+      if (other.label !== detection.label || other.box === undefined || detection.box === undefined) return false;
+      if (iou(other.box, detection.box) >= 0.5) return true;
+      // containment dedups the same object across window seams, where both
+      // boxes are alike in size; a small object inside a huge same-label box
+      // (a passing car in front of a parked column read as one vehicle) is a
+      // distinct object, not a duplicate
+      const areaA = other.box.width * other.box.height;
+      const areaB = detection.box.width * detection.box.height;
+      const sizeAlike = Math.min(areaA, areaB) >= Math.max(areaA, areaB) * 0.25;
+      return sizeAlike && containment(other.box, detection.box) >= 0.7;
+    });
     if (!duplicate) kept.push(detection);
   }
   return kept;

@@ -170,6 +170,7 @@ export class DetectionEventManager {
 
   private shippedSceneAt = 0;
   private attributeThumbnails = new Map<string, ThumbnailCandidate>();
+  private identifiedFaceTracks = new Set<number>();
   private heldAttributes: HeldAttribute[] = [];
   private shippedAttributes = new Map<number, Uint8Array>();
   private segmentMoment?: SegmentMoment;
@@ -792,6 +793,14 @@ export class DetectionEventManager {
     for (const thumb of thumbnails) {
       const label = thumb.label;
       if (!label.startsWith('face:') && !label.startsWith('plate:') && !label.startsWith('class:')) continue;
+      // once a track's face resolved to an identity, its earlier and later
+      // "unknown" crops are the same person, not a second thumbnail
+      if (label.startsWith('face:') && label !== 'face:unknown' && thumb.trackId !== undefined) {
+        this.identifiedFaceTracks.add(thumb.trackId);
+        const unknown = this.attributeThumbnails.get('face:unknown');
+        if (unknown?.trackId === thumb.trackId) this.attributeThumbnails.delete('face:unknown');
+      }
+      if (label === 'face:unknown' && thumb.trackId !== undefined && this.identifiedFaceTracks.has(thumb.trackId)) continue;
       this.updateBestCandidate(this.attributeThumbnails, label, thumb);
       // a moving vehicle produces a distinct plate crop almost every frame, cap retention
       if (label.startsWith('plate:')) this.prunePlateThumbnails();
@@ -950,6 +959,7 @@ export class DetectionEventManager {
     this.segmentMoment = undefined;
     this.pendingMoment = undefined;
     this.attributeThumbnails.clear();
+    this.identifiedFaceTracks.clear();
     this.heldAttributes = [];
     this.shippedAttributes.clear();
     this.segmentFaceTrackIds.clear();
