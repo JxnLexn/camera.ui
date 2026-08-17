@@ -517,18 +517,26 @@ const analysisHeaders = computed<TableHeader[]>(() => {
     },
     {
       type: 'category',
-      field: (item: ProcessInfo) => (item.perf ? `${item.perf.activePercent}%` : '-'),
-      name: t('views.metrics.col_active'),
-      headerTooltip: t('views.metrics.info_active'),
-      columnProps,
-    },
-    {
-      type: 'category',
       field: (item: ProcessInfo) => (item.perf ? item.perf.objectsPerFrame.toFixed(1) : '-'),
       name: t('views.metrics.col_detections'),
       headerTooltip: t('views.metrics.info_detections'),
       columnProps,
       tooltip: (item: ProcessInfo) => `${t('views.metrics.tip_hit_rate')}: ${item.perf ? `${item.perf.hitPercent}%` : '-'}`,
+    },
+    {
+      type: 'category',
+      field: (item: ProcessInfo) => (item.perf ? `${item.perf.zoomPercent}%` : '-'),
+      name: t('views.metrics.col_zoom'),
+      headerTooltip: t('views.metrics.info_zoom'),
+      columnProps,
+      tooltip: (item: ProcessInfo) => `${t('views.metrics.tip_zoom_windows')}: ${item.perf && item.perf.zoomWindows > 0 ? item.perf.zoomWindows.toFixed(1) : '-'}`,
+    },
+    {
+      type: 'category',
+      field: (item: ProcessInfo) => (item.perf ? `${item.perf.activePercent}%` : '-'),
+      name: t('views.metrics.col_active'),
+      headerTooltip: t('views.metrics.info_active'),
+      columnProps,
     },
   ];
 });
