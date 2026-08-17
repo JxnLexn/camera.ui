@@ -243,13 +243,52 @@ export function createConnection(options: ConnectionOptions): Connection {
 
   const backgroundProbe = createBackgroundProbe({
     kernel,
-    discover: options.callbacks.discover,
-    probe: options.callbacks.probe,
+    discover: async (signal) => {
+      const pool = await options.callbacks.discover(signal);
+      attempts.roundStarted();
+      return pool;
+    },
+    probe: async (probeCtx) => {
+      attempts.probeStarted(probeCtx.endpoint.url, probeCtx.endpoint.mode);
+      try {
+        const tokens = await options.callbacks.probe(probeCtx);
+        attempts.probeSucceeded(probeCtx.endpoint.url);
+        return tokens;
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        const kind = err instanceof Error && 'kind' in err ? (err as { kind: string }).kind : 'unknown';
+        attempts.probeFailed(probeCtx.endpoint.url, `${kind}: ${msg}`);
+        throw err;
+      }
+    },
     lastTarget: () => target.value ?? restoredTarget ?? persistence.peek(),
     prefer: (ep) => ep.mode === 'direct-lan',
+    preferGraceMs: 1_000,
+    isCurrentHealthy: () => [socketio, nats].some((t) => t.health().up),
     onResult: (outcome, detail) => diag('probe', `background ${outcome}`, detail),
   });
   cleanups.push(() => backgroundProbe.dispose());
+
+  const UPGRADE_RETRY_DELAYS_MS = [3_000, 8_000];
+  let upgradeRetryTimer: ReturnType<typeof setTimeout> | undefined;
+
+  function runUpgradeProbe(retriesLeft = UPGRADE_RETRY_DELAYS_MS.length): void {
+    if (upgradeRetryTimer !== undefined) {
+      clearTimeout(upgradeRetryTimer);
+      upgradeRetryTimer = undefined;
+    }
+    void backgroundProbe.run().then(() => {
+      if (retriesLeft <= 0) return;
+      if (kernel.phase.kind !== 'online') return;
+      if (target.value?.endpoint.mode === 'direct-lan') return;
+      const delay = UPGRADE_RETRY_DELAYS_MS[UPGRADE_RETRY_DELAYS_MS.length - retriesLeft];
+      diag('probe', `background retry in ${Math.round(delay / 1000)}s (${retriesLeft} left)`);
+      upgradeRetryTimer = setTimeout(() => runUpgradeProbe(retriesLeft - 1), delay);
+    });
+  }
+  cleanups.push(() => {
+    if (upgradeRetryTimer !== undefined) clearTimeout(upgradeRetryTimer);
+  });
 
   cleanups.push(
     attachDegradedRecovery({
@@ -273,7 +312,7 @@ export function createConnection(options: ConnectionOptions): Connection {
         diag('presence', 'network online');
         wakeTokens();
         if (shouldRetryOnWake()) k.dispatch({ type: 'USER_RETRY' });
-        else if (k.phase.kind === 'online') backgroundProbe.run();
+        else if (k.phase.kind === 'online') runUpgradeProbe();
       },
       onOffline: () => diag('presence', 'network offline'),
       onVisibilityVisible: (k) => {
@@ -297,7 +336,7 @@ export function createConnection(options: ConnectionOptions): Connection {
           // healthy connections stay online: probe silently and swap the
           // endpoint in place if the new network opened a better path
           if (k.phase.kind === 'online') {
-            backgroundProbe.run();
+            runUpgradeProbe();
           } else if (k.phase.kind === 'offline') {
             diag('network-change', 're-discovering');
             k.dispatch({ type: 'USER_RETRY' });

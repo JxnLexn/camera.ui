@@ -1,5 +1,5 @@
 <template>
-  <div>
+  <div ref="containerRef">
     <h1 v-if="!smBreakpoint" class="page-title">
       {{ $t(`views.${String($route.name).toLowerCase()}.title`) }}
     </h1>
@@ -79,17 +79,51 @@
                 @update:page="onPage($event, 'frameworker')"
               >
                 <template #actions>
-                  <Button
-                    severity="secondary"
-                    outlined
-                    class="cui-button-medium"
-                    :label="showInference ? $t('views.metrics.show_performance') : $t('views.metrics.show_inference')"
-                    @click="showInference = !showInference"
-                  />
+                  <div class="flex items-end gap-2">
+                    <Button v-tooltip.top="{ value: $t('views.metrics.copy') }" severity="secondary" outlined class="cui-button-medium" @click="copyAnalysis">
+                      <template #icon>
+                        <i-mdi:content-copy />
+                      </template>
+                    </Button>
+                    <Button
+                      v-tooltip.top="{ value: showInference ? $t('views.metrics.show_performance') : $t('views.metrics.show_inference'), disabled: !xsBreakpoint }"
+                      severity="secondary"
+                      outlined
+                      class="cui-button-medium"
+                      :label="xsBreakpoint ? undefined : showInference ? $t('views.metrics.show_performance') : $t('views.metrics.show_inference')"
+                      @click="showInference = !showInference"
+                    >
+                      <template v-if="xsBreakpoint" #icon>
+                        <i-mdi:chart-timeline-variant v-if="showInference" />
+                        <i-mdi:brain v-else />
+                      </template>
+                    </Button>
+                  </div>
 
                   <div class="flex items-end gap-2">
-                    <Button severity="secondary" class="cui-button-medium" :loading="resetPerfLoading" :label="$t('views.metrics.reset')" @click="confirmReset" />
-                    <Button class="cui-button-medium" :disabled="resetPerfLoading" :label="$t('views.metrics.benchmark')" @click="openBenchmark" />
+                    <Button
+                      v-tooltip.top="{ value: $t('views.metrics.reset'), disabled: !xsBreakpoint }"
+                      severity="secondary"
+                      class="cui-button-medium"
+                      :loading="resetPerfLoading"
+                      :label="xsBreakpoint ? undefined : $t('views.metrics.reset')"
+                      @click="confirmReset"
+                    >
+                      <template v-if="xsBreakpoint" #icon>
+                        <i-ic:round-restart-alt />
+                      </template>
+                    </Button>
+                    <Button
+                      v-tooltip.top="{ value: $t('views.metrics.benchmark'), disabled: !xsBreakpoint }"
+                      class="cui-button-medium"
+                      :disabled="resetPerfLoading"
+                      :label="xsBreakpoint ? undefined : $t('views.metrics.benchmark')"
+                      @click="openBenchmark"
+                    >
+                      <template v-if="xsBreakpoint" #icon>
+                        <i-mdi:speedometer />
+                      </template>
+                    </Button>
                   </div>
                 </template>
               </CuiChartTable>
@@ -244,26 +278,14 @@ const serverQuery = new ServerQuery();
 
 const { t } = useI18n();
 const dialog = useCuiDialog();
+const toast = useCuiToast();
+const { copy } = useClipboard();
 const metricsSocket = useMetricsSocket();
-const { mdBreakpoint, smBreakpoint } = useSharedCuiBreakpoint();
+const { mdBreakpoint, smBreakpoint, xsBreakpoint } = useSharedCuiBreakpoint();
 const { beginServerRestart } = useServerRestart();
 const { stats, isLoading: storageStatsLoading } = useStorageStats();
 
-const currentTab = ref('overview');
-const showInference = ref(false);
-const tablePages = ref({ frameworker: 1, plugins: 1 });
-
-const frameworkersPagination = ref<PaginationQuery>({ page: 1, pageSize: -1 });
-const pluginsPagination = ref<PaginationQuery>({ page: 1, pageSize: -1 });
-
-const { data: camerasData } = camerasQuery.getCamerasQuery({ page: 1, pageSize: -1 });
-const { data: plugins, isBusy: pluginsLoading, suspense: pluginsSuspense } = pluginsQuery.getPluginsQuery(pluginsPagination);
-const { data: frameWorkers, isBusy: frameWorkersLoading, suspense: frameWorkerSuspense } = frameWorkerQuery.getFrameWorkersQuery(frameworkersPagination);
-const { mutateAsync: restartPlugin } = pluginsQuery.restartPluginQuery();
-const { mutateAsync: restartFrameWorker } = frameWorkerQuery.restartFrameWorkerQuery();
-const { mutateAsync: resetFrameWorkerPerf, isPending: resetPerfLoading } = frameWorkerQuery.resetFrameWorkerPerfQuery();
-const { mutate: restartGo2Rtc, isPending: restartGo2RtcLoading } = serverQuery.restartGo2RtcQuery();
-const { mutate: restartServer, isPending: restartSystemLoading } = serverQuery.restartServerQuery();
+const METRICS_TABS = ['overview', 'cameras', 'storage'];
 
 const tablePtOptions: DataTablePassThroughOptions = {
   bodyRow: {
@@ -276,8 +298,31 @@ const tablePtOptions: DataTablePassThroughOptions = {
   },
 };
 
+const containerRef = useTemplateRef('containerRef');
+const currentTab = ref('overview');
+const showInference = ref(false);
+const tablePages = ref({ frameworker: 1, plugins: 1 });
+const frameworkersPagination = ref<PaginationQuery>({ page: 1, pageSize: -1 });
+const pluginsPagination = ref<PaginationQuery>({ page: 1, pageSize: -1 });
 const frameWorkersRestarting = ref<string[]>([]);
 const pluginsRestarting = ref<string[]>([]);
+
+const { data: camerasData } = camerasQuery.getCamerasQuery({ page: 1, pageSize: -1 });
+const { data: plugins, isBusy: pluginsLoading, suspense: pluginsSuspense } = pluginsQuery.getPluginsQuery(pluginsPagination);
+const { data: frameWorkers, isBusy: frameWorkersLoading, suspense: frameWorkerSuspense } = frameWorkerQuery.getFrameWorkersQuery(frameworkersPagination);
+const { mutateAsync: restartPlugin } = pluginsQuery.restartPluginQuery();
+const { mutateAsync: restartFrameWorker } = frameWorkerQuery.restartFrameWorkerQuery();
+const { mutateAsync: resetFrameWorkerPerf, isPending: resetPerfLoading } = frameWorkerQuery.resetFrameWorkerPerfQuery();
+const { mutate: restartGo2Rtc, isPending: restartGo2RtcLoading } = serverQuery.restartGo2RtcQuery();
+const { mutate: restartServer, isPending: restartSystemLoading } = serverQuery.restartServerQuery();
+
+useTabSwipe(containerRef, (swipeDirection) => {
+  const index = METRICS_TABS.indexOf(currentTab.value);
+  const nextTab = METRICS_TABS[swipeDirection === 'right' ? index - 1 : index + 1];
+  if (nextTab) {
+    currentTab.value = nextTab;
+  }
+});
 
 const systemProcess = metricsSocket.systemProcess;
 const systemProcessInfo = metricsSocket.systemProcessInfo;
@@ -429,66 +474,52 @@ const headers = computed<(type: 'system' | 'core' | 'frameworker' | 'plugins') =
 
 const analysisItems = computed(() => frameworkerItems.value);
 
-const analysisHeaders = computed<TableHeader[]>(() => {
-  const columnProps = { headerClass: 'min-w-24', class: 'min-w-24' };
-  const firstColumnProps = { headerClass: 'min-w-24 pl-4', class: 'min-w-24 pl-4' };
-  const ms = (value?: number) => (value && value > 0 ? `${value.toFixed(1)} ms` : '-');
-  const fps = (value?: number) => (value && value > 0 ? value.toFixed(1) : '-');
-  const detector = (item: ProcessInfo, type: string) => item.perf?.detectors?.[type];
-  const detectorTooltip = (item: ProcessInfo, type: string) => {
-    const info = detector(item, type);
-    if (!info) return t('views.metrics.tip_no_plugin');
+const analysisColumnProps = { headerClass: 'min-w-24', class: 'min-w-24' };
+const analysisFirstColumnProps = { headerClass: 'min-w-24 pl-4', class: 'min-w-24 pl-4' };
 
-    const models = (info.models ?? []).map((model) => [model.name, model.role, model.device].filter(Boolean).join(' '));
-    const parts = [info.plugin, info.input, info.runtime, ...models];
-    if (!info.stamped) parts.push(t('views.metrics.tip_round_trip'));
-    return parts.filter(Boolean).join(' · ');
-  };
+const analysisCameraColumn = computed<TableHeader>(() => ({
+  type: 'category',
+  field: 'name',
+  name: t('views.metrics.col_camera'),
+  columnProps: {
+    alignFrozen: 'left',
+    frozen: !mdBreakpoint.value,
+    headerClass: 'w-56 min-w-56 max-w-56',
+    class: 'w-56 min-w-56 max-w-56',
+  },
+  props: { class: 'font-bold text-color' },
+  badge: (item: ProcessInfo) => item.worker,
+  badgeTooltip: (item: ProcessInfo) => (item.worker ? t('views.metrics.tip_worker', { name: item.worker }) : undefined),
+}));
 
-  const cameraColumn: TableHeader = {
+const analysisInferenceHeaders = computed<TableHeader[]>(() => {
+  const inferenceColumn = (type: string, name: string, info: string, first = false): TableHeader => ({
     type: 'category',
-    field: 'name',
-    name: t('views.metrics.col_camera'),
-    columnProps: {
-      alignFrozen: 'left',
-      frozen: !mdBreakpoint.value,
-      headerClass: 'w-56 min-w-56 max-w-56',
-      class: 'w-56 min-w-56 max-w-56',
-    },
-    props: { class: 'font-bold text-color' },
-    badge: (item: ProcessInfo) => item.worker,
-    badgeTooltip: (item: ProcessInfo) => (item.worker ? t('views.metrics.tip_worker', { name: item.worker }) : undefined),
-  };
-
-  if (showInference.value) {
-    const inferenceColumn = (type: string, name: string, info: string, first = false): TableHeader => ({
-      type: 'category',
-      field: (item: ProcessInfo) => ms(detector(item, type)?.inferenceMs),
-      name,
-      headerTooltip: info,
-      columnProps: first ? firstColumnProps : columnProps,
-      tooltip: (item: ProcessInfo) => detectorTooltip(item, type),
-    });
-
-    return [
-      cameraColumn,
-      inferenceColumn('motion', t('views.metrics.col_motion'), t('views.metrics.info_motion'), true),
-      inferenceColumn('object', t('views.metrics.col_object'), t('views.metrics.info_object')),
-      inferenceColumn('face', t('views.metrics.col_face'), t('views.metrics.info_secondary')),
-      inferenceColumn('licensePlate', t('views.metrics.col_plate'), t('views.metrics.info_secondary')),
-      inferenceColumn('classifier', t('views.metrics.col_classifier'), t('views.metrics.info_secondary')),
-      inferenceColumn('clip', t('views.metrics.col_clip'), t('views.metrics.info_secondary')),
-    ];
-  }
+    field: (item: ProcessInfo) => ms(detector(item, type)?.inferenceMs),
+    name,
+    headerTooltip: info,
+    columnProps: first ? analysisFirstColumnProps : analysisColumnProps,
+    tooltip: (item: ProcessInfo) => detectorTooltip(item, type),
+  });
 
   return [
-    cameraColumn,
+    inferenceColumn('motion', t('views.metrics.col_motion'), t('views.metrics.info_motion'), true),
+    inferenceColumn('object', t('views.metrics.col_object'), t('views.metrics.info_object')),
+    inferenceColumn('face', t('views.metrics.col_face'), t('views.metrics.info_secondary')),
+    inferenceColumn('licensePlate', t('views.metrics.col_plate'), t('views.metrics.info_secondary')),
+    inferenceColumn('classifier', t('views.metrics.col_classifier'), t('views.metrics.info_secondary')),
+    inferenceColumn('clip', t('views.metrics.col_clip'), t('views.metrics.info_secondary')),
+  ];
+});
+
+const analysisPerformanceHeaders = computed<TableHeader[]>(() => {
+  return [
     {
       type: 'category',
       field: (item: ProcessInfo) => `${ms(item.perf?.decodeMs)} / ${ms(item.perf?.mainDecodeMs)}`,
       name: t('views.metrics.col_decode'),
       headerTooltip: t('views.metrics.info_decode'),
-      columnProps: firstColumnProps,
+      columnProps: analysisFirstColumnProps,
       tooltip: () => `${t('views.metrics.tip_analysis_stream')} / ${t('views.metrics.tip_main')}`,
     },
     {
@@ -496,7 +527,7 @@ const analysisHeaders = computed<TableHeader[]>(() => {
       field: (item: ProcessInfo) => ms(item.perf?.processingMs),
       name: t('views.metrics.col_processing'),
       headerTooltip: t('views.metrics.info_processing'),
-      columnProps,
+      columnProps: analysisColumnProps,
       tooltip: (item: ProcessInfo) =>
         [`${t('views.metrics.tip_scale')}: ${ms(item.perf?.scaleMs)}`, `${t('views.metrics.tip_post')}: ${ms(item.perf?.postMs)}`].join(' · '),
     },
@@ -505,14 +536,14 @@ const analysisHeaders = computed<TableHeader[]>(() => {
       field: (item: ProcessInfo) => ms(item.perf?.transportMs),
       name: t('views.metrics.col_transport'),
       headerTooltip: t('views.metrics.info_transport'),
-      columnProps,
+      columnProps: analysisColumnProps,
     },
     {
       type: 'category',
       field: (item: ProcessInfo) => `${fps(item.perf?.analysedFps)} / ${fps(item.perf?.mainFps)}`,
       name: t('views.metrics.col_analysed'),
       headerTooltip: t('views.metrics.info_analysed'),
-      columnProps,
+      columnProps: analysisColumnProps,
       tooltip: () => `${t('views.metrics.tip_analysis_stream')} / ${t('views.metrics.tip_main')}`,
     },
     {
@@ -520,7 +551,7 @@ const analysisHeaders = computed<TableHeader[]>(() => {
       field: (item: ProcessInfo) => (item.perf ? item.perf.objectsPerFrame.toFixed(1) : '-'),
       name: t('views.metrics.col_detections'),
       headerTooltip: t('views.metrics.info_detections'),
-      columnProps,
+      columnProps: analysisColumnProps,
       tooltip: (item: ProcessInfo) => `${t('views.metrics.tip_hit_rate')}: ${item.perf ? `${item.perf.hitPercent}%` : '-'}`,
     },
     {
@@ -528,7 +559,7 @@ const analysisHeaders = computed<TableHeader[]>(() => {
       field: (item: ProcessInfo) => (item.perf ? `${item.perf.zoomPercent}%` : '-'),
       name: t('views.metrics.col_zoom'),
       headerTooltip: t('views.metrics.info_zoom'),
-      columnProps,
+      columnProps: analysisColumnProps,
       tooltip: (item: ProcessInfo) => `${t('views.metrics.tip_zoom_windows')}: ${item.perf && item.perf.zoomWindows > 0 ? item.perf.zoomWindows.toFixed(1) : '-'}`,
     },
     {
@@ -536,10 +567,58 @@ const analysisHeaders = computed<TableHeader[]>(() => {
       field: (item: ProcessInfo) => (item.perf ? `${item.perf.activePercent}%` : '-'),
       name: t('views.metrics.col_active'),
       headerTooltip: t('views.metrics.info_active'),
-      columnProps,
+      columnProps: analysisColumnProps,
     },
   ];
 });
+
+const analysisHeaders = computed<TableHeader[]>(() => [
+  analysisCameraColumn.value,
+  ...(showInference.value ? analysisInferenceHeaders.value : analysisPerformanceHeaders.value),
+]);
+
+function ms(value?: number): string {
+  return value && value > 0 ? `${value.toFixed(1)} ms` : '-';
+}
+
+function fps(value?: number): string {
+  return value && value > 0 ? value.toFixed(1) : '-';
+}
+
+function detector(item: ProcessInfo, type: string) {
+  return item.perf?.detectors?.[type];
+}
+
+function detectorTooltip(item: ProcessInfo, type: string): string {
+  const info = detector(item, type);
+  if (!info) return t('views.metrics.tip_no_plugin');
+
+  const models = (info.models ?? []).map((model) => [model.name, model.role, model.device].filter(Boolean).join(' '));
+  const parts = [info.plugin, info.input, info.runtime, ...models];
+  if (!info.stamped) parts.push(t('views.metrics.tip_round_trip'));
+  return parts.filter(Boolean).join(' · ');
+}
+
+async function copyAnalysis() {
+  const sections = [
+    { title: t('views.metrics.performance'), headers: analysisPerformanceHeaders.value },
+    { title: t('views.metrics.inference'), headers: analysisInferenceHeaders.value },
+  ];
+
+  const text = analysisItems.value
+    .map((item) => {
+      const name = item.worker ? `${item.name} (${item.worker})` : item.name;
+      const lines = sections.flatMap(({ title, headers }) => [
+        `${title}:`,
+        ...headers.map((header) => `  ${header.name}: ${typeof header.field === 'function' ? header.field(item) : ((item as any)[header.field] ?? '-')}`),
+      ]);
+      return [name, ...lines].join('\n');
+    })
+    .join('\n\n');
+
+  await copy(text);
+  toast.add({ severity: 'success', detail: t('views.metrics.copied'), life: 3000 });
+}
 
 function confirmReset() {
   dialog.openTextDialog({

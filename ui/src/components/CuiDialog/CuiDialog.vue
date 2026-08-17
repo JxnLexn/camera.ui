@@ -286,21 +286,7 @@ async function onConfirm() {
 }
 
 function bringToFront(): void {
-  const rootElement = document.getElementById(rootId?.value || '');
-  const mask = rootElement?.closest('.p-dialog-mask') as HTMLElement | null;
-  if (!mask) return;
-
-  const allMasks = Array.from(document.querySelectorAll<HTMLElement>('.p-dialog-mask'));
-  let maxZ = 0;
-  for (const m of allMasks) {
-    const z = parseInt(m.style.zIndex, 10) || 0;
-    if (z > maxZ) maxZ = z;
-  }
-
-  const currentZ = parseInt(mask.style.zIndex, 10) || 0;
-  if (currentZ < maxZ) {
-    mask.style.zIndex = String(maxZ + 1);
-  }
+  bringDialogToFront(rootId?.value || '');
 }
 
 if (isStepper.value) {

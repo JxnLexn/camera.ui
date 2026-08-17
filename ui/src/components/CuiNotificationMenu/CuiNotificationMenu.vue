@@ -9,6 +9,7 @@
     <Popover
       ref="notificationsMenuRef"
       append-to="self"
+      :dismissable="!detailDialogOpen"
       class="w-[20rem] shadow-lg cui-rounded-corner notification-menu isolate overscroll-contain non-draggable-region"
       @hide="onHide"
     >
@@ -79,14 +80,9 @@
               <Button severity="secondary" text class="cui-button p-2 block w-full" @click="openDialog(notification)">
                 <div class="flex gap-3">
                   <div class="w-2 h-2 rounded-full mt-2" :style="{ backgroundColor: getColor(notification.severity) }" />
-                  <img
-                    v-if="imageSource(notification) && !failedImages[notification.id]"
-                    :src="imageSource(notification)"
-                    alt=""
-                    loading="lazy"
-                    class="w-14 h-10 rounded-md object-cover shrink-0 self-center"
-                    @error="failedImages[notification.id] = true"
-                  />
+                  <div v-if="imageSource(notification)" class="w-14 h-10 rounded-md overflow-hidden shrink-0 self-center bg-black">
+                    <CuiImage :src="imageSource(notification)" alt="" :image-style="{ objectFit: 'cover' }" image-container-class="w-full h-full" />
+                  </div>
                   <div class="flex-1 min-w-0">
                     <div class="flex justify-between items-center gap-2">
                       <h4 class="text-sm truncate max-w-[200px]" :class="notification.seenAt == null ? 'font-semibold text-color' : 'font-medium text-muted'">
@@ -174,7 +170,7 @@ const { data: settings, isLoading: settingsLoading } = notificationsQuery.getSet
 
 const notificationsMenuRef = useTemplateRef<InstanceType<typeof Popover>>('notificationsMenuRef');
 const swipeStates = ref<Record<string, { left: string; opacity: number; deleteOpacity: number; isSwiping: boolean; resetFn: () => void; stopFn: () => void }>>({});
-const failedImages = ref<Record<string, boolean>>({});
+const detailDialogOpen = ref(false);
 
 const notifications = computed(() => notificationsSocket.notifications.value);
 const unreadCount = computed(() => notificationsSocket.unreadCount.value);
@@ -330,8 +326,10 @@ function openDialog(notification: StoredNotification) {
 
   const detail = [notification.subtitle, notification.body].filter(Boolean).join('\n');
   const confirmText = !notification?.deepLink ? t('components.form.button.mark_as_read') : t('components.form.button.go_to_message');
-  const src = failedImages.value[notification.id] ? undefined : imageSource(notification);
+  const src = imageSource(notification);
   const videoSrc = notificationImageUrl(notification.videoUrl);
+
+  detailDialogOpen.value = true;
 
   if (src || videoSrc) {
     dialog.openComponentDialog<NotificationDetailProps>(NotificationDetail, {
@@ -346,6 +344,7 @@ function openDialog(notification: StoredNotification) {
       },
       onConfirm: () => handleNotificationClick(notification),
       onCancel: () => removeNotification(notification),
+      onSettled: () => (detailDialogOpen.value = false),
     });
     return;
   }
@@ -359,6 +358,7 @@ function openDialog(notification: StoredNotification) {
     },
     onConfirm: () => handleNotificationClick(notification),
     onCancel: () => removeNotification(notification),
+    onSettled: () => (detailDialogOpen.value = false),
   });
 }
 

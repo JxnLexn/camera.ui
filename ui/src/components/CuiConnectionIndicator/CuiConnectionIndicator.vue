@@ -1,14 +1,15 @@
 <template>
   <Transition name="fade">
-    <div v-if="visible" class="cui-connection-indicator shadow-xl" :style="{ bottom: bottomOffset }">
+    <div v-if="visible || notice" class="cui-connection-indicator shadow-xl" :style="{ bottom: bottomOffset }">
       <div class="cui-connection-indicator__content">
-        <ProgressSpinner class="!w-5 !h-5 shrink-0" stroke-width="5" />
+        <ProgressSpinner v-if="visible" class="!w-5 !h-5 shrink-0" stroke-width="5" />
+        <component :is="noticeIcon" v-else class="w-5 h-5 shrink-0" :class="noticeIconColor" />
 
         <span class="cui-connection-indicator__text">
-          {{ statusText }}
+          {{ visible ? statusText : noticeText }}
         </span>
 
-        <Button v-if="showEscape" size="small" rounded class="cui-connection-indicator__button" :aria-label="t('connection.pick_server')" @click="onEscape">
+        <Button v-if="visible && showEscape" size="small" rounded class="cui-connection-indicator__button" :aria-label="t('connection.pick_server')" @click="onEscape">
           <i-mdi:cloud-outline class="w-4 h-4" />
         </Button>
       </div>
@@ -17,17 +18,29 @@
 </template>
 
 <script setup lang="ts">
-import { useBootMode } from '@/connection/index.js';
+import CloudIcon from '~icons/material-symbols/cloud-outline';
+import EarthIcon from '~icons/mdi/earth';
+import LanIcon from '~icons/mdi/lan';
+
+import { PROXY_SERVICE_HOST } from '@/common/constants.js';
+import { useBootMode, useCloudSession } from '@/connection/index.js';
+
+const NOTICE_MS = 3_000;
 
 const { t } = useI18n();
 const { bottombarHeight } = useSharedCuiStates();
 const connection = useConnection();
-const { bannerMode, inTrouble } = connection;
+const { bannerMode, inTrouble, isOnline, target } = connection;
 const { restarting } = useServerRestart();
 const mode = useBootMode();
+const cloudSession = useCloudSession();
 
 const authStore = useAuthStore();
 const { isLoggedIn } = storeToRefs(authStore);
+
+const notice = ref<'lan' | 'wan' | 'cloud' | null>(null);
+const announcedKind = ref<'lan' | 'wan' | 'cloud' | null>(null);
+let noticeTimer: ReturnType<typeof setTimeout> | undefined;
 
 const bottomOffset = computed(() => `calc(${bottombarHeight.value}px + 1rem + env(safe-area-inset-bottom, 0px))`);
 
@@ -40,12 +53,80 @@ const statusText = computed(() => {
   return t('connection.restarting');
 });
 
+const connectionKind = computed<'lan' | 'wan' | 'cloud' | null>(() => {
+  if (!isLoggedIn.value || !isOnline.value) return null;
+  const endpoint = target.value?.endpoint;
+  if (!endpoint) return null;
+  const endpointHost = urlHost(endpoint.url);
+  if (endpointHost && (endpointHost === urlHost(cloudSession?.state.value?.proxyUrl) || endpointHost === PROXY_SERVICE_HOST)) return 'cloud';
+  if (endpoint.mode === 'direct-lan') return 'lan';
+  return 'wan';
+});
+
+const noticeText = computed(() => {
+  if (notice.value === 'lan') return t('connection.connected_lan');
+  if (notice.value === 'wan') return t('connection.connected_wan');
+  return t('connection.connected_cloud');
+});
+
+const noticeIcon = computed(() => {
+  if (notice.value === 'lan') return LanIcon;
+  if (notice.value === 'wan') return EarthIcon;
+  return CloudIcon;
+});
+
+const noticeIconColor = computed(() => {
+  if (notice.value === 'lan') return 'text-success';
+  if (notice.value === 'wan') return 'text-info';
+  return 'text-warning';
+});
+
 const showEscape = computed(() => inTrouble.value && mode === 'cloud');
+
+function urlHost(url?: string): string | undefined {
+  if (!url) return undefined;
+  try {
+    return new URL(url).host;
+  } catch {
+    return undefined;
+  }
+}
+
+function clearNotice() {
+  if (noticeTimer !== undefined) {
+    clearTimeout(noticeTimer);
+    noticeTimer = undefined;
+  }
+  notice.value = null;
+}
 
 async function onEscape() {
   const { bounceToCloudFrontend } = await import('@/connection/cloudHandoff');
   await bounceToCloudFrontend();
 }
+
+watch(connectionKind, (kind) => {
+  if (!kind || kind === announcedKind.value) return;
+  announcedKind.value = kind;
+  clearNotice();
+  notice.value = kind;
+  noticeTimer = setTimeout(clearNotice, NOTICE_MS);
+});
+
+watch(visible, (troubled) => {
+  if (troubled) clearNotice();
+});
+
+watch(isLoggedIn, (loggedIn) => {
+  if (!loggedIn) {
+    clearNotice();
+    announcedKind.value = null;
+  }
+});
+
+onUnmounted(() => {
+  clearNotice();
+});
 </script>
 
 <style scoped>

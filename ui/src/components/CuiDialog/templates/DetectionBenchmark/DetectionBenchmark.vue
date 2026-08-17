@@ -3,6 +3,16 @@
     <span class="text-sm text-pretty">{{ $t('views.metrics.benchmark_confirm') }}</span>
 
     <div v-if="!result" class="flex flex-col">
+      <div class="flex justify-end">
+        <Button
+          severity="secondary"
+          text
+          class="cui-button-small"
+          :label="allSelected ? $t('views.metrics.deselect_all') : $t('views.metrics.select_all')"
+          @click="toggleAll"
+        />
+      </div>
+
       <div v-for="camera in cameras" :key="camera" class="cui-list-item">
         <CuiListItem :active="selected.includes(camera)" class="h-14" @click="toggle(camera)">
           <span>{{ camera }}</span>
@@ -79,9 +89,11 @@ const tablePtOptions: DataTablePassThroughOptions = {
 
 const { mutateAsync: runBenchmark } = new FrameWorkerQuery().benchmarkObjectDetectionQuery();
 
-const selected = ref<string[]>([...props.cameras]);
+const selected = ref<string[]>([]);
 const result = ref<ObjectBenchmarkRun>();
 const page = ref(0);
+
+const allSelected = computed(() => props.cameras.length > 0 && selected.value.length === props.cameras.length);
 
 const pages = computed(() => {
   const run = result.value;
@@ -138,6 +150,10 @@ function cameraRows(camera: ObjectBenchmarkResult) {
 
 function toggle(camera: string) {
   selected.value = selected.value.includes(camera) ? selected.value.filter((name) => name !== camera) : [...selected.value, camera];
+}
+
+function toggleAll() {
+  selected.value = allSelected.value ? [] : [...props.cameras];
 }
 
 async function copyResult() {

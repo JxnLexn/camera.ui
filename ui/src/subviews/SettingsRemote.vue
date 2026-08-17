@@ -676,15 +676,15 @@ import LanIcon from '~icons/mdi/lan';
 import { RemoteQuery } from '@/api/routes/remote.js';
 import { ServerQuery } from '@/api/routes/server.js';
 import { CLOUD_SERVICE_URL, PROXY_SERVICE_HOST } from '@/common/constants.js';
-import ConnectionDetailsDialog from '@/components/CuiDialog/templates/ConnectionDetails/ConnectionDetails.vue';
 import { copyToClipboard, deepToRaw } from '@/common/utils.js';
+import ConnectionDetailsDialog from '@/components/CuiDialog/templates/ConnectionDetails/ConnectionDetails.vue';
 import { isCapacitor, isInCloudSession } from '@/connection/index.js';
 import { remotePatchSchema } from '@/schemas/remote.schema.js';
 import { serverPatchSchema } from '@/schemas/server.schema.js';
 
+import type { ConnectionDetailsProps } from '@/components/CuiDialog/templates/ConnectionDetails/types.js';
 import type { PatchRemoteInput } from '@/schemas/remote.schema.js';
 import type { PatchServerInput } from '@/schemas/server.schema.js';
-import type { ConnectionDetailsProps } from '@/components/CuiDialog/templates/ConnectionDetails/types.js';
 import type { DBCloudflareMode, DBRemote, DBRemoteDirectMode, DBServer } from '@shared/types';
 
 const serverQuery = new ServerQuery();
@@ -694,6 +694,7 @@ const log = useLogger();
 const dialog = useCuiDialog();
 const toast = useCuiToast();
 const { t } = useI18n();
+const { endpoint, isOnline } = useConnection();
 
 const { data: serverInfo, isBusy: serverInfoLoading } = serverQuery.getServerInfoQuery();
 const { data: remoteInfo, isBusy: remoteInfoLoading } = remoteQuery.getRemoteInfoQuery();
@@ -871,8 +872,8 @@ function openConnectionDetails(): void {
       confirmText: t('components.connection_details.copy'),
       cancelText: t('components.form.button.close'),
       contentProps: {
-        currentType: connectionTypeLabel.value,
-        currentAddress: connectionInfo.value?.currentConnection.address ?? '',
+        currentType: connectionTypeLabel,
+        currentAddress: computed(() => connectionInfo.value?.currentConnection.address ?? ''),
       },
     },
   });
@@ -1195,6 +1196,12 @@ watch(
 watch(isRegistered, (registered) => {
   if (registered && pairCode.value) {
     resetPairState();
+  }
+});
+
+watch([isOnline, endpoint], ([online]) => {
+  if (online) {
+    remoteQuery.queryClient.refetchQueries({ queryKey: ['remote', 'connection-info'], exact: true });
   }
 });
 

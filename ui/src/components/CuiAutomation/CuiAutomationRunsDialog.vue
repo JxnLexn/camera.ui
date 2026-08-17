@@ -10,7 +10,7 @@
     </div>
 
     <template v-else>
-      <div v-for="(run, index) in runs" :key="`${run.startedAt}-${index}`" class="border border-surface rounded-lg overflow-hidden">
+      <div v-for="(run, index) in runs" :key="`${run.startedAt}-${index}`" class="shrink-0 border border-surface rounded-lg overflow-hidden">
         <div class="flex items-center gap-2 p-3 cursor-pointer select-none" @click="toggle(index)">
           <Tag
             :severity="run.status === 'success' ? 'success' : 'danger'"

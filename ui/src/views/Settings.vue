@@ -68,12 +68,10 @@ import { routes } from '@/router/index.js';
 
 import type CuiSubNavbar from '@/components/CuiSubNavbar/CuiSubNavbar.vue';
 import type { SubNavbarState } from '@/components/CuiSubNavbar/types.js';
-import type { UsePointerSwipeOptions, UseSwipeOptions } from '@vueuse/core';
 
 const router = useRouter();
 const routeMeta = useRouteMeta();
 const { bus } = useCuiBus();
-const { isTouch } = useSharedCuiUserAgent();
 const { mdBreakpoint, xlBreakpoint, smBreakpoint } = useSharedCuiBreakpoint();
 
 const loadingStore = useRouterStore();
@@ -87,39 +85,20 @@ const uiRoutes = (['personal', 'system'] as const).flatMap((group) =>
 
 const subnavbarRef = useTemplateRef<InstanceType<typeof CuiSubNavbar>>('subnavbarRef');
 const containerRef = useTemplateRef('containerRef');
-const allowSipe = ref(true);
 
 const isListRoute = computed(() => router.currentRoute.value.path === '/settings');
 
-const swipeOptions: UseSwipeOptions = {
-  threshold: 50,
-  onSwipeStart(e) {
-    const target = e.target as HTMLElement;
-    const interactiveElements = ['INPUT', 'TEXTAREA', 'SELECT', 'BUTTON'];
-    if (interactiveElements.includes(target.tagName) || target.closest('.p-datatable')) {
-      allowSipe.value = false;
-    }
-  },
-  onSwipeEnd() {
-    allowSipe.value = true;
-  },
-};
+useTabSwipe(containerRef, (swipeDirection) => {
+  if (isListRoute.value) return;
 
-const pointerSwipeOptions: UsePointerSwipeOptions = {
-  threshold: 50,
-  onSwipeStart(e) {
-    const target = e.target as HTMLElement;
-    const interactiveElements = ['INPUT', 'TEXTAREA', 'SELECT', 'BUTTON'];
-    if (interactiveElements.includes(target.tagName) || target.closest('.p-datatable')) {
-      allowSipe.value = false;
-    }
-  },
-  onSwipeEnd() {
-    allowSipe.value = true;
-  },
-};
+  const oldRouteIndex = uiRoutes.findIndex((route) => route.path === router.currentRoute.value.path.split('/settings/')[1]);
+  const newRoute = swipeDirection === 'right' ? uiRoutes[oldRouteIndex - 1] : uiRoutes[oldRouteIndex + 1];
 
-const { isSwiping, direction } = isTouch.value ? useSwipe(containerRef, swipeOptions) : usePointerSwipe(containerRef, pointerSwipeOptions);
+  if (newRoute) {
+    router.push({ path: newRoute.path });
+  }
+});
+
 const subnavbarEl = useElementSize(subnavbarRef);
 
 const subnavbarState = computed<SubNavbarState>(() => subnavbarRef.value?.subnavbarState ?? 'closed');
@@ -133,33 +112,6 @@ watch(smBreakpoint, (isMobile) => {
   if (!isMobile && isListRoute.value) {
     const view = useUiStore().uiSettings.interface.selectedSettingsView;
     router.replace(`/settings/${settingsViews.includes(view) ? view : 'account'}`);
-  }
-});
-
-watch([isSwiping, direction], () => {
-  if (isSwiping.value && allowSipe.value && !isListRoute.value) {
-    const oldRouteIndex = uiRoutes.findIndex((route) => route.path === router.currentRoute.value.path.split('/settings/')[1]);
-
-    switch (direction.value) {
-      case 'right':
-        {
-          const newRoute = uiRoutes[oldRouteIndex - 1];
-
-          if (newRoute) {
-            router.push({ path: newRoute.path });
-          }
-        }
-        break;
-      case 'left':
-        {
-          const newRoute = uiRoutes[oldRouteIndex + 1];
-
-          if (newRoute) {
-            router.push({ path: newRoute.path });
-          }
-        }
-        break;
-    }
   }
 });
 </script>

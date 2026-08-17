@@ -20,6 +20,7 @@ declare global {
   const asyncComputed: typeof import('@vueuse/core').asyncComputed
   const autoResetRef: typeof import('@vueuse/core').autoResetRef
   const axios: typeof import('axios').default
+  const bringDialogToFront: typeof import('../composables/useCuiDialog').bringDialogToFront
   const checkAppUpdate: typeof import('../composables/useAppUpdate').checkAppUpdate
   const checkBiometryAvailable: typeof import('../composables/useBiometricCredentials').checkBiometryAvailable
   const clearCredentials: typeof import('../composables/useBiometricCredentials').clearCredentials
@@ -376,6 +377,7 @@ declare global {
   const useStyleTag: typeof import('@vueuse/core').useStyleTag
   const useSupported: typeof import('@vueuse/core').useSupported
   const useSwipe: typeof import('@vueuse/core').useSwipe
+  const useTabSwipe: typeof import('../composables/useTabSwipe').useTabSwipe
   const useTabVisibility: typeof import('@camera.ui/browser').useTabVisibility
   const useTemplateRef: typeof import('vue').useTemplateRef
   const useTemplateRefsList: typeof import('@vueuse/core').useTemplateRefsList
@@ -483,6 +485,9 @@ declare global {
   export type { PushSyncStatus, PushSyncState } from '../composables/usePushRegistration'
   import('../composables/usePushRegistration')
   // @ts-ignore
+  export type { UseTabSwipeOptions } from '../composables/useTabSwipe'
+  import('../composables/useTabSwipe')
+  // @ts-ignore
   export type { HiddenDevice, CamerasSocketState } from '../composables/sockets/useCamerasSocket'
   import('../composables/sockets/useCamerasSocket')
   // @ts-ignore
@@ -534,6 +539,7 @@ declare module 'vue' {
     readonly asyncComputed: UnwrapRef<typeof import('@vueuse/core')['asyncComputed']>
     readonly autoResetRef: UnwrapRef<typeof import('@vueuse/core')['autoResetRef']>
     readonly axios: UnwrapRef<typeof import('axios')['default']>
+    readonly bringDialogToFront: UnwrapRef<typeof import('../composables/useCuiDialog')['bringDialogToFront']>
     readonly checkAppUpdate: UnwrapRef<typeof import('../composables/useAppUpdate')['checkAppUpdate']>
     readonly checkBiometryAvailable: UnwrapRef<typeof import('../composables/useBiometricCredentials')['checkBiometryAvailable']>
     readonly clearCredentials: UnwrapRef<typeof import('../composables/useBiometricCredentials')['clearCredentials']>
@@ -890,6 +896,7 @@ declare module 'vue' {
     readonly useStyleTag: UnwrapRef<typeof import('@vueuse/core')['useStyleTag']>
     readonly useSupported: UnwrapRef<typeof import('@vueuse/core')['useSupported']>
     readonly useSwipe: UnwrapRef<typeof import('@vueuse/core')['useSwipe']>
+    readonly useTabSwipe: UnwrapRef<typeof import('../composables/useTabSwipe')['useTabSwipe']>
     readonly useTabVisibility: UnwrapRef<typeof import('@camera.ui/browser')['useTabVisibility']>
     readonly useTemplateRef: UnwrapRef<typeof import('vue')['useTemplateRef']>
     readonly useTemplateRefsList: UnwrapRef<typeof import('@vueuse/core')['useTemplateRefsList']>

@@ -46,6 +46,7 @@ export interface ContentBaseProps {
   modal?: boolean;
   goTo?: string;
   rootId?: string;
+  dedupeKey?: string;
   headerActions?: { icon: Component; tooltip?: string; onClick: () => void; toggle?: boolean; loading?: boolean }[];
   contentClickConfirms?: boolean;
 }
@@ -215,6 +216,26 @@ const RESPONSIVE_DIALOG_PROPS: ResponsiveDialogProps = {
   },
 } as const;
 
+const openDialogRegistry = new Map<string, { instance: DynamicDialogInstance; rootId: string }>();
+
+export function bringDialogToFront(rootId: string): void {
+  const rootElement = document.getElementById(rootId);
+  const mask = rootElement?.closest('.p-dialog-mask') as HTMLElement | null;
+  if (!mask) return;
+
+  const allMasks = Array.from(document.querySelectorAll<HTMLElement>('.p-dialog-mask'));
+  let maxZ = 0;
+  for (const m of allMasks) {
+    const z = parseInt(m.style.zIndex, 10) || 0;
+    if (z > maxZ) maxZ = z;
+  }
+
+  const currentZ = parseInt(mask.style.zIndex, 10) || 0;
+  if (currentZ < maxZ) {
+    mask.style.zIndex = String(maxZ + 1);
+  }
+}
+
 function dialogService() {
   const open = (content: any, options?: DynamicDialogOptions) => {
     const instance = {
@@ -328,6 +349,15 @@ export function useCuiDialog() {
   ): DynamicDialogInstance {
     const { component, data, onConfirm, onCancel, onSettled, events, ...rest } = options;
 
+    const dedupeKey = unref(data.dedupeKey);
+    if (dedupeKey) {
+      const existing = openDialogRegistry.get(dedupeKey);
+      if (existing) {
+        bringDialogToFront(existing.rootId);
+        return existing.instance;
+      }
+    }
+
     releaseNonInteractiveFocus();
 
     const templates: DialogTemplates = {
@@ -358,7 +388,7 @@ export function useCuiDialog() {
       props.modal = isModal;
     }
 
-    const rootId = data.rootId ?? randomLetter(10);
+    const rootId = unref(data.rootId) ?? randomLetter(10);
     (props.pt as any).root.id = rootId;
 
     const dialogRef = dialog.open(CuiDialog, {
@@ -392,6 +422,10 @@ export function useCuiDialog() {
       onConfirm: onConfirm,
       onCancel: onCancel,
       onClose: (opt) => {
+        if (dedupeKey) {
+          openDialogRegistry.delete(dedupeKey);
+        }
+
         if (opt?.data?.status === 'confirm') {
           const { status, ...data } = opt.data;
           onConfirm?.(data?.data ?? data);
@@ -402,6 +436,10 @@ export function useCuiDialog() {
         onSettled?.(opt?.data?.data ?? opt?.data);
       },
     });
+
+    if (dedupeKey) {
+      openDialogRegistry.set(dedupeKey, { instance: dialogRef, rootId });
+    }
 
     if (data.fullscreen) {
       return dialogRef;

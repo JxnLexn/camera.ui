@@ -134,12 +134,27 @@
       <div v-if="preview && isPreviewActive && preview.isLoading.value" class="absolute inset-0 z-[4] flex items-center justify-center pointer-events-none">
         <ProgressSpinner class="w-[28px] h-[28px] m-0" stroke-width="6" />
       </div>
+
+      <div v-if="previewIndicator" class="absolute bottom-2 left-1/2 -translate-x-1/2 z-[4] pointer-events-none">
+        <span class="text-[10px] font-semibold text-white bg-black/60 px-1.5 py-0.5 rounded-md whitespace-nowrap" style="font-variant-numeric: tabular-nums">
+          {{ previewIndicator }}
+        </span>
+      </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { attributeThumbnails, EventHoverPreviewKey, resolveThumbnail, segmentTypes, thumbnailToUrl, useEventStore } from '@camera.ui/nvr';
+import {
+  attributeThumbnails,
+  EventHoverPreviewKey,
+  isSegmentLive,
+  previewFocusTrack,
+  resolveThumbnail,
+  segmentTypes,
+  thumbnailToUrl,
+  useEventStore,
+} from '@camera.ui/nvr';
 
 import { extractErrorMessage } from '@/common/utils.js';
 import { eventAnchorTime, segmentLabel } from '@/utils/eventAnchor.js';
@@ -179,6 +194,7 @@ const preview = inject(EventHoverPreviewKey, undefined);
 const rootRef = useTemplateRef<HTMLElement>('rootRef');
 const previewCanvasRef = useTemplateRef('previewCanvasRef');
 const footerRef = useTemplateRef<HTMLElement>('footerRef');
+const previewBlocked = ref(false);
 
 const longPress = useLongPressPreview(
   rootRef,
@@ -306,6 +322,15 @@ const formatDateTime = computed(() => {
 
 const canDownload = computed(() => Boolean(nvrPluginRef.value && props.event.endTime && props.event.hasRecording !== false));
 
+const previewIndicator = computed(() => {
+  if (!preview) return '';
+  if (previewBlocked.value) return t('views.recordings.no_preview');
+  if (!isPreviewActive.value) return '';
+  if (preview.status.value === 'unavailable') return t('views.recordings.no_preview');
+  if (preview.status.value === 'playing' && preview.previewTimeMs.value) return formatClock(preview.previewTimeMs.value);
+  return '';
+});
+
 function fitCount(total: number, space: number, itemPx: number): number {
   if (total === 0 || space < itemPx) return 0;
   if (total * itemPx <= space) return total;
@@ -327,18 +352,43 @@ function onTileClick(index: number, event: MouseEvent): void {
 }
 
 function stopPreview(): void {
+  previewBlocked.value = false;
   if (!preview || !isPreviewActive.value) return;
   isPreviewActive.value = false;
   preview.onHoverEnd();
 }
 
+function formatClock(ms: number): string {
+  const d = new Date(ms);
+  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}:${String(d.getSeconds()).padStart(2, '0')}`;
+}
+
+// a running event is playable up to its last closed segment; only the live
+// tail is still being written
+function previewEndTime(): number | undefined {
+  if (props.event.endTime) return props.event.endTime;
+  let last: number | undefined;
+  const segments = props.event.segments ?? [];
+  for (let i = 0; i < segments.length; i++) {
+    const seg = segments[i];
+    if (!seg || isSegmentLive(props.event, i)) continue;
+    if (seg.lastSeen && (!last || seg.lastSeen > last)) last = seg.lastSeen;
+  }
+  return last;
+}
+
 function startPreview(): void {
-  if (!preview || !props.event.endTime || props.event.hasRecording === false) return;
+  if (!preview) return;
   if (activeImageIndex.value > 0) return;
   const canvas = previewCanvasRef.value;
   if (!canvas) return;
+  const to = previewEndTime();
+  if (props.event.hasRecording === false || !to) {
+    previewBlocked.value = true;
+    return;
+  }
   isPreviewActive.value = true;
-  preview.onHoverStart(canvas, props.event.cameraId, props.event.id, props.event.startTime, props.event.endTime, props.camera?.zones?.privacy);
+  preview.onHoverStart(canvas, props.event.cameraId, props.event.id, props.event.startTime, to, props.camera?.zones?.privacy, previewFocusTrack(props.event));
 }
 
 function handleMouseEnter(): void {
@@ -347,6 +397,7 @@ function handleMouseEnter(): void {
 }
 
 function handleMouseLeave(): void {
+  previewBlocked.value = false;
   if (!preview) return;
   isPreviewActive.value = false;
   preview.onHoverEnd();

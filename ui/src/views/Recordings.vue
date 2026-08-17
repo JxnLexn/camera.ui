@@ -567,6 +567,7 @@ function openRecordingDialog(event: RecordedEvent): void {
   dialog.openComponentDialog<CameraStreamEventProps>(CameraEventDialog, {
     data: {
       title: camera.name,
+      dedupeKey: `camera-event:${camera._id}:${event.startTime}`,
       stayActive: true,
       hideCancelButton: true,
       hideConfirmButton: true,

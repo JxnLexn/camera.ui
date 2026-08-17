@@ -158,11 +158,14 @@ const mobileSearchInput = useTemplateRef<{ $el: HTMLElement }>('mobileSearchInpu
 const levelMenuRef = useTemplateRef<InstanceType<typeof CuiMenu>>('levelMenuRef');
 
 const recording = ref(Logger.isRecording());
-
+const stickToBottom = ref(true);
 const nativePlatform = ref('web');
+
 if (isCapacitor) {
   import('@capacitor/core').then(({ Capacitor }) => (nativePlatform.value = Capacitor.getPlatform())).catch(() => {});
 }
+
+useEventListener(scrollEl, 'scroll', onScroll, { passive: true });
 
 let offEntries: (() => void) | undefined;
 let offFlags: (() => void) | undefined;
@@ -230,6 +233,12 @@ async function scrollToBottom(): Promise<void> {
   if (scrollEl.value) scrollEl.value.scrollTop = scrollEl.value.scrollHeight;
 }
 
+function onScroll(): void {
+  const el = scrollEl.value;
+  if (!el) return;
+  stickToBottom.value = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
+}
+
 // Tapping the topbar title scrolls the log back to the top.
 function scrollToTop(): void {
   scrollEl.value?.scrollTo({ top: 0, behavior: 'smooth' });
@@ -282,6 +291,10 @@ function clear(): void {
   refresh();
   toast.add({ severity: 'success', summary: t('views.console.cleared') });
 }
+
+watch(filtered, () => {
+  if (stickToBottom.value) scrollToBottom();
+});
 
 onMounted(() => {
   refresh();

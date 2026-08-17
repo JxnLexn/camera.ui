@@ -31,6 +31,12 @@
         <ProgressSpinner class="w-[24px] h-[24px] m-0" stroke-width="3" />
       </div>
 
+      <div v-if="previewIndicator" class="absolute bottom-1.5 left-1/2 -translate-x-1/2 z-[3] pointer-events-none">
+        <span class="text-[10px] font-semibold text-white bg-black/60 px-1.5 py-0.5 rounded-md whitespace-nowrap" style="font-variant-numeric: tabular-nums">
+          {{ previewIndicator }}
+        </span>
+      </div>
+
       <div v-if="isActive" class="absolute top-1.5 left-1.5 z-[3] flex items-center gap-1">
         <span class="relative flex h-2.5 w-2.5">
           <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
@@ -82,7 +88,8 @@
 
       <div
         v-if="displayUrl"
-        class="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors duration-200 flex flex-col items-center justify-end pb-3 gap-1 z-[2] pointer-events-none"
+        class="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-all duration-200 flex flex-col items-center justify-end gap-1 z-[2] pointer-events-none"
+        :class="previewIndicator ? 'pb-8' : 'pb-3'"
       >
         <div class="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
           <component :is="eventIcons[type] ?? genericIcon" v-for="type in displayTypes" :key="type" class="w-3.5 h-3.5 text-white/50" />
@@ -100,7 +107,17 @@
 </template>
 
 <script setup lang="ts">
-import { attributeThumbnails, EventHoverPreviewKey, getPrimaryType, resolveThumbnail, segmentTypes, thumbnailToUrl, useEventStore } from '@camera.ui/nvr';
+import {
+  attributeThumbnails,
+  EventHoverPreviewKey,
+  getPrimaryType,
+  isSegmentLive,
+  previewFocusTrack,
+  resolveThumbnail,
+  segmentTypes,
+  thumbnailToUrl,
+  useEventStore,
+} from '@camera.ui/nvr';
 import SparklesIcon from '~icons/tabler/sparkles';
 
 import CameraEventDialog from '@/components/CuiDialog/templates/CameraStreamEvent/CameraStreamEvent.vue';
@@ -115,6 +132,7 @@ import type { CameraEventProps } from './types.js';
 const props = defineProps<CameraEventProps>();
 
 const dialog = useCuiDialog();
+const { t } = useI18n();
 const preview = inject(EventHoverPreviewKey, undefined);
 const eventStore = useEventStore('@camera.ui/camera-ui-nvr');
 
@@ -127,6 +145,7 @@ const isPreviewActive = ref(false);
 const loadedThumbs = ref<EventThumbnails | null>(null);
 const thumbnailState = ref<'loading' | 'loaded' | 'empty'>('loading');
 const activeImageIndexRaw = ref(0);
+const previewBlocked = ref(false);
 
 let dialogInstance: DynamicDialogInstance | undefined;
 let loadTriggered = false;
@@ -191,6 +210,15 @@ const description = computed(() => (props.segment ? props.segment.description : 
 const hasDescription = computed(() => !isActive.value && Boolean(description.value));
 const descriptionTitle = computed(() => description.value?.title);
 
+const previewIndicator = computed(() => {
+  if (!preview) return '';
+  if (previewBlocked.value) return t('views.recordings.no_preview');
+  if (!isPreviewActive.value) return '';
+  if (preview.status.value === 'unavailable') return t('views.recordings.no_preview');
+  if (preview.status.value === 'playing' && preview.previewTimeMs.value) return formatClock(preview.previewTimeMs.value);
+  return '';
+});
+
 function stepImage(delta: number): void {
   const len = carouselImages.value.length;
   if (!len) return;
@@ -199,20 +227,37 @@ function stepImage(delta: number): void {
 }
 
 function stopPreview(): void {
+  previewBlocked.value = false;
   if (!preview || !isPreviewActive.value) return;
   isPreviewActive.value = false;
   preview.onHoverEnd();
 }
 
+function formatClock(ms: number): string {
+  const d = new Date(ms);
+  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}:${String(d.getSeconds()).padStart(2, '0')}`;
+}
+
 function startPreview(): void {
-  if (!preview || !props.event.endTime) return;
+  if (!preview) return;
   if (activeImageIndex.value > 0) return;
   const canvas = previewCanvasRef.value;
   if (!canvas) return;
-  isPreviewActive.value = true;
+  // an ended segment of a still-running event is already playable; only the
+  // live segment (and an event-level card without endTime) has to wait
   const from = props.segment?.firstSeen ?? props.event.startTime;
-  const to = props.segment?.lastSeen ?? props.event.endTime;
-  preview.onHoverStart(canvas, props.event.cameraId, props.event.id, from, to, props.camera?.zones?.privacy);
+  let to: number | undefined;
+  if (props.segment && cardSegIndex.value !== undefined) {
+    to = isSegmentLive(props.event, cardSegIndex.value) ? undefined : props.segment.lastSeen;
+  } else {
+    to = props.event.endTime;
+  }
+  if (!to) {
+    previewBlocked.value = true;
+    return;
+  }
+  isPreviewActive.value = true;
+  preview.onHoverStart(canvas, props.event.cameraId, props.event.id, from, to, props.camera?.zones?.privacy, previewFocusTrack(props.event, cardSegIndex.value));
 }
 
 function handleMouseEnter(): void {
@@ -221,6 +266,7 @@ function handleMouseEnter(): void {
 }
 
 function handleMouseLeave(): void {
+  previewBlocked.value = false;
   if (!preview) return;
   isPreviewActive.value = false;
   preview.onHoverEnd();
@@ -268,6 +314,7 @@ function openCameraEvent(): void {
   dialogInstance = dialog.openComponentDialog<CameraStreamEventProps>(CameraEventDialog, {
     data: {
       title: props.camera.name,
+      dedupeKey: `camera-event:${props.camera._id}:${isNearLive ? 'live' : anchorTime.value}`,
       stayActive: true,
       hideCancelButton: true,
       hideConfirmButton: true,
