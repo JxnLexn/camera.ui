@@ -326,8 +326,6 @@ export class PluginManager {
     await this.installRequiredPythonEnvs();
   }
 
-  // Lazy: PluginsService depends on SocketService (registered later in boot).
-  // Eager construction here would crash during bootstrap.
   private get pluginsService(): PluginsService {
     return (this._pluginsService ??= new PluginsService());
   }

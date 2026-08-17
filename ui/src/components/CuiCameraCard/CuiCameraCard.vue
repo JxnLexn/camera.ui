@@ -1082,10 +1082,10 @@ const { start: startDetectionIndicatorTimeout } = useTimeoutFn(
 const needsDetections = computed(() => !nvrPlaybackVisible.value && ((boundingBoxOverlay.value && bboxEnabled.value) || detectionIndicatorOverlay.value));
 const gatedCameraDevice = computed(() => (needsDetections.value ? cameraDevice.value : undefined));
 
-const { sensor: motionSensor } = useMotionSensor(gatedCameraDevice);
-const { sensor: objectSensor } = useObjectSensor(gatedCameraDevice);
-const { sensor: faceSensor } = useFaceSensor(gatedCameraDevice);
-const { sensor: licensePlateSensor } = useLicensePlateSensor(gatedCameraDevice);
+const { sensor: motionSensor } = useMotionSensor(gatedCameraDevice, () => camera.value?.assignments?.motion?.id);
+const { sensor: objectSensor } = useObjectSensor(gatedCameraDevice, () => camera.value?.assignments?.object?.id);
+const { sensor: faceSensor } = useFaceSensor(gatedCameraDevice, () => camera.value?.assignments?.face?.id);
+const { sensor: licensePlateSensor } = useLicensePlateSensor(gatedCameraDevice, () => camera.value?.assignments?.licensePlate?.id);
 const { sensors: classifierSensors } = useClassifierSensors(gatedCameraDevice);
 
 const isExpanded = computed(() => props.expanded ?? internalExpanded.value);
@@ -2157,7 +2157,6 @@ watch(activityMode, (mode) => {
 watch(
   () => motionSensor.value?.properties.detections,
   (detections) => {
-    if (cameraObj.value?.zones?.object.length === 0) return;
     const detectionsArray = (detections ?? []) as FaceDetection[];
     handleActivity(detectionsArray);
     handleDetectionIndicator(detectionsArray);
@@ -2169,7 +2168,6 @@ watch(
 watch(
   () => objectSensor.value?.properties.detections,
   (detections) => {
-    if (cameraObj.value?.zones?.object.length === 0) return;
     const detectionsArray = (detections ?? []) as TrackedDetection[];
     handleActivity(detectionsArray);
     handleDetectionIndicator(detectionsArray);
