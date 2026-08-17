@@ -111,8 +111,8 @@ import {
   attributeThumbnails,
   EventHoverPreviewKey,
   getPrimaryType,
-  isSegmentLive,
   previewFocusTrack,
+  previewPlayableEnd,
   resolveThumbnail,
   segmentTypes,
   thumbnailToUrl,
@@ -243,15 +243,8 @@ function startPreview(): void {
   if (activeImageIndex.value > 0) return;
   const canvas = previewCanvasRef.value;
   if (!canvas) return;
-  // an ended segment of a still-running event is already playable; only the
-  // live segment (and an event-level card without endTime) has to wait
   const from = props.segment?.firstSeen ?? props.event.startTime;
-  let to: number | undefined;
-  if (props.segment && cardSegIndex.value !== undefined) {
-    to = isSegmentLive(props.event, cardSegIndex.value) ? undefined : props.segment.lastSeen;
-  } else {
-    to = props.event.endTime;
-  }
+  const to = props.segment ? props.segment.lastSeen : previewPlayableEnd(props.event);
   if (!to) {
     previewBlocked.value = true;
     return;

@@ -277,7 +277,7 @@ export function createConnection(options: ConnectionOptions): Connection {
       clearTimeout(upgradeRetryTimer);
       upgradeRetryTimer = undefined;
     }
-    void backgroundProbe.run().then(() => {
+    backgroundProbe.run().then(() => {
       if (retriesLeft <= 0) return;
       if (kernel.phase.kind !== 'online') return;
       if (target.value?.endpoint.mode === 'direct-lan') return;

@@ -148,8 +148,8 @@
 import {
   attributeThumbnails,
   EventHoverPreviewKey,
-  isSegmentLive,
   previewFocusTrack,
+  previewPlayableEnd,
   resolveThumbnail,
   segmentTypes,
   thumbnailToUrl,
@@ -363,26 +363,12 @@ function formatClock(ms: number): string {
   return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}:${String(d.getSeconds()).padStart(2, '0')}`;
 }
 
-// a running event is playable up to its last closed segment; only the live
-// tail is still being written
-function previewEndTime(): number | undefined {
-  if (props.event.endTime) return props.event.endTime;
-  let last: number | undefined;
-  const segments = props.event.segments ?? [];
-  for (let i = 0; i < segments.length; i++) {
-    const seg = segments[i];
-    if (!seg || isSegmentLive(props.event, i)) continue;
-    if (seg.lastSeen && (!last || seg.lastSeen > last)) last = seg.lastSeen;
-  }
-  return last;
-}
-
 function startPreview(): void {
   if (!preview) return;
   if (activeImageIndex.value > 0) return;
   const canvas = previewCanvasRef.value;
   if (!canvas) return;
-  const to = previewEndTime();
+  const to = previewPlayableEnd(props.event);
   if (props.event.hasRecording === false || !to) {
     previewBlocked.value = true;
     return;

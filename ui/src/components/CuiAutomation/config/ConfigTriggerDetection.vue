@@ -101,6 +101,9 @@
 
 <script setup lang="ts">
 import { useFaceStore } from '@camera.ui/nvr';
+import { BASE_AUDIO_LABELS } from '@camera.ui/sdk';
+
+import { audioLabelKey } from '@/common/eventLabels.js';
 
 import { useCameraOptions } from './useCameraOptions.js';
 
@@ -128,24 +131,10 @@ const detectionLabelOptions = [
   { label: t('components.automation_nodes.label_person'), value: 'person' },
   { label: t('components.automation_nodes.label_vehicle'), value: 'vehicle' },
   { label: t('components.automation_nodes.label_animal'), value: 'animal' },
-  { label: t('components.automation_nodes.label_package'), value: 'package' },
   { label: t('components.automation_nodes.label_audio'), value: 'audio' },
 ];
 
-const audioLabelOptions = [
-  { label: t('components.automation_nodes.audio_doorbell'), value: 'doorbell' },
-  { label: t('components.automation_nodes.audio_glass_break'), value: 'glass_break' },
-  { label: t('components.automation_nodes.audio_scream'), value: 'scream' },
-  { label: t('components.automation_nodes.audio_gunshot'), value: 'gunshot' },
-  { label: t('components.automation_nodes.audio_dog_bark'), value: 'dog_bark' },
-  { label: t('components.automation_nodes.audio_baby_cry'), value: 'baby_cry' },
-  { label: t('components.automation_nodes.audio_alarm'), value: 'alarm' },
-  { label: t('components.automation_nodes.audio_car_alarm'), value: 'car_alarm' },
-  { label: t('components.automation_nodes.audio_smoke_alarm'), value: 'smoke_alarm' },
-  { label: t('components.automation_nodes.audio_siren'), value: 'siren' },
-  { label: t('components.automation_nodes.audio_speaking'), value: 'speaking' },
-  { label: t('components.automation_nodes.audio_cat'), value: 'cat' },
-];
+const audioLabelOptions = BASE_AUDIO_LABELS.map((label) => ({ label: t(audioLabelKey(label)), value: label as string }));
 
 const faceSuggestions = computed(() => {
   const selected = new Set(props.data.faceFilter ?? []);
