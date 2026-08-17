@@ -15,12 +15,12 @@ import type {
   CameraDetectionSettings,
   Detection,
   DetectionLabel,
-  ZoneLabel,
   DetectionLine,
   MotionZone,
   ObjectZone,
   PrivacyZone,
   TrackedDetection,
+  ZoneLabel,
 } from '@camera.ui/sdk';
 
 const NMS_IOU_THRESHOLD = 0.45;
@@ -50,6 +50,7 @@ function round(value: number): number {
 
 export interface PipelineResult {
   tracked: TrackedDetection[];
+  staticTracks: TrackedDetection[];
   crossings: LineCrossingEvent[];
   created: number[];
   removed: number[];
@@ -95,6 +96,7 @@ function fromWorldObject(obj: WorldObject): TrackedDetection {
     trackLost: false,
     trackSpeed: obj.speed,
     trackVelocity: { x: obj.velocityX, y: obj.velocityY },
+    ...(obj.stationarySinceMs !== undefined ? { stationarySince: obj.stationarySinceMs } : {}),
   };
 }
 
@@ -194,10 +196,10 @@ export class DetectionPipeline {
     const rustZones = toRustZones(zones);
     this.world.setZones(rustZones);
     this.whitelist = objectWhitelist(zones.object);
-    this.world.setMinConfidence(settings.object.confidence);
+    this.applyConfidences(settings);
     this.suppressStatic = settings.object.suppressStatic ?? true;
     // debugging
-    detectionRecord.config({ zones: rustZones, minConfidence: settings.object.confidence });
+    detectionRecord.config({ zones: rustZones, minConfidences: settings.object.confidences });
   }
 
   public updateZones(zones: ZoneConfig): void {
@@ -218,10 +220,10 @@ export class DetectionPipeline {
   }
 
   public updateSettings(settings: CameraDetectionSettings): void {
-    this.world.setMinConfidence(settings.object.confidence);
+    this.applyConfidences(settings);
     this.suppressStatic = settings.object.suppressStatic ?? true;
     // debugging
-    detectionRecord.config({ minConfidence: settings.object.confidence });
+    detectionRecord.config({ minConfidences: settings.object.confidences });
   }
 
   public notifyCameraMove(): void {
@@ -254,6 +256,7 @@ export class DetectionPipeline {
       });
     }
     const tracked = (this.suppressStatic ? result.tracked.filter((t) => t.state !== 'stationary') : result.tracked).map(fromWorldObject);
+    const staticTracks = this.suppressStatic ? result.tracked.filter((t) => t.state === 'stationary').map(fromWorldObject) : [];
     const boxLookup = new Map<number, BoundingBox>();
     for (const t of tracked) {
       if (t.trackId !== undefined) boxLookup.set(t.trackId, t.box);
@@ -261,6 +264,7 @@ export class DetectionPipeline {
 
     return {
       tracked,
+      staticTracks,
       crossings: result.crossings.map((c) => fromRustCrossing(c, boxLookup)),
       created: result.created,
       removed: result.removed,
@@ -327,6 +331,12 @@ export class DetectionPipeline {
     if (this.whitelist === null) return true;
     const lower = label.toLowerCase();
     return lower === 'motion' || this.whitelist.has(lower);
+  }
+
+  private applyConfidences(settings: CameraDetectionSettings): void {
+    const values = Object.values(settings.object.confidences);
+    this.world.setMinConfidence(values.length > 0 ? Math.min(...values) : 0.5);
+    this.world.setMinConfidences(settings.object.confidences);
   }
 
   private allowedByWhitelist<T extends { label: string }>(detections: T[]): T[] {

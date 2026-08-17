@@ -10,7 +10,7 @@ import { AudioDetectionLoop } from './audio-loop.js';
 import { CascadeManager } from './cascade-manager.js';
 import { detectionRecord } from './debug/detection-record.js';
 import { DetectionPipeline } from './detection-pipeline.js';
-import { DetectionWindow, mergeWindowDetections, planWindowsOnce, TRACK_PAD } from './detection-window.js';
+import { clusterBoxes, DetectionWindow, mergeWindowDetections, planWindowsOnce, TRACK_PAD } from './detection-window.js';
 import { DwellManager } from './dwell-manager.js';
 import { DetectionEventManager, MOMENT_RANK_ATTRIBUTE, MOMENT_RANK_OBJECT } from './event-manager.js';
 import { EventThumbnailer } from './event-thumbnailer.js';
@@ -558,8 +558,10 @@ export class DetectionCoordinator {
       if (filtered.detected !== true) return;
 
       // assist alone is enough: its boxes upgrade zones, bboxes and thumbnails
-      // even when no face/plate/clip secondary consumes them
-      if (!this.plugins.hasFrameBasedSecondary() && !this.plugins.hasEligibleObjectAssist()) return;
+      // even when no face/plate/clip secondary consumes them; without either,
+      // the embedded diff's anchors can still localize a moment crop
+      const hasAnchors = this.anchorBoxes.length > 0 || this.farewellBoxes.length > 0;
+      if (!this.plugins.hasFrameBasedSecondary() && !this.plugins.hasEligibleObjectAssist() && !hasAnchors) return;
       if (this.processingExternalSecondary) return; // previous RPC still running
 
       this.processingExternalSecondary = true;
@@ -591,6 +593,12 @@ export class DetectionCoordinator {
               }
               this.eventManager.processResults(snapshot);
             } else {
+              // no assist boxes: the diff's motion clusters are the only
+              // localization, still better than a full-scene card
+              const anchorDetections = this.anchorMomentDetections(rawExternal);
+              if (anchorDetections.length > 0) {
+                await this.captureExternalMoment(anchorDetections, analysis, results.timestamp);
+              }
               const sceneJpeg = await this.secondaries.detectFullFrame(analysis.frame, results);
               try {
                 results.thumbnails = await this.secondaries.generateThumbnails(analysis.frame, analysis.scaler, results);
@@ -686,6 +694,10 @@ export class DetectionCoordinator {
 
   private get windowAnchorsWanted(): boolean {
     return this.plugins.get(SensorType.Object)?.requiresFrames === true || this.plugins.hasEligibleObjectAssist();
+  }
+
+  private get localizerWanted(): boolean {
+    return this.plugins.has(SensorType.Object);
   }
 
   private get windowWantsMainStream(): boolean {
@@ -1372,6 +1384,7 @@ export class DetectionCoordinator {
     const t0 = Date.now();
     let motionDetected = false;
     let objectDetections: Detection[] = [];
+    let staticDetections: TrackedDetection[] = [];
     const results: DetectionResults = { timestamp: t0 };
 
     // while the PTZ repositions: motion and object keep running so the
@@ -1392,7 +1405,7 @@ export class DetectionCoordinator {
       if (!this.loopRunning) return;
       if (motionFrame) {
         this.lastMotionAt = t0;
-        if (this.windowAnchorsWanted) this.feedLocalizer(motionFrame, t0, ptzSuppressed);
+        if (this.localizerWanted) this.feedLocalizer(motionFrame, t0, ptzSuppressed);
         try {
           const motionInferStart = Date.now();
           const result = await motionPlugin.proxy.detectMotion(motionFrame);
@@ -1423,7 +1436,7 @@ export class DetectionCoordinator {
 
       // the localizer scales its own gray here, nobody else needed one
       const localizeDue = t0 - this.lastLocalizeAt >= MOTION_INTERVAL_MS - TICK_SLACK_MS;
-      if (localizeDue && this.windowAnchorsWanted) {
+      if (localizeDue && this.localizerWanted) {
         const scaleStart = Date.now();
         const gray = await this.scaleForMotionInput(motionRawFrame);
         this.perf.scaleMs += Date.now() - scaleStart;
@@ -1494,6 +1507,7 @@ export class DetectionCoordinator {
           });
           objectDetections = visibleTracks.filter((t) => !t.trackLost);
           results.object = { detected: objectDetections.length > 0, detections: visibleTracks };
+          staticDetections = pipelineResult.staticTracks;
           if (pipelineResult.crossings.length > 0) results.lineCrossings = pipelineResult.crossings;
 
           // incl. extrapolated tracks, otherwise a single missed detector
@@ -1521,7 +1535,7 @@ export class DetectionCoordinator {
     if (ptzSuppressed) {
       // object boxes stay live in the UI through the move, bbox publish only
       if (objectPlugin && results.object) {
-        this.writeSensorProperties(objectPlugin.sensorId, { detections: results.object.detections });
+        this.writeSensorProperties(objectPlugin.sensorId, { detections: results.object.detections, staticDetections });
       }
       // keep an already-running object dwell alive so a chase doesn't end its
       // own event, but never activate it from suppressed frames
@@ -1542,6 +1556,7 @@ export class DetectionCoordinator {
       this.ingestDetectionResult(SensorType.Object, objectPlugin.sensorId, {
         detected: objectDetections.length > 0,
         detections: results.object.detections,
+        staticDetections,
       });
     }
 
@@ -1744,6 +1759,16 @@ export class DetectionCoordinator {
     await this.captureMoment(subject, bestScore, trigger, result.tracked, analysis, at);
   }
 
+  private anchorMomentDetections(reported: Detection[]): Detection[] {
+    const anchors = [...this.anchorBoxes, ...this.farewellBoxes];
+    if (anchors.length === 0 || reported.length === 0) return [];
+    const subject = reported.find((d) => d.label !== 'motion') ?? reported[0];
+    const clusters = clusterBoxes(anchors);
+    const largest = Math.max(...clusters.map((b) => b.width * b.height));
+    // specks would drag the base union across the frame
+    return clusters.filter((b) => b.width * b.height >= largest * 0.2).map((b) => ({ label: subject.label, confidence: subject.confidence, box: b }));
+  }
+
   private async captureExternalMoment(detections: Detection[], analysis: AnalysisFrame, at: number): Promise<void> {
     let subject: Detection | undefined;
     let bestScore = 0;
@@ -1921,7 +1946,7 @@ export class DetectionCoordinator {
   }
 
   private async seedLocalizerReference(): Promise<void> {
-    if (!this.windowAnchorsWanted || !this.frameSource.decodeOldestKeyframe) return;
+    if (!this.localizerWanted || !this.frameSource.decodeOldestKeyframe) return;
 
     try {
       const frame = await this.frameSource.decodeOldestKeyframe();

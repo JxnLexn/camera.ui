@@ -1,6 +1,6 @@
-import type { ClassifierDetection, Detection, DetectionLabel, FaceDetection, LicensePlateDetection } from '@camera.ui/sdk';
+import type { ClassifierDetection, Detection, DetectionLabel, FaceDetection, LicensePlateDetection, TrackedDetection } from '@camera.ui/sdk';
 
-export type AnyDetection = Detection | FaceDetection | LicensePlateDetection | ClassifierDetection;
+export type AnyDetection = Detection | TrackedDetection | FaceDetection | LicensePlateDetection | ClassifierDetection;
 
 export interface CuiBBoxPlaygroundProps {
   showIcon?: boolean;

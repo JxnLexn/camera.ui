@@ -3,7 +3,7 @@
     <template v-for="(detection, i) in activeDetections" :key="'trackId' in detection ? `t${detection.trackId}` : i">
       <div
         class="bbox-corners"
-        :class="{ tracked: 'trackId' in detection }"
+        :class="{ tracked: 'trackId' in detection, stationary: isStationary(detection) }"
         :style="{
           left: `${getScaledX(detection.box.x)}px`,
           top: `${getScaledY(detection.box.y)}px`,
@@ -14,7 +14,7 @@
         <div
           class="w-full h-full"
           :style="{
-            background: highlightArea ? resolveHighlightStyle(resolveStyleKey(detection)).color : undefined,
+            background: highlightArea && !isStationary(detection) ? resolveHighlightStyle(resolveStyleKey(detection)).color : undefined,
           }"
         >
           <div
@@ -36,14 +36,16 @@
           v-if="showLabel || showConfidence || showIcon"
           class="label z-1"
           :class="{
-            'label-bottom': shouldShowLabelAtBottom(detection),
+            'label-bottom': labelPlacement(detection) === 'below',
+            'label-inside': labelPlacement(detection) === 'inside',
             'label-right': isLabelOnRight(detection),
           }"
           :style="{
-            backgroundColor: resolveStyle(resolveStyleKey(detection)).color,
+            backgroundColor: isStationary(detection) ? `${resolveStyle(resolveStyleKey(detection)).color}B3` : resolveStyle(resolveStyleKey(detection)).color,
             fontSize: `${12 * labelScaleFactor}px`,
             padding: `${4 * labelScaleFactor}px ${8 * labelScaleFactor}px`,
             gap: `${4 * labelScaleFactor}px`,
+            maxWidth: `${labelMaxWidth(detection)}px`,
           }"
         >
           <component :is="resolveStyle(resolveStyleKey(detection)).icon" v-if="showIcon" />
@@ -52,6 +54,10 @@
           >
           <span v-if="showConfidence && minDimension > 250" class="confidence" :style="{ fontSize: `${11 * labelScaleFactor}px` }">
             {{ (detection.confidence * 100).toFixed(1) }}%
+          </span>
+          <span v-if="isStationary(detection) && minDimension > 250" class="dwell" :style="{ fontSize: `${11 * labelScaleFactor}px` }">
+            <TimerIcon class="dwell-icon" />
+            {{ formatDwell(detection) }}
           </span>
         </div>
       </div>
@@ -68,8 +74,9 @@ import BoxesIcon from '~icons/lucide/boxes';
 import LicensePlateIcon from '~icons/mdi/card-text-outline';
 import FaceIcon from '~icons/mdi/face-recognition';
 import ClassifierIcon from '~icons/mdi/tag-multiple';
+import TimerIcon from '~icons/mdi/timer-outline';
 
-import type { ClassifierDetection, FaceDetection, LicensePlateDetection } from '@camera.ui/sdk';
+import type { ClassifierDetection, FaceDetection, LicensePlateDetection, TrackedDetection } from '@camera.ui/sdk';
 import type { AnyDetection, CuiBBoxPlaygroundProps } from './types.js';
 
 const props = withDefaults(defineProps<CuiBBoxPlaygroundProps>(), {
@@ -153,6 +160,9 @@ const sources = new Map<string, AnyDetection[]>();
 
 const containerRef = useTemplateRef('containerRef');
 const activeDetections = shallowRef<AnyDetection[]>([]);
+const now = ref(Date.now());
+
+let dwellTimer: ReturnType<typeof setInterval> | undefined;
 
 const { width: containerWidth, height: containerHeight } = useElementSize(containerRef);
 
@@ -191,16 +201,52 @@ const getCornerSize = computed(() => (detection: AnyDetection): number => {
   return Math.min(width, height) * ratio;
 });
 
-const shouldShowLabelAtBottom = computed(() => (detection: AnyDetection): boolean => {
-  const topY = getScaledY.value(detection.box.y);
+const labelPlacement = computed(() => (detection: AnyDetection): 'above' | 'below' | 'inside' => {
   const minLabelSpace = 30 * labelScaleFactor.value;
-  return topY < minLabelSpace;
+  const topY = getScaledY.value(detection.box.y);
+  if (topY >= minLabelSpace) return 'above';
+  const bottomY = topY + getScaledHeight.value(detection.box.height);
+  if (containerHeight.value - bottomY >= minLabelSpace) return 'below';
+  return 'inside';
 });
 
 const isLabelOnRight = computed(() => (detection: AnyDetection): boolean => {
   const boxLeft = getScaledX.value(detection.box.x);
   return boxLeft > containerWidth.value * 0.7;
 });
+
+const labelMaxWidth = computed(() => (detection: AnyDetection): number => {
+  const boxLeft = getScaledX.value(detection.box.x);
+  if (isLabelOnRight.value(detection)) {
+    return Math.max(40, boxLeft + getScaledWidth.value(detection.box.width) - 4);
+  }
+  return Math.max(40, containerWidth.value - boxLeft - 4);
+});
+
+function syncDwellTimer(): void {
+  const hasStationary = activeDetections.value.some((d) => isStationary(d));
+  if (hasStationary && dwellTimer === undefined) {
+    dwellTimer = setInterval(() => {
+      now.value = Date.now();
+    }, 1000);
+  } else if (!hasStationary && dwellTimer !== undefined) {
+    clearInterval(dwellTimer);
+    dwellTimer = undefined;
+  }
+}
+
+function isStationary(detection: AnyDetection): detection is TrackedDetection & { stationarySince: number } {
+  return 'stationarySince' in detection && typeof detection.stationarySince === 'number';
+}
+
+function formatDwell(detection: TrackedDetection & { stationarySince: number }): string {
+  const seconds = Math.max(0, Math.floor((now.value - detection.stationarySince) / 1000));
+  if (seconds < 60) return `${seconds}s`;
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m ${seconds % 60}s`;
+  const hours = Math.floor(minutes / 60);
+  return `${hours}h ${minutes % 60}m`;
+}
 
 function isFaceDetection(d: AnyDetection): d is FaceDetection {
   return d.attribute === 'face';
@@ -245,6 +291,7 @@ function getDisplayLabel(detection: AnyDetection): string {
 function mergeDetections(): void {
   const all = [...sources.values()].flat();
   activeDetections.value = classes.value.length === 0 ? all : all.filter((d) => classes.value.includes(d.label));
+  syncDwellTimer();
 }
 
 function draw(source: string, detections: AnyDetection[]): void {
@@ -263,6 +310,7 @@ function clear(source?: string): void {
   } else {
     sources.clear();
     activeDetections.value = [];
+    syncDwellTimer();
   }
 }
 
@@ -275,6 +323,10 @@ watch(
   },
   { immediate: true },
 );
+
+onUnmounted(() => {
+  if (dwellTimer !== undefined) clearInterval(dwellTimer);
+});
 
 defineExpose({
   draw,
@@ -303,6 +355,10 @@ defineExpose({
     top 100ms linear,
     width 100ms linear,
     height 100ms linear;
+}
+
+.bbox-corners.stationary .corner-lines {
+  opacity: 0.5;
 }
 
 .corner-lines {
@@ -394,8 +450,23 @@ defineExpose({
   border-bottom-left-radius: 6px;
 }
 
+.label.label-inside {
+  top: 2px;
+  left: 2px;
+  transform: translateY(0);
+  border-radius: 6px;
+}
+
+.label.label-inside.label-right {
+  left: auto;
+  right: 2px;
+}
+
 .label-text {
   margin-right: 4px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
 }
 
 .label.label-right .label-text {
@@ -405,5 +476,17 @@ defineExpose({
 
 .confidence {
   opacity: 0.9;
+}
+
+.dwell {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  opacity: 0.9;
+}
+
+.dwell-icon {
+  width: 1em;
+  height: 1em;
 }
 </style>

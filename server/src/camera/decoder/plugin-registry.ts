@@ -147,10 +147,7 @@ export class PluginRegistry {
   }
 
   public needsAdHocLoop(): boolean {
-    const obj = this.single.get(SensorType.Object);
-    if (!obj) return false;
-    if (obj.requiresFrames) return true;
-    return this.hasFrameBasedSecondary();
+    return this.single.has(SensorType.Object);
   }
 
   private isMultiProvider(sensorType: SensorType): boolean {

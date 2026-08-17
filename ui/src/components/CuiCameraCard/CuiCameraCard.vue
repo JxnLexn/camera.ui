@@ -2119,6 +2119,14 @@ watch(
 );
 
 watch(
+  () => objectSensor.value?.properties.staticDetections,
+  (detections) => {
+    drawCanvas('object-static', (detections ?? []) as TrackedDetection[]);
+  },
+  { deep: true },
+);
+
+watch(
   () => faceSensor.value?.properties.detections,
   (detections) => {
     drawCanvas('face', (detections ?? []) as FaceDetection[]);
