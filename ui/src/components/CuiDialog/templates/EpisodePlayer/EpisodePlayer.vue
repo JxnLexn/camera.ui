@@ -196,7 +196,7 @@ const activeIds = computed(() => {
   return [...ids];
 });
 
-const { master, controllers } = useMultiNvrPlayback(ref(memberCameraIds), { activeIds });
+const { master, controllers } = useMultiNvrPlayback(ref(memberCameraIds), { activeIds, sourceRole: 'auto' });
 
 const isPlaying = computed(() => master.mode.value === 'play');
 const showControl = computed(() => isHovered.value || initialHover.value);

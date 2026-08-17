@@ -50,10 +50,7 @@ export interface CuiCameraCardProps {
 
   // Subcontrol Configuration
   subcontrol?: boolean;
-  subcontrolActivityModeButton?: boolean;
   subcontrolPtzButton?: boolean;
-  subcontrolQualityButton?: boolean;
-  subcontrolStreamingModeButton?: boolean;
 
   // Overlay Configuration
   cameraNameOverlay?: boolean;
@@ -137,8 +134,5 @@ export const CAMERA_CARD_DEFAULTS: InferDefaults<CuiCameraCardProps> = {
   controlSpeakerButton: true,
 
   subcontrol: true,
-  subcontrolActivityModeButton: true,
   subcontrolPtzButton: true,
-  subcontrolQualityButton: true,
-  subcontrolStreamingModeButton: true,
 };

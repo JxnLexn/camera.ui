@@ -1044,6 +1044,8 @@ export default {
         local_url:
           'A name your network resolves, for example behind a reverse proxy. Apps prefer it over the plain IP when it answers. It needs a certificate matching the name and must pass WebSocket connections through. Camera streams keep using the IP addresses above.',
         streaming_source: 'Camera source used for the stream — choose high, mid, or low resolution',
+        playback_source: 'Recording quality for playback. Auto plays the best quality that has footage and switches when needed',
+        activity_mode: 'When the live stream runs. Always on streams continuously, Activity only while something happens, Standby waits for a tap',
         system_preference: 'System setting for the user interface',
         type_and_enter: 'Type and press Enter',
         use_for_snapshot: 'Uses this source for snapshots (if no other suitable source exists)',
@@ -1171,6 +1173,8 @@ export default {
         sources: 'Sources',
         streaming_mode: 'Streaming mode',
         streaming_source: 'Streaming source',
+        playback_source: 'Playback source',
+        activity_mode: 'Activity mode',
         support_url: 'Support URL',
         system_preference: 'System preference',
         theme: 'Theme',

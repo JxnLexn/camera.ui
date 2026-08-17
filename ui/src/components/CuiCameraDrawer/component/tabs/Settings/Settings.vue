@@ -248,6 +248,62 @@
 
           <Field
             v-slot="{ errors }"
+            :model-value="cameraForm.interfaceSettings.playbackSource"
+            name="interfaceSettings.playbackSource"
+            as="div"
+            class="flex flex-col field-gap"
+          >
+            <label for="interfaceSettings.playbackSource" class="cui-label">{{ $t('components.form.label.playback_source') }}</label>
+            <InputGroup>
+              <Select
+                :model-value="cameraForm.interfaceSettings.playbackSource ?? 'auto'"
+                :options="playbackSources"
+                :invalid="errors.length > 0"
+                :loading="isLoading"
+                type="text"
+                @value-change="(e) => (cameraForm.interfaceSettings.playbackSource = e)"
+              />
+            </InputGroup>
+
+            <Transition name="fade">
+              <ErrorMessage name="interfaceSettings.playbackSource" class="cui-input-error" />
+            </Transition>
+
+            <Message v-if="!errors.length" severity="secondary" variant="simple" size="small" class="cui-input-hint">{{
+              $t('components.form.hint.playback_source')
+            }}</Message>
+          </Field>
+
+          <Field
+            v-slot="{ errors }"
+            :model-value="cameraForm.interfaceSettings.activityMode"
+            name="interfaceSettings.activityMode"
+            as="div"
+            class="flex flex-col field-gap"
+          >
+            <label for="interfaceSettings.activityMode" class="cui-label">{{ $t('components.form.label.activity_mode') }}</label>
+            <InputGroup>
+              <Select
+                :model-value="cameraForm.interfaceSettings.activityMode ?? 'always-on'"
+                :options="activityModes"
+                :invalid="errors.length > 0"
+                :loading="isLoading"
+                type="text"
+                @value-change="(e) => (cameraForm.interfaceSettings.activityMode = e)"
+              />
+            </InputGroup>
+
+            <Transition name="fade">
+              <ErrorMessage name="interfaceSettings.activityMode" class="cui-input-error" />
+            </Transition>
+
+            <Message v-if="!errors.length" severity="secondary" variant="simple" size="small" class="cui-input-hint">{{
+              $t('components.form.hint.activity_mode')
+            }}</Message>
+          </Field>
+
+          <Field
+            v-slot="{ errors }"
             :model-value="cameraForm.interfaceSettings.aspectRatio"
             name="interfaceSettings.aspectRatio"
             as="div"
@@ -1752,9 +1808,11 @@ import type {
   CameraNotificationSettings,
   CameraRecordingSettings,
   CameraType,
+  CameraActivityMode,
   FrameWorkerDecoderHardware,
   MotionResolution,
   NotificationSpeed,
+  PlaybackSource,
   RecordingMode,
   RecordingSource,
   StreamingRole,
@@ -1796,6 +1854,8 @@ const { mutateAsync: patchZoneConfig, isPending: zoneConfigPatching } = camerasQ
 const cameraTypes = ref<CameraType[]>(['camera', 'doorbell']);
 const streamingModes = ref<VideoStreamingMode[]>(['auto', 'mse', 'webrtc', 'webrtc/tcp']);
 const streamingSources = ref<StreamingRole[]>(['high-resolution', 'mid-resolution', 'low-resolution']);
+const playbackSources = ref<PlaybackSource[]>(['auto', 'high', 'mid', 'low']);
+const activityModes = ref<CameraActivityMode[]>(['always-on', 'activity', 'standby']);
 const aspectRatios = ref<CameraAspectRatio[]>(['16:9', '9:16', '8:3', '4:3', '1:1']);
 const motionResolutions = ref<MotionResolution[]>(['low', 'medium', 'high']);
 const recordingModes = ref<RecordingMode[]>(['continuous', 'event', 'adhoc']);

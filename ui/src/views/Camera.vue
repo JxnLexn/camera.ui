@@ -330,9 +330,11 @@ const currentDescription = computed<EventDescription | undefined>(() => cuiTimel
 
 const timeline = useElementSize(timelineRef);
 
+const playbackSourceRole = computed(() => camera.value?.interfaceSettings?.playbackSource ?? 'auto');
+
 const nvrController = useNvrPlayback(
   computed(() => cameraId.value ?? ''),
-  { sourceRole: qualityRole },
+  { sourceRole: playbackSourceRole },
 );
 
 const startTs = computed(() => {

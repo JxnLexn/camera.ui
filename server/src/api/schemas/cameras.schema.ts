@@ -398,9 +398,15 @@ export const frameWorkerSettingsSchema = zod.object({
 
 export const cameraTypeSchema = zod.union([zod.literal('camera'), zod.literal('doorbell')]);
 
+export const playbackSourceSchema = zod.union([zod.literal('auto'), zod.literal('high'), zod.literal('mid'), zod.literal('low')]);
+
+export const activityModeSchema = zod.union([zod.literal('always-on'), zod.literal('activity'), zod.literal('standby')]);
+
 export const interfaceSettingsSchema = zod.object({
   streamingMode: streamingModeSchema,
   streamingSource: streamingSourceRole,
+  playbackSource: playbackSourceSchema.default('auto'),
+  activityMode: activityModeSchema.default('always-on'),
   aspectRatio: aspectRatioSchema,
 });
 
@@ -485,6 +491,8 @@ export const createCameraBaseSchema = zod
     interfaceSettings: interfaceSettingsSchema.default({
       streamingMode: 'webrtc',
       streamingSource: 'high-resolution',
+      playbackSource: 'auto',
+      activityMode: 'always-on',
       aspectRatio: '16:9',
     }),
     zones: zoneConfigSchema.default(normalizeZones()),

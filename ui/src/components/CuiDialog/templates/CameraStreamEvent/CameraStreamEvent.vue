@@ -12,10 +12,7 @@
         :camera-name-overlay="false"
         :toolbar="false"
         :subcontrol="true"
-        :subcontrol-quality-button="true"
-        :subcontrol-activity-mode-button="false"
         :subcontrol-ptz-button="false"
-        :subcontrol-streaming-mode-button="false"
         :control-pip-button="false"
         :control-microphone-button="false"
       />
@@ -99,9 +96,11 @@ const isDownloading = ref(false);
 
 let playbackStarted = false;
 
+const playbackSourceRole = computed(() => camera.value.interfaceSettings?.playbackSource ?? 'auto');
+
 const nvrController = useNvrPlayback(
   computed(() => camera.value._id),
-  { sourceRole: qualityRole },
+  { sourceRole: playbackSourceRole },
 );
 
 const isLoading = computed(() => Boolean(dialogRefProps.loading?.value));

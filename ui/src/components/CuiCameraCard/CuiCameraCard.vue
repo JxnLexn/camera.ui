@@ -396,6 +396,21 @@
                   </Button>
 
                   <Button
+                    v-if="controlPipButton && controlBarLayout.pip.inline"
+                    :disabled="!isPipSupported || isLoading || nvrPlaybackVisible"
+                    fluid
+                    text
+                    severity="contrast"
+                    class="control-bar-btn"
+                    @click="togglePictureInPicture"
+                  >
+                    <template #icon>
+                      <i-fluent:picture-in-picture-16-regular v-if="!isPip" class="w-[18px] h-[18px]" />
+                      <i-fluent:picture-in-picture-16-filled v-else class="w-[18px] h-[18px]" />
+                    </template>
+                  </Button>
+
+                  <Button
                     v-if="expandableCard && controlBarLayout.expand.inline && !tapsForExpand"
                     v-tooltip.top="{ value: isExpanded ? $t('components.player.shrink') : $t('components.player.expand') }"
                     fluid
@@ -548,50 +563,6 @@
                     <i-fluent:picture-in-picture-16-regular v-if="!isPip" class="w-[18px] h-[18px] shrink-0" />
                     <i-fluent:picture-in-picture-16-filled v-else class="w-[18px] h-[18px] shrink-0" />
                     <span>{{ isPip ? $t('components.player.hide_pip') : $t('components.player.show_pip') }}</span>
-                  </button>
-
-                  <button
-                    v-if="subcontrol && subcontrolQualityButton && controlBarLayout.quality.inMenu"
-                    :disabled="isLoading"
-                    class="more-menu-item"
-                    @click="
-                      toggleSourceRole();
-                      morePopoverRef?.hide();
-                    "
-                  >
-                    <i-mynaui:letter-l-square-solid v-if="displayResolution === 'low-resolution'" class="w-[18px] h-[18px] shrink-0" />
-                    <i-mynaui:letter-m-square-solid v-else-if="displayResolution === 'mid-resolution'" class="w-[18px] h-[18px] shrink-0" />
-                    <i-mynaui:letter-h-square-solid v-else class="w-[18px] h-[18px] shrink-0" />
-                    <span>{{ getCurrentResolution() }}</span>
-                  </button>
-
-                  <button
-                    v-if="subcontrol && subcontrolStreamingModeButton && controlBarLayout.streamingMode.inMenu"
-                    :disabled="isLoading || nvrPlaybackVisible"
-                    class="more-menu-item"
-                    @click="
-                      toggleStreamingMode();
-                      morePopoverRef?.hide();
-                    "
-                  >
-                    <i-cbi:iosfacetime v-if="activeMode === 'mse'" class="w-[18px] h-[18px] shrink-0" />
-                    <i-simple-icons:webrtc v-else class="w-[18px] h-[18px] shrink-0" />
-                    <span>{{ getCurrentStreamingMode() }}</span>
-                  </button>
-
-                  <button
-                    v-if="subcontrol && subcontrolActivityModeButton && controlBarLayout.activityMode.inMenu"
-                    :disabled="isLoading || nvrPlaybackVisible"
-                    class="more-menu-item"
-                    @click="
-                      toggleActivityMode();
-                      morePopoverRef?.hide();
-                    "
-                  >
-                    <i-mdi:webcam v-if="activityMode === 'always-on'" class="w-[18px] h-[18px] shrink-0" />
-                    <i-icon-park-solid:sleep v-else-if="activityMode === 'standby'" class="w-[18px] h-[18px] shrink-0" />
-                    <i-fluent:pulse-24-filled v-else class="w-[18px] h-[18px] shrink-0" />
-                    <span>{{ getCurrentActivityMode() }}</span>
                   </button>
                 </div>
               </Popover>
@@ -893,10 +864,7 @@ const {
   controlRewindButton,
   controlSpeakerButton,
   subcontrol,
-  subcontrolActivityModeButton,
   subcontrolPtzButton,
-  subcontrolQualityButton,
-  subcontrolStreamingModeButton,
   toolbar,
   toolbarClass,
   toolbarDetectionButton,
@@ -1049,7 +1017,7 @@ const cameraStream = useCameraStream({
   camera: cameraName,
   mode: selectedStreamingMode,
   resolution: selectedSourceRole,
-  activityMode: () => activityMode.value ?? 'always-on',
+  activityMode: () => activityMode.value ?? camera.value?.interfaceSettings.activityMode ?? 'always-on',
   activityConfig: {
     standbyTimeout: 5000,
     activityTimeout: 5000,
@@ -1380,10 +1348,7 @@ const controlBarLayout = computed(() => {
     speaker: { inline: full, inMenu: !full },
     expand: { inline: full, inMenu: !full },
     microphone: { inline: full, inMenu: !full },
-    pip: { inline: false, inMenu: true },
-    quality: { inline: false, inMenu: true },
-    streamingMode: { inline: false, inMenu: true },
-    activityMode: { inline: false, inMenu: true },
+    pip: { inline: full, inMenu: !full },
   };
 });
 
@@ -1396,10 +1361,7 @@ const hasMoreMenuItems = computed(() => {
     (l.speaker.inMenu && controlSpeakerButton.value) ||
     (l.expand.inMenu && expandableCard.value && !tapsForExpand.value) ||
     (l.microphone.inMenu && controlMicrophoneButton.value) ||
-    (l.pip.inMenu && controlPipButton.value) ||
-    (l.quality.inMenu && subcontrol.value && subcontrolQualityButton.value) ||
-    (l.streamingMode.inMenu && subcontrol.value && subcontrolStreamingModeButton.value) ||
-    (l.activityMode.inMenu && subcontrol.value && subcontrolActivityModeButton.value)
+    (l.pip.inMenu && controlPipButton.value)
   );
 });
 
@@ -1432,26 +1394,6 @@ function goBack() {
   } else {
     router.push('/home');
   }
-}
-
-function getCurrentActivityMode() {
-  if (activityMode.value === 'always-on') return t('components.player.activity_mode_always_on');
-  if (activityMode.value === 'standby') return t('components.player.activity_mode_standby');
-  return t('components.player.activity_mode_activity');
-}
-
-function getCurrentStreamingMode() {
-  if (activeMode.value === 'mse') return t('components.player.streaming_mode_mse');
-  if (activeMode.value === 'webrtc' || activeMode.value === 'webrtc/tcp') return t('components.player.streaming_mode_webrtc');
-  if (activeMode.value === 'webcodecs') return t('components.player.streaming_mode_webcodecs');
-  return t('components.player.streaming_mode_unknown');
-}
-
-function getCurrentResolution() {
-  if (displayResolution.value === 'high-resolution') return t('components.player.source_role_high');
-  if (displayResolution.value === 'mid-resolution') return t('components.player.source_role_mid');
-  if (displayResolution.value === 'low-resolution') return t('components.player.source_role_low');
-  return t('components.player.source_role_unknown');
 }
 
 function getMaxPan(zoom: number) {
