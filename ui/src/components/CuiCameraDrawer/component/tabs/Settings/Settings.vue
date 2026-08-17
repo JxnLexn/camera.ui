@@ -443,16 +443,18 @@
           <span class="section-chip mt-2">{{ $t('components.camera_options.sensor_type_object') }}</span>
 
           <Field
+            v-for="objectLabel in OBJECT_DETECTION_LABELS"
+            :key="objectLabel"
             v-slot="{ errors }"
-            :model-value="cameraForm.detectionSettings.object.confidence"
-            name="detectionSettings.object.confidence"
+            :model-value="cameraForm.detectionSettings.object.confidences[objectLabel]"
+            :name="`detectionSettings.object.confidences.${objectLabel}`"
             as="div"
             class="flex flex-col field-gap"
           >
-            <label for="detectionSettings.object.confidence" class="cui-label">{{ $t('components.form.label.confidence') }}</label>
+            <label :for="`detectionSettings.object.confidences.${objectLabel}`" class="cui-label">{{ $t(`components.form.label.confidence_${objectLabel}`) }}</label>
             <InputGroup>
               <InputNumber
-                :model-value="cameraForm.detectionSettings.object.confidence"
+                :model-value="cameraForm.detectionSettings.object.confidences[objectLabel]"
                 :invalid="errors.length > 0"
                 :loading="isLoading"
                 show-buttons
@@ -461,16 +463,18 @@
                 :max="1"
                 mode="decimal"
                 :use-grouping="false"
-                @value-change="(e) => (cameraForm.detectionSettings.object.confidence = e ?? undefined)"
-                @input="(e) => (cameraForm.detectionSettings.object.confidence = (e.value as any) ?? undefined)"
+                @value-change="(e) => (cameraForm.detectionSettings.object.confidences[objectLabel] = e ?? undefined)"
+                @input="(e) => (cameraForm.detectionSettings.object.confidences[objectLabel] = (e.value as any) ?? undefined)"
               />
             </InputGroup>
 
             <Transition name="fade">
-              <ErrorMessage name="detectionSettings.object.confidence" class="cui-input-error" />
+              <ErrorMessage :name="`detectionSettings.object.confidences.${objectLabel}`" class="cui-input-error" />
             </Transition>
 
-            <Message v-if="!errors.length" severity="secondary" variant="simple" size="small" class="cui-input-hint">{{ $t('components.form.hint.confidence') }}</Message>
+            <Message v-if="!errors.length" severity="secondary" variant="simple" size="small" class="cui-input-hint">{{
+              $t(`components.form.hint.confidence_${objectLabel}`)
+            }}</Message>
           </Field>
 
           <Field
@@ -1791,7 +1795,7 @@
 
 <script setup lang="ts">
 import { useSensors } from '@camera.ui/browser';
-import { BASE_AUDIO_LABELS, PluginInterface, SensorType } from '@camera.ui/sdk';
+import { BASE_AUDIO_LABELS, OBJECT_DETECTION_LABELS, PluginInterface, SensorType } from '@camera.ui/sdk';
 import { ErrorMessage, Field } from 'vee-validate';
 
 import { CamerasQuery } from '@/api/routes/cameras.js';
@@ -1804,11 +1808,11 @@ import type { AspectRatioProps } from '@/components/CuiDialog/templates/AspectRa
 import type { ZoneEditorProps } from '@/components/CuiDialog/templates/ZoneEditor/types.js';
 import type { VideoStreamingMode } from '@camera.ui/browser';
 import type {
+  CameraActivityMode,
   CameraAspectRatio,
   CameraNotificationSettings,
   CameraRecordingSettings,
   CameraType,
-  CameraActivityMode,
   FrameWorkerDecoderHardware,
   MotionResolution,
   NotificationSpeed,
@@ -1951,7 +1955,6 @@ const ptzAutotrackLabels = computed(() => [
   { label: t('components.automation_nodes.label_person'), value: 'person' },
   { label: t('components.automation_nodes.label_vehicle'), value: 'vehicle' },
   { label: t('components.automation_nodes.label_animal'), value: 'animal' },
-  { label: t('components.automation_nodes.label_package'), value: 'package' },
 ]);
 
 const ptzActiveHoursEnabled = computed(() => Boolean(cameraForm.value.ptzAutotrack?.activeHours));

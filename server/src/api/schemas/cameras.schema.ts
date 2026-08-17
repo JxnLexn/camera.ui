@@ -131,7 +131,13 @@ export const detectionSettingsSchema = zod.object({
     timeout: zod.number().min(10, 'Minimum 10 seconds'),
   }),
   object: zod.object({
-    confidence: zod.number().min(0.3, 'Minimum 0.3').max(1, 'Maximum 1'),
+    confidences: zod
+      .object({
+        person: zod.number().min(0.3, 'Minimum 0.3').max(1, 'Maximum 1').default(0.5),
+        vehicle: zod.number().min(0.3, 'Minimum 0.3').max(1, 'Maximum 1').default(0.5),
+        animal: zod.number().min(0.3, 'Minimum 0.3').max(1, 'Maximum 1').default(0.5),
+      })
+      .default({ person: 0.5, vehicle: 0.5, animal: 0.5 }),
     suppressStatic: zod.boolean().default(true),
     timeout: zod.number().min(10, 'Minimum 10 seconds').default(15),
   }),
@@ -502,7 +508,11 @@ export const createCameraBaseSchema = zod
         timeout: 30,
       },
       object: {
-        confidence: 0.5,
+        confidences: {
+          person: 0.5,
+          vehicle: 0.5,
+          animal: 0.5,
+        },
         suppressStatic: true,
         timeout: 15,
       },

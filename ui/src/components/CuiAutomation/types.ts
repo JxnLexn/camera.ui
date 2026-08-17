@@ -488,15 +488,15 @@ export const CAMERA_CONTROL_PROPERTY_DEFINITIONS: CameraControlPropertyDefinitio
     step: 0.05,
     defaultValue: '0.5',
   },
-  {
-    key: 'detectionSettings.object.confidence',
-    labelKey: 'components.automation_nodes.camera_prop_object_confidence',
-    inputType: 'number',
+  ...OBJECT_DETECTION_LABELS.map((label) => ({
+    key: `detectionSettings.object.confidences.${label}`,
+    labelKey: `components.automation_nodes.camera_prop_object_confidence_${label}`,
+    inputType: 'number' as const,
     min: 0.3,
     max: 1,
     step: 0.05,
     defaultValue: '0.5',
-  },
+  })),
   { key: 'detectionSettings.motion.timeout', labelKey: 'components.automation_nodes.camera_prop_motion_timeout', inputType: 'number', min: 10, defaultValue: '30' },
   {
     key: 'detectionSettings.motion.resolution',
