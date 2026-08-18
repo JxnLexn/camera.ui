@@ -522,10 +522,16 @@ async function onFormSubmit(configData: Record<string, any>): Promise<void> {
             src: mediaUrl,
             response,
             onTextSearch: async (text: string) => {
-              const textResult = await pluginProxy.value!.getTextEmbedding!(text);
+              const wanted = response.embeddingModel;
+              let textResult = pluginProxy.value!.getTextEmbeddings
+                ? (await pluginProxy.value!.getTextEmbeddings(text))?.find((r) => r.embeddingModel === wanted)
+                : undefined;
+              textResult ??= await pluginProxy.value!.getTextEmbedding!(text);
               if (!textResult?.embedding?.length) return { score: 0 };
-              const score = cosineSimilarity(imageEmbedding, textResult.embedding);
-              return { score };
+              if (wanted && textResult.embeddingModel && textResult.embeddingModel !== wanted) {
+                return { score: 0 };
+              }
+              return { score: cosineSimilarity(imageEmbedding, textResult.embedding) };
             },
           },
         },

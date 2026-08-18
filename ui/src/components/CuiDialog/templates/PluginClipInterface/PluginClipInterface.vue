@@ -33,8 +33,6 @@
 </template>
 
 <script setup lang="ts">
-import { CLIP_MAX, CLIP_MIN } from './types.js';
-
 import type { CustomDialogComponent } from '@/composables/useCuiDialog.js';
 import type { PluginClipInterfaceProps, PluginClipInterfaceResult } from './types.js';
 
@@ -47,7 +45,9 @@ const searching = ref(false);
 const results = ref<PluginClipInterfaceResult[]>([]);
 
 function clipDisplayScore(raw: number): number {
-  return Math.max(0, Math.min(1, (raw - CLIP_MIN) / (CLIP_MAX - CLIP_MIN)));
+  const [min, max] = props.response.scoreBand ?? [0, 0];
+  if (max <= min) return 0;
+  return Math.max(0, Math.min(1, (raw - min) / (max - min)));
 }
 
 async function runSearch() {
