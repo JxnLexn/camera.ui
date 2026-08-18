@@ -317,22 +317,78 @@ export class ServerManager {
     const stagingPath = join(this.serverPath, '.staging');
     const stagedModules = join(stagingPath, 'node_modules');
 
-    rmSync(stagingPath, { recursive: true, force: true });
-    await mkdirp(stagingPath);
-    const seeded = await this.seedAllowScripts(stagingPath, version);
-    await this.cli.chownPath(stagingPath);
+    this.acquireUpdateLock();
 
     try {
-      await this.npmInstallWithRetry(stagingPath, version, stdout, !seeded);
-
-      if (!this.isStagedInstallComplete()) {
-        throw new Error('Server install verification failed — staged files incomplete');
-      }
-
-      await this.cli.chownPath(stagedModules);
-    } catch (error) {
       rmSync(stagingPath, { recursive: true, force: true });
-      throw error;
+      await mkdirp(stagingPath);
+      const seeded = await this.seedAllowScripts(stagingPath, version);
+      await this.cli.chownPath(stagingPath);
+
+      try {
+        await this.npmInstallWithRetry(stagingPath, version, stdout, !seeded);
+
+        if (!this.isStagedInstallComplete()) {
+          throw new Error('Server install verification failed — staged files incomplete');
+        }
+
+        await this.cli.chownPath(stagedModules);
+      } catch (error) {
+        rmSync(stagingPath, { recursive: true, force: true });
+        throw error;
+      }
+    } finally {
+      this.releaseUpdateLock();
+    }
+  }
+
+  private get updateLockPath(): string {
+    return join(this.serverPath, '.staging.lock');
+  }
+
+  private acquireUpdateLock(): void {
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        writeFileSync(this.updateLockPath, String(process.pid), { flag: 'wx' });
+        return;
+      } catch {
+        const holder = this.updateLockHolder();
+        if (holder !== undefined) {
+          throw new Error(`Another update is already in progress (pid ${holder})`);
+        }
+        // stale lock of a dead process
+        rmSync(this.updateLockPath, { force: true });
+      }
+    }
+    throw new Error('Could not acquire the update lock');
+  }
+
+  private releaseUpdateLock(): void {
+    try {
+      if (readFileSync(this.updateLockPath, 'utf-8').trim() === String(process.pid)) {
+        rmSync(this.updateLockPath, { force: true });
+      }
+    } catch {
+      // already gone
+    }
+  }
+
+  private updateLockHolder(): number | undefined {
+    let pid: number;
+    try {
+      pid = parseInt(readFileSync(this.updateLockPath, 'utf-8').trim(), 10);
+    } catch {
+      return undefined;
+    }
+    if (!Number.isFinite(pid) || pid <= 0) {
+      return undefined;
+    }
+    try {
+      process.kill(pid, 0);
+      return pid;
+    } catch (error) {
+      // EPERM: alive, just not ours to signal
+      return (error as NodeJS.ErrnoException).code === 'EPERM' ? pid : undefined;
     }
   }
 
@@ -346,6 +402,10 @@ export class ServerManager {
     const stagedModules = join(stagingPath, 'node_modules');
 
     if (!existsSync(stagingPath)) {
+      return;
+    }
+
+    if (this.updateLockHolder() !== undefined) {
       return;
     }
 
