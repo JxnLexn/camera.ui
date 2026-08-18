@@ -1,23 +1,54 @@
 import { IS_ELECTRON } from '@camera.ui/common/utils';
 
-import type { CLIMessage, IPCMessage } from '../types.js';
+import type { AppUpdateAvailableMessage, CLIMessage, IPCMessage } from '../types.js';
 
 const REPORT_TIMEOUT_MS = 1000;
 const UPDATE_TIMEOUT_MS = 5 * 60 * 1000;
+const ELECTRON_UPDATE_TIMEOUT_MS = 15 * 60 * 1000;
+
+export interface AppUpdateState {
+  version: string;
+  appVersion?: string;
+  remoteInstall: boolean;
+}
+
+let appUpdate: AppUpdateState | null = null;
 
 export class FatalBootError extends Error {}
+
+export function initAppUpdateListener(): void {
+  if (!IS_ELECTRON) return;
+  process.on('message', (message: AppUpdateAvailableMessage) => {
+    if (message?.type !== 'APP_UPDATE_AVAILABLE' || !message.version) return;
+    appUpdate = { version: message.version, appVersion: message.appVersion, remoteInstall: message.remoteInstall === true };
+  });
+}
+
+export function appUpdateState(): AppUpdateState | null {
+  return appUpdate;
+}
 
 export function sendIPCMessage(message: IPCMessage): void {
   process.send?.(message);
 }
 
+export function requestAppUpdateCheck(): void {
+  if (!IS_ELECTRON) return;
+  sendIPCMessage({ type: 'CHECK_APP_UPDATE' });
+}
+
+export function announceUpdateChannel(beta: boolean): void {
+  if (!IS_ELECTRON) return;
+  sendIPCMessage({ type: 'SET_UPDATE_CHANNEL', channel: beta ? 'beta' : 'latest' });
+}
+
 export function canRequestServerUpdate(): boolean {
-  // eslint-disable-next-line @typescript-eslint/unbound-method
-  return !IS_ELECTRON && Boolean(process.send);
+  if (!process.send) return false;
+  return !IS_ELECTRON || appUpdate?.remoteInstall === true;
 }
 
 export async function requestServerUpdate(version?: string): Promise<AsyncGenerator<string, void, unknown>> {
-  if (IS_ELECTRON) {
+  if (IS_ELECTRON && appUpdate?.remoteInstall !== true) {
     throw new Error('Server updates are managed by the desktop app');
   }
 
@@ -42,11 +73,12 @@ async function* streamUpdateOutput(): AsyncGenerator<string, void, unknown> {
   let updateFailed = false;
   let updateError: Error | null = null;
 
+  const timeoutMs = IS_ELECTRON ? ELECTRON_UPDATE_TIMEOUT_MS : UPDATE_TIMEOUT_MS;
   const timer = setTimeout(() => {
     if (resolver) {
-      rejector?.(new Error('Update timeout after 5 minutes'));
+      rejector?.(new Error(`Update timeout after ${timeoutMs / 60_000} minutes`));
     }
-  }, UPDATE_TIMEOUT_MS);
+  }, timeoutMs);
 
   const handler = (message: CLIMessage): void => {
     switch (message.type) {

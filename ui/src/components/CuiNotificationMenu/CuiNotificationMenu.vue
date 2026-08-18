@@ -379,7 +379,7 @@ function buildElectronUpdateNotification(): StoredNotification {
     title: 'Update',
     body: 'New camera.ui app update available',
     severity: Severity.Info,
-    deepLink: '/settings/system',
+    deepLink: '/updates',
     tag: 'electron-update',
     createdAt: Date.now(),
     seenAt: null,

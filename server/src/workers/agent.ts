@@ -7,7 +7,7 @@ import { container } from 'tsyringe';
 import { WorkersService } from '../api/services/workers.service.js';
 import { NamespaceManager } from '../rpc/namespaces.js';
 import { ConfigService } from '../services/config/index.js';
-import { canRequestServerUpdate, requestServerUpdate } from '../utils/ipc.js';
+import { announceUpdateChannel, canRequestServerUpdate, requestServerUpdate } from '../utils/ipc.js';
 import { collectSystemInfo } from '../utils/system-info.js';
 import { FrameDecodingHandler } from './capabilities/frame-decoding.js';
 import { PluginHostHandler } from './capabilities/plugin-host.js';
@@ -232,6 +232,7 @@ export class WorkerAgent implements WorkerAgentRPC {
     this.report('log', `Updating to ${version}`);
 
     try {
+      announceUpdateChannel(version.includes('-beta'));
       const output = await requestServerUpdate(version);
       for await (const line of output) {
         this.report('raw', line);

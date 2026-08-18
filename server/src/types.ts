@@ -53,6 +53,8 @@ export type CLIMessage = UpdateStartedMessage | UpdateOutputMessage | UpdateErro
 export interface AppUpdateAvailableMessage {
   type: 'APP_UPDATE_AVAILABLE';
   version: string;
+  appVersion?: string;
+  remoteInstall?: boolean;
 }
 
 export interface AppStartedMessage {
@@ -80,4 +82,14 @@ export interface AppUpdateMessage {
   version?: string;
 }
 
-export type IPCMessage = AppStartedMessage | AppStoppingMessage | AppStartFailedMessage | AppStartProgressMessage | AppUpdateMessage;
+export interface AppUpdateCheckMessage {
+  type: 'CHECK_APP_UPDATE';
+}
+
+export interface AppUpdateChannelMessage {
+  type: 'SET_UPDATE_CHANNEL';
+  channel: 'latest' | 'beta';
+}
+
+export type IPCMessage =
+  AppStartedMessage | AppStoppingMessage | AppStartFailedMessage | AppStartProgressMessage | AppUpdateMessage | AppUpdateCheckMessage | AppUpdateChannelMessage;

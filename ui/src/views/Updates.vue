@@ -190,9 +190,8 @@ const sections = computed<{ kind: UpdateKind; title: string; items: UpdateItem[]
 const checkedAtLabel = computed(() => new Date(checkedAt.value).toLocaleTimeString());
 
 function blockedLabel(item: UpdateItem): string {
-  if (item.blockedReason === 'desktop') return t('views.updates.blocked_desktop');
   if (item.blockedReason === 'legacy') return t('views.updates.blocked_legacy');
-  return t('views.updates.blocked_needs_server');
+  return t('views.updates.blocked_desktop');
 }
 
 function openChangelog(item: UpdateItem): void {

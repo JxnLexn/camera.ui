@@ -17,7 +17,7 @@ export async function patchServerInfo(systemData: Partial<DBServer>): Promise<DB
 }
 
 export async function updateServerFn({ serverData }: { serverData: UpdateServerInput }): Promise<AckResponse> {
-  const response: AxiosResponse<AckResponse> = await api.post('/server/update', serverData, { timeout: 360_000 });
+  const response: AxiosResponse<AckResponse> = await api.post('/server/update', serverData, { timeout: 960_000 });
   return response.data;
 }
 

@@ -1,7 +1,7 @@
 <template>
   <div>
     <div class="flex flex-col w-full gap-6">
-      <div v-if="!isElectronBuild">
+      <div>
         <Card class="cui-card">
           <template #content>
             <div>
@@ -45,20 +45,11 @@
                 </span>
               </div>
 
-              <div v-if="(isElectronApp && latestElectronVersion) || !isElectronBuild" class="flex w-full items-center gap-2">
+              <div v-if="!isElectronBuild" class="flex w-full items-center gap-2">
                 <div class="ml-auto"></div>
 
                 <Button
-                  v-if="isElectronApp && latestElectronVersion"
-                  :disabled="!isElectronApp"
-                  :loading="isLoading"
-                  class="cui-button-medium"
-                  :label="`${$t('components.form.button.update')} (v${latestElectronVersion})`"
-                  @click="installElectronUpdate"
-                />
-
-                <Button
-                  v-if="!isElectronBuild && restartRequired"
+                  v-if="restartRequired"
                   :loading="isLoading"
                   :disabled="actionsDisabled"
                   class="cui-button-medium"
@@ -67,16 +58,6 @@
                 />
 
                 <Button
-                  v-else-if="!isElectronBuild && installVersion"
-                  :loading="isLoading"
-                  :disabled="actionsDisabled"
-                  class="cui-button-medium"
-                  :label="`${$t('components.form.button.update')} (v${installVersion})`"
-                  @click="openDialog('install')"
-                />
-
-                <Button
-                  v-if="!isElectronBuild"
                   :loading="isLoading"
                   :disabled="actionsDisabled"
                   class="cui-button-medium"
@@ -147,8 +128,6 @@
 </template>
 
 <script setup lang="ts">
-import { compareVersions } from 'compare-versions';
-
 import { ApiQuery, apiInfo as fetchApiInfo } from '@/api/routes/api.js';
 import { downloadCertFn, ServerQuery } from '@/api/routes/server.js';
 import { asyncComponent } from '@/common/asyncComponent.js';
@@ -172,36 +151,20 @@ const { appVersion, nativeVersion, refreshAppVersion } = useAppVersion();
 
 const authStore = useAuthStore();
 
-serverQuery.toggleQueryActivator('checkVersionQuery', false);
-
 const { data: apiInfo, isBusy: apiInfoLoading } = apiQuery.apiInfoQuery();
-const { data: versionInfo, isBusy: versionLoading } = serverQuery.checkVersionQuery();
 const { mutate: restartServer, isPending: restartServerLoading } = serverQuery.restartServerQuery();
 const { mutateAsync: resetServer, isPending: resetServerLoading } = serverQuery.resetServerQuery();
 
 const currentVersion = ref(t('views.settings.unknown'));
 const currentElectronVersion = ref(t('views.settings.unknown'));
-const latestBetaVersion = ref<string>();
-const latestVersion = ref<string>();
-const latestElectronVersion = ref<string>();
 const loadingCert = ref(false);
-const isUpdatingElectron = ref(false);
-const isCheckingForElectronVersion = ref(false);
-const isCheckingForElectronUpdates = ref(false);
 
 let refreshRun = 0;
 
 const isElectronBuild = computed(() => apiInfo.value?.electron ?? false);
 
 const isLoading = computed(() => {
-  return (
-    restartServerLoading.value ||
-    resetServerLoading.value ||
-    apiInfoLoading.value ||
-    versionLoading.value ||
-    isCheckingForElectronUpdates.value ||
-    isUpdatingElectron.value
-  );
+  return restartServerLoading.value || resetServerLoading.value || apiInfoLoading.value;
 });
 
 const installedVersion = computed(() => apiInfo.value?.installedVersion || apiInfo.value?.version);
@@ -209,34 +172,6 @@ const installedVersion = computed(() => apiInfo.value?.installedVersion || apiIn
 const restartRequired = computed(() => apiInfo.value?.restartRequired ?? false);
 
 const actionsDisabled = computed(() => isLoading.value || !isOnline.value || restarting.value);
-
-const updateAvailable = computed(() => {
-  if (installedVersion.value && latestVersion.value) {
-    return compareVersions(latestVersion.value, installedVersion.value) === 1;
-  }
-
-  return false;
-});
-
-const onBetaTrack = computed(() => Boolean(installedVersion.value?.includes('-')));
-
-const updateAvailableBeta = computed(() => {
-  if ((isBeta.value || onBetaTrack.value) && installedVersion.value && latestBetaVersion.value) {
-    return compareVersions(latestBetaVersion.value, installedVersion.value) === 1;
-  }
-
-  return false;
-});
-
-const installVersion = computed(() => {
-  const candidates = [updateAvailable.value ? latestVersion.value : undefined, updateAvailableBeta.value ? latestBetaVersion.value : undefined].filter((v): v is string =>
-    Boolean(v),
-  );
-
-  if (!candidates.length) return undefined;
-
-  return candidates.sort((a, b) => compareVersions(b, a))[0];
-});
 
 function onBetaToggle(next: boolean | string | undefined): void {
   setBeta(next === true);
@@ -265,7 +200,7 @@ function beginRestart(): void {
   restartServer();
 }
 
-function openDialog(type: 'restart' | 'reset' | 'versions' | 'install') {
+function openDialog(type: 'restart' | 'reset' | 'versions') {
   switch (type) {
     case 'restart':
       dialog.openTextDialog({
@@ -298,15 +233,13 @@ function openDialog(type: 'restart' | 'reset' | 'versions' | 'install') {
       });
       break;
     case 'versions':
-    case 'install':
       dialog.openComponentDialog<VersionsHandlerProps>(VersionsHandlerDialog, {
         data: {
           title: t('components.dialog.title.install_version'),
-          confirmText: type === 'install' ? t('components.form.button.update') : t('components.form.button.install'),
+          confirmText: t('components.form.button.install'),
           loading: isLoading,
           contentProps: {
             target: { type: 'server' },
-            installVersion: type === 'install' ? installVersion.value : undefined,
           },
         },
       });
@@ -320,43 +253,9 @@ async function checkElectronVersion() {
   }
 
   try {
-    isCheckingForElectronVersion.value = true;
     currentElectronVersion.value = (await electron!.invoke('get-app-version')) ?? t('views.settings.unknown');
   } catch (error) {
     log.error('Error getting electron app version:', error);
-  } finally {
-    isCheckingForElectronVersion.value = false;
-  }
-}
-
-async function checkElectronUpdates() {
-  if (!isElectronApp) {
-    return;
-  }
-
-  try {
-    isCheckingForElectronUpdates.value = true;
-    const response: { isUpdateAvailable: boolean; version: string } = await electron!.invoke('get-update-available');
-    latestElectronVersion.value = response.isUpdateAvailable ? response.version : undefined;
-  } catch (error) {
-    log.error('Error checking for electron updates:', error);
-  } finally {
-    isCheckingForElectronUpdates.value = false;
-  }
-}
-
-async function installElectronUpdate() {
-  if (!isElectronApp) {
-    return;
-  }
-
-  try {
-    isUpdatingElectron.value = true;
-    await electron!.invoke('quit-and-install');
-  } catch (error) {
-    log.error('Error installing electron update:', error);
-  } finally {
-    isUpdatingElectron.value = false;
   }
 }
 
@@ -368,7 +267,6 @@ async function refreshAfterReconnect(): Promise<void> {
       await fetchApiInfo({ signal: AbortSignal.timeout(5000) });
       if (run !== refreshRun) return;
       apiQuery.queryClient.invalidateQueries({ queryKey: ['api'] });
-      serverQuery.queryClient.invalidateQueries({ queryKey: ['version'] });
       return;
     } catch {
       await new Promise((resolve) => setTimeout(resolve, 2000));
@@ -381,18 +279,6 @@ watch(
   apiInfo,
   () => {
     currentVersion.value = apiInfo.value?.version || t('views.settings.unknown');
-    if (apiInfo.value) {
-      serverQuery.toggleQueryActivator('checkVersionQuery', !isElectronBuild.value);
-    }
-  },
-  { deep: true, immediate: true },
-);
-
-watch(
-  versionInfo,
-  () => {
-    latestVersion.value = versionInfo.value?.['dist-tags'].latest;
-    latestBetaVersion.value = versionInfo.value?.['dist-tags'].beta;
   },
   { deep: true, immediate: true },
 );
@@ -418,7 +304,6 @@ onMounted(() => {
   }
   if (isElectronApp) {
     checkElectronVersion();
-    checkElectronUpdates();
   }
 });
 </script>

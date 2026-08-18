@@ -39,4 +39,15 @@ export const UpdatesRoute: FastifyPluginAsync = async (app: FastifyInstance): Pr
       summary: 'Cancel the active update run after the current item',
     },
   });
+
+  app.route({
+    url: '/check',
+    method: 'POST',
+    preValidation: [validJWTNeeded, onlyAdminCanDoThisAction],
+    handler: updatesController.check.bind(updatesController),
+    schema: {
+      tags: ['Updates'],
+      summary: 'Re-check every update source now (rate-limited)',
+    },
+  });
 };

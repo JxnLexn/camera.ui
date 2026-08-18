@@ -1,11 +1,13 @@
 import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
 
-import { APP_SERVER_NAME, sleep } from '@camera.ui/common/utils';
+import { APP_SERVER_NAME, IS_ELECTRON, sleep } from '@camera.ui/common/utils';
 import { pathExists, readJson, remove, writeJson } from 'fs-extra/esm';
+import { lt, valid } from 'semver';
 import { container } from 'tsyringe';
 
 import { ConfigService } from '../../services/config/index.js';
+import { appUpdateState, requestAppUpdateCheck } from '../../utils/ipc.js';
 import { PluginsService } from './plugins.service.js';
 import { ServerService } from './server.service.js';
 
@@ -16,7 +18,7 @@ import type { ServerNamespace } from '../websocket/nsp/server.js';
 
 export type UpdatesItemKind = 'server' | 'plugin' | 'worker';
 export type UpdatesItemStatus = 'pending' | 'updating' | 'restarting' | 'success' | 'error';
-export type UpdatesBlockedReason = 'desktop' | 'legacy' | 'needs_server';
+export type UpdatesBlockedReason = 'desktop' | 'legacy';
 
 export interface UpdatesActivityItem {
   id: string;
@@ -55,7 +57,7 @@ export interface UpdatesPendingPlugin {
 }
 
 export interface UpdatesPending {
-  server: { installedVersion: string; latestVersion?: string; updateAvailable: boolean };
+  server: { installedVersion: string; latestVersion?: string; updateAvailable: boolean; blockedReason?: UpdatesBlockedReason };
   plugins: UpdatesPendingPlugin[];
   workers: UpdatesPendingWorker[];
   targetServerVersion: string;
@@ -82,6 +84,7 @@ export class UpdatesLockedError extends Error {
 
 const WORKER_UPDATE_TIMEOUT_MS = 10 * 60 * 1000;
 const WORKER_POLL_MS = 2_000;
+const CHECK_TTL_MS = 60_000;
 const MANUAL_ITEM_LINGER_MS = 60_000;
 const STAMP_FILE = 'updates-run.json';
 
@@ -102,6 +105,7 @@ export class UpdatesService {
   private manualCleanupTimers = new Map<string, NodeJS.Timeout>();
   private serverInstallActive = false;
   private workerPollTimer: NodeJS.Timeout | undefined;
+  private lastCheckAt = 0;
 
   constructor() {
     this.logger = container.resolve<LoggerService>('logger');
@@ -141,11 +145,8 @@ export class UpdatesService {
 
   public notifyServerInstall(phase: 'start' | 'success' | 'error', detail?: { version?: string; error?: string; source?: 'run' | 'manual' }): void {
     this.serverInstallActive = phase === 'start';
-    // a successful install waits for the restart, it is not done yet
     this.notifyActivity('server', 'server', APP_SERVER_NAME, phase === 'success' ? 'restarting' : phase, detail);
 
-    // a manual server update needs the completion stamp too, so the boot
-    // after the restart can report the outcome on the updates channel
     if (phase === 'success' && detail?.source !== 'run' && !this.runItem('server')) {
       const item = this.manual.get('server');
       this.writeStamp({
@@ -171,6 +172,21 @@ export class UpdatesService {
     };
   }
 
+  public async checkNow(): Promise<void> {
+    if (Date.now() - this.lastCheckAt < CHECK_TTL_MS) return;
+    this.lastCheckAt = Date.now();
+
+    const nsp = this.serverNamespace();
+    if (IS_ELECTRON) {
+      requestAppUpdateCheck();
+      await nsp?.checkPlugins();
+      await sleep(1500);
+    } else {
+      await Promise.all([nsp?.checkServer(), nsp?.checkPlugins()]);
+    }
+    nsp?.refreshWorkerUpdateAvailable();
+  }
+
   public pending(): UpdatesPending {
     const pending: UpdatesPending = {
       server: { installedVersion: ConfigService.VERSION, updateAvailable: false },
@@ -182,7 +198,15 @@ export class UpdatesService {
     const serverNsp = this.serverNamespace();
     const updates = serverNsp?.getUpdates();
 
-    if (updates?.server && (updates.server.updateAvailable || updates.server.betaUpdateAvailable)) {
+    if (IS_ELECTRON) {
+      const app = appUpdateState();
+      pending.server = {
+        installedVersion: app?.appVersion ?? ConfigService.VERSION,
+        latestVersion: app?.version,
+        updateAvailable: Boolean(app),
+        blockedReason: app && !app.remoteInstall ? 'desktop' : undefined,
+      };
+    } else if (updates?.server && (updates.server.updateAvailable || updates.server.betaUpdateAvailable)) {
       pending.server = { installedVersion: ConfigService.VERSION, latestVersion: updates.server.latestVersion, updateAvailable: true };
       if (updates.server.latestVersion) {
         pending.targetServerVersion = updates.server.latestVersion;
@@ -202,19 +226,8 @@ export class UpdatesService {
 
     for (const worker of this.workerManager()?.getWorkers() ?? []) {
       if (!worker.online) continue;
-      if (!worker.versionMismatch) {
-        if (pending.server.updateAvailable) {
-          pending.workers.push({
-            agentId: worker.agentId,
-            name: worker.name,
-            installedVersion: worker.version,
-            updateAvailable: true,
-            updatable: false,
-            blockedReason: 'needs_server',
-          });
-        } else {
-          pending.workers.push({ agentId: worker.agentId, name: worker.name, installedVersion: worker.version, updateAvailable: false, updatable: true });
-        }
+      if (!this.workerBehindTarget(worker.version, pending.targetServerVersion, worker.versionMismatch === true)) {
+        pending.workers.push({ agentId: worker.agentId, name: worker.name, installedVersion: worker.version, updateAvailable: false, updatable: true });
       } else if (worker.update?.updatable) {
         pending.workers.push({ agentId: worker.agentId, name: worker.name, installedVersion: worker.version, updateAvailable: true, updatable: true });
       } else {
@@ -241,7 +254,7 @@ export class UpdatesService {
     }
 
     const pending = this.pending();
-    const serverPending = pending.server.updateAvailable;
+    const serverPending = pending.server.updateAvailable && !pending.server.blockedReason;
 
     const items: UpdatesActivityItem[] = [
       ...pending.workers
@@ -578,5 +591,10 @@ export class UpdatesService {
     } catch {
       return undefined;
     }
+  }
+
+  private workerBehindTarget(workerVersion: string | undefined, targetVersion: string, versionMismatch: boolean): boolean {
+    if (!workerVersion || !valid(workerVersion) || !valid(targetVersion)) return versionMismatch;
+    return lt(workerVersion, targetVersion);
   }
 }

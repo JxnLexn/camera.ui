@@ -1,13 +1,13 @@
 import { installPluginFn } from '@/api/routes/plugins.js';
 import { restartSystemFn, updateServerFn } from '@/api/routes/server.js';
-import { cancelUpdates, getUpdatesStatus, runUpdates } from '@/api/routes/updates.js';
+import { cancelUpdates, checkUpdates, getUpdatesStatus, runUpdates } from '@/api/routes/updates.js';
 import { updateWorker } from '@/api/routes/workers.js';
 
 import type { UpdatesActivityItem, UpdatesStatus } from '@shared/types';
 
 export type UpdateKind = 'server' | 'plugin' | 'worker';
 export type UpdateItemStatus = 'pending' | 'updating' | 'restarting' | 'success' | 'error' | 'uptodate' | 'blocked';
-export type UpdateBlockedReason = 'desktop' | 'legacy' | 'needs_server';
+export type UpdateBlockedReason = 'desktop' | 'legacy';
 
 export interface UpdateItem {
   id: string;
@@ -59,7 +59,8 @@ export const useUpdatesStore = defineStore('updates', () => {
         name: 'camera.ui',
         installedVersion: pending.server.installedVersion,
         latestVersion: pending.server.latestVersion ?? pending.server.installedVersion,
-        status: pending.server.updateAvailable ? 'pending' : 'uptodate',
+        status: pending.server.updateAvailable ? (pending.server.blockedReason ? 'blocked' : 'pending') : 'uptodate',
+        blockedReason: pending.server.updateAvailable ? pending.server.blockedReason : undefined,
       }),
     );
 
@@ -152,6 +153,7 @@ export const useUpdatesStore = defineStore('updates', () => {
     if (busy.value) return;
     isChecking.value = true;
     try {
+      await checkUpdates().catch(() => {});
       await fetchStatus();
     } finally {
       isChecking.value = false;

@@ -1,9 +1,11 @@
 import { APP_SERVER_NAME, IS_ELECTRON } from '@camera.ui/common/utils';
 import { Severity } from '@camera.ui/sdk';
+import { lt, valid } from 'semver';
 import { container } from 'tsyringe';
 
 import { SystemNotificationTypeId } from '../../../manager/types.js';
 import { ConfigService } from '../../../services/config/index.js';
+import { announceUpdateChannel } from '../../../utils/ipc.js';
 import { checkForUpdate } from '../../../utils/npm/index.js';
 import { PluginsService } from '../../services/plugins.service.js';
 
@@ -56,6 +58,7 @@ export class ServerNamespace {
       this.checkServer();
     } else {
       this.listenForAppUpdates();
+      announceUpdateChannel(this.configService.config.betaUpdates ?? false);
     }
   }
 
@@ -75,7 +78,13 @@ export class ServerNamespace {
     let available = false;
     try {
       const workerManager = container.resolve<WorkerManager>('workerManager');
-      available = workerManager.getWorkers().some((worker) => worker.online && worker.versionMismatch);
+      const hasUpdate = this.serverUpdate.updateAvailable || this.serverUpdate.betaUpdateAvailable;
+      const target = (hasUpdate ? this.serverUpdate.latestVersion : undefined) ?? ConfigService.RUNNING_VERSION;
+      available = workerManager.getWorkers().some((worker) => {
+        if (!worker.online) return false;
+        if (!worker.version || !valid(worker.version) || !valid(target)) return worker.versionMismatch === true;
+        return lt(worker.version, target);
+      });
     } catch {
       // manager not constructed (worker mode)
     }
@@ -83,6 +92,21 @@ export class ServerNamespace {
     if (available !== this.workerUpdateAvailable) {
       this.workerUpdateAvailable = available;
       this.nsp.emit('worker-updates', { updateAvailable: available });
+
+      if (available) {
+        this.proxyServer.notificationManager.notify({
+          source: { kind: 'system', id: SystemNotificationTypeId.WorkerUpdateAvailable },
+          notification: {
+            title: 'Worker Update',
+            body: 'New worker updates available',
+            severity: Severity.Info,
+            tag: SystemNotificationTypeId.WorkerUpdateAvailable,
+            deepLink: '/updates',
+          },
+        });
+      } else {
+        this.proxyServer.notificationManager.removeByTagForAll(SystemNotificationTypeId.WorkerUpdateAvailable);
+      }
     }
   }
 
@@ -133,6 +157,8 @@ export class ServerNamespace {
   }
 
   public async checkServer(interval?: boolean): Promise<void> {
+    if (IS_ELECTRON) return;
+
     const hadUpdate = this.serverUpdate.updateAvailable || this.serverUpdate.betaUpdateAvailable;
 
     await this.checkServerUpdate();
@@ -170,14 +196,16 @@ export class ServerNamespace {
     }
   }
 
-  public restartPluginInterval(timer = 20000): void {
+  // 10 min everywhere, matching the desktop app's updater cadence; these hit
+  // the npm registry, and the updates page has a manual re-check
+  public restartPluginInterval(timer = 10 * 60 * 1000): void {
     clearInterval(this.checkPluginUpdateInterval);
     this.checkPluginUpdateInterval = setInterval(() => {
       this.checkPlugins(true);
     }, timer);
   }
 
-  public restartServerInterval(timer = 20000): void {
+  public restartServerInterval(timer = 10 * 60 * 1000): void {
     clearInterval(this.checkServerUpdateInterval);
     this.checkServerUpdateInterval = setInterval(() => {
       this.checkServer(true);
@@ -190,6 +218,13 @@ export class ServerNamespace {
     process.on('message', (message: AppUpdateAvailableMessage) => {
       if (message?.type !== 'APP_UPDATE_AVAILABLE' || !message.version) {
         return;
+      }
+
+      // the update badge feeds off serverUpdate; on desktop the app update IS
+      // the server update
+      if (!this.serverUpdate.updateAvailable || this.serverUpdate.latestVersion !== message.version) {
+        this.serverUpdate = { ...this.serverUpdate, updateAvailable: true, latestVersion: message.version };
+        this.nsp.emit('server-updates', this.serverUpdate);
       }
 
       if (message.version === this.lastNotifiedAppVersion) {
@@ -205,7 +240,7 @@ export class ServerNamespace {
           body: `camera.ui ${message.version} is ready to install`,
           severity: Severity.Info,
           tag: SystemNotificationTypeId.AppUpdateAvailable,
-          deepLink: '/settings/system',
+          deepLink: '/updates',
         },
       });
     });

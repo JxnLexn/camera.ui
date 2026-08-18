@@ -30,4 +30,13 @@ export class UpdatesController {
       return reply.code(500).send({ statusCode: 500, message: error.message });
     }
   }
+
+  public async check(_req: FastifyRequest<AuthLoginRequest>, reply: FastifyReply): Promise<FastifyReply> {
+    try {
+      await updatesService().checkNow();
+      return reply.code(204).send();
+    } catch (error: any) {
+      return reply.code(500).send({ statusCode: 500, message: error.message });
+    }
+  }
 }

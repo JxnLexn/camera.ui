@@ -19,6 +19,7 @@ import { patchConfigSchema } from '../../api/schemas/config.schema.js';
 import { patchGo2RtcSchema } from '../../api/schemas/go2rtc.schema.js';
 import { CertificateGeneration } from '../../api/utils/cert.js';
 import { HOST_CERT_FILENAME, HOST_KEY_FILENAME, OLD_ROOT_CERT_FILENAME, OLD_ROOT_KEY_FILENAME, ROOT_CERT_FILENAME } from '../../api/utils/constants.js';
+import { announceUpdateChannel } from '../../utils/ipc.js';
 import { execSafePath } from '../../utils/path.js';
 import { DEFAULT_CONFIG, DEFAULT_GO2RTC_CONFIG, ELECTRON_ASAR_UNPACKED } from './constants.js';
 
@@ -243,6 +244,8 @@ export class ConfigService {
     }
 
     writeFileSync(this.CONFIG_FILE, dump(this._config, { lineWidth: -1, noRefs: true }));
+
+    announceUpdateChannel(this._config.betaUpdates ?? false);
   }
 
   private async updateGo2RtcConfigCommon(newConfig?: DeepPartial<Go2RtcConfig>, writeMethod: 'file' | 'api' = 'file'): Promise<void> {

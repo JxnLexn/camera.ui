@@ -31,7 +31,7 @@ import { SensorRegistry } from './sensors/registry.js';
 import { ConfigService } from './services/config/index.js';
 import { LoggerService } from './services/logger/index.js';
 import { markShuttingDown, resetShuttingDown } from './shutdown-state.js';
-import { reportStartError, requestServerUpdate, sendIPCMessage } from './utils/ipc.js';
+import { initAppUpdateListener, reportStartError, requestServerUpdate, sendIPCMessage } from './utils/ipc.js';
 import { WorkerAgent } from './workers/agent.js';
 import { WorkerManager } from './workers/manager.js';
 import { ensureWorkerPaired } from './workers/pairing.js';
@@ -376,6 +376,8 @@ function reapTrackedProcessesOnExit(configService: ConfigService): void {
 }
 
 async function launch(): Promise<void> {
+  initAppUpdateListener();
+
   if (isWorkerMode) {
     process.title = 'camera.ui-worker';
 

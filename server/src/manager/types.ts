@@ -31,6 +31,7 @@ export const SystemNotificationTypeId = {
   PluginIncompatible: 'system.plugin.incompatible',
   UpdateAvailable: 'system.update.available',
   AppUpdateAvailable: 'system.app.update_available',
+  WorkerUpdateAvailable: 'system.worker.update_available',
 } as const;
 
 export type SystemNotificationTypeId = (typeof SystemNotificationTypeId)[keyof typeof SystemNotificationTypeId];
@@ -41,6 +42,7 @@ export const SYSTEM_NOTIFICATION_TYPES: readonly SystemNotificationType[] = [
   { type: SystemNotificationTypeId.PluginIncompatible, label: 'Plugin incompatible with server' },
   { type: SystemNotificationTypeId.UpdateAvailable, label: 'Server update available' },
   { type: SystemNotificationTypeId.AppUpdateAvailable, label: 'App update available' },
+  { type: SystemNotificationTypeId.WorkerUpdateAvailable, label: 'Worker updates available' },
 ] as const;
 
 export interface SourcesListing {

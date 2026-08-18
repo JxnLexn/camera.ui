@@ -16,3 +16,7 @@ export async function runUpdates(): Promise<UpdatesRunState> {
 export async function cancelUpdates(): Promise<void> {
   await api.post('/updates/cancel');
 }
+
+export async function checkUpdates(): Promise<void> {
+  await api.post('/updates/check', undefined, { timeout: 60_000 });
+}

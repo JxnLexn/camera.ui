@@ -2834,7 +2834,6 @@ export default {
       all_up_to_date: 'Alles ist aktuell',
       blocked_desktop: 'Aktualisiert sich mit der Desktop-App',
       blocked_legacy: 'Einmal direkt auf seiner Maschine aktualisieren',
-      blocked_needs_server: 'Verfügbar nach dem Server-Update',
       cancelling: 'Wird abgebrochen...',
       check_now: 'Nach Updates suchen',
       checked_at: 'Zuletzt geprüft {time}',

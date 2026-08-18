@@ -2807,7 +2807,6 @@ export default {
       all_up_to_date: 'Everything is up to date',
       blocked_desktop: 'Updates with the desktop app',
       blocked_legacy: 'Update it once on its own machine',
-      blocked_needs_server: 'Available after the server update',
       cancelling: 'Cancelling...',
       check_now: 'Check for updates',
       checked_at: 'Last checked {time}',
