@@ -409,16 +409,10 @@ const displayEvents = computed(() => {
     result = result.filter((e) => e.segments.some((s) => s.detections.some((d) => d.box && boxOverlapsRegions(d.box, f.gridRegions))));
   }
 
-  // Slider value is in display % (0-1), convert back to raw cosine score using the same
-  // normalization as RecordingCard: displayPct = (raw - CLIP_MIN) / (CLIP_MAX - CLIP_MIN)
-  // So: raw = displayPct * (CLIP_MAX - CLIP_MIN) + CLIP_MIN
   if (isSemanticActive.value) {
-    const CLIP_MIN = 0.15;
-    const CLIP_MAX = 0.38;
-    const minRawScore = f.minSemanticScore * (CLIP_MAX - CLIP_MIN) + CLIP_MIN;
     result = result.filter((e) => {
       const score = semanticEventIds.value.get(e.id);
-      return score != null && score >= minRawScore;
+      return score != null && score >= f.minSemanticScore;
     });
     result.sort((a, b) => (semanticEventIds.value.get(b.id) ?? 0) - (semanticEventIds.value.get(a.id) ?? 0));
   }

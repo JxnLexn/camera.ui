@@ -173,8 +173,6 @@ const { t } = useI18n();
 const eventStore = useEventStore('@camera.ui/camera-ui-nvr');
 const { plugin: nvrPluginRef } = usePlugin('@camera.ui/camera-ui-nvr');
 
-const CLIP_MIN = 0.15;
-const CLIP_MAX = 0.38;
 const ICON_PX = 24;
 const TILE_PX = 30;
 const MORE_PX = 22;
@@ -223,7 +221,7 @@ const memberEpisodeId = computed(() => {
 
 const semanticDisplay = computed(() => {
   if (props.semanticScore == null) return undefined;
-  const pct = Math.max(0, Math.min(1, (props.semanticScore - CLIP_MIN) / (CLIP_MAX - CLIP_MIN)));
+  const pct = Math.max(0, Math.min(1, props.semanticScore));
   return {
     pct,
     label: `${(pct * 100).toFixed(0)}%`,
