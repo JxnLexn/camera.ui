@@ -4,9 +4,79 @@ All notable changes to this project will be documented in this file.
 
 ## [2.1.10]
 
+### Added
+
+- **Playback picks the best available quality by itself.** The new playback source setting defaults to Auto: a hole in the high recording plays the next quality that has footage, with a badge, and switches back once high resumes. Needs the camera-ui-nvr update.
+
+- **Outage bands match the footage.** Bands start where the recording actually ended and close where it resumed; reconnect blips under 15 seconds paint no band.
+
+- **The timeline tells outages apart.** If only the high stream stops recording, a "recording without high" band shows instead of offline; offline means the camera records nothing.
+
+- **Timeline data arrives with the first frame.** Opening playback from a push no longer shows video next to an empty timeline.
+
+- **Player settings live in one place.** Streaming mode, streaming source and activity mode moved into camera settings → interface; picture-in-picture sits in the control bar.
+
+- **Detection looks where the movement is.** Detection zooms into the moving regions at full resolution instead of squeezing the whole picture into the model, so a distant car or a cat at night arrives big enough to be recognized. The Metrics view counts the zooms.
+
+- **Parked objects show on the live view.** Settled objects appear as dimmed boxes with a timer, without triggering events or notifications.
+
+- **Confidence per object type.** Person, vehicle and animal each get their own confidence in the camera settings; automations can set each one.
+
+- **Smart-camera events get framed pictures.** Cameras that report detections without coordinates (Reolink AI, ONVIF) get the moving region framed instead of the whole scene.
+
+- **Audio detection needs no plugin settings anymore.** YAMNet listens for the standard sound list and follows the camera's audio confidence; its own settings are gone.
+
+- **The search index rebuilds after a model change.** A reindex button in Recordings re-embeds old events in the background; search keeps working, current events are skipped. Needs the camera-ui-nvr update.
+
+- **Search percentages tell the truth for every CLIP model.** Match scores are scaled per model, so a strong match reads high whatever model is selected and the score filter no longer hides good matches. Needs the camera-ui-nvr update.
+
+- **Every update in one place.** The new Updates page lists server, plugins and workers with versions and release notes; "Update all" runs them in the right order.
+
+- **The app says how it is connected.** A short notice shows whether the connection went over the local network, the internet or the cloud, and again whenever the path changes.
+
+- **The detection table can be copied.** A copy button puts both views for every camera on the clipboard as text. The benchmark dialog starts empty and got a select-all button.
+
+- **Metrics tabs switch with a swipe.** Overview, Cameras and Storage swipe left and right on the phone.
+
+- **The console follows new entries.** New log lines scroll into view as they arrive, unless you scrolled up.
+
 ### Fixed
 
-- **Metrics show what runs on a worker.** A camera or plugin handed to a worker disappeared from the metrics tables, detection numbers included. Both are listed again, with the worker's name next to them and their load taken from that machine. The benchmark also names the machine a camera ran on and lists its hardware, instead of showing the server's for everything.
+- **Timeline scrubbing is smooth on the phone.** Dragging on iPhone moved in visible little steps; it now follows the finger.
+
+- **Episodes respect the recordings filters.** Type, search, audio, attribute and sensor filters apply to episode cards too, and episodes follow a custom date range.
+
+- **Detection boxes show up in the live view again.** Since 2.1.9 the overlay stayed empty on cameras without object zones, or drew from the wrong one of two detection plugins.
+
+- **Event pictures frame the person, not a spot.** A misread face could zoom onto a shoulder; the picture now frames the whole person. A recognized face also removes its earlier "Unknown" crop.
+
+- **The timeline never jumps on its own anymore.** Gaps and damaged spots used to snap the playhead back into a loop; it now only moves forward.
+
+- **Playback starts where you let go.** No more replaying the seconds before the chosen position.
+
+- **Event previews follow the action.** Hovering a card steps through the clip zoomed to the subject, with a clock for the shown frame; cards without playable footage say "No preview".
+
+- **Fine scrubbing steps forward cleanly.** Slow dragging no longer flickers between neighboring frames.
+
+- **The export selection shows its real duration.** Near the live edge a 10 minute range could read as an hour; the duration sits in its own label now.
+
+- **Events refresh reliably after a reconnect.** Connection blips and view switches during an outage backfill what happened, episodes included.
+
+- **Smart-camera detection gets real event pictures.** With the camera's own detection and a plugin assisting, events carry a proper subject picture in cards, pushes and AI descriptions.
+
+- **PTZ autotracking can be switched on again.** Turning it on failed with a validation error.
+
+- **A worker no longer claims to be connected when it is not.** Startup and later link failures show in the log, with the reason.
+
+- **Metrics show what runs on a worker.** Cameras and plugins on a worker are listed again with the worker's name and its load; the benchmark names the machine and its hardware.
+
+- **Back on WiFi means back on the local network.** The app returns to the local path within seconds instead of staying on the internet path until the next reconnect.
+
+- **The automation run history is readable on the phone again.** Entries were squashed to a few pixels.
+
+- **The notification list stays open.** Closing a notification's detail view no longer closes the list with it.
+
+- **The same camera event no longer opens twice.** Tapping it again brings the open window to the front.
 
 ## [2.1.9]
 
