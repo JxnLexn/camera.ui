@@ -16,7 +16,7 @@ import type { ServerNamespace } from '../websocket/nsp/server.js';
 
 export type UpdatesItemKind = 'server' | 'plugin' | 'worker';
 export type UpdatesItemStatus = 'pending' | 'updating' | 'restarting' | 'success' | 'error';
-export type UpdatesBlockedReason = 'desktop' | 'legacy';
+export type UpdatesBlockedReason = 'desktop' | 'legacy' | 'needs_server';
 
 export interface UpdatesActivityItem {
   id: string;
@@ -203,7 +203,18 @@ export class UpdatesService {
     for (const worker of this.workerManager()?.getWorkers() ?? []) {
       if (!worker.online) continue;
       if (!worker.versionMismatch) {
-        pending.workers.push({ agentId: worker.agentId, name: worker.name, installedVersion: worker.version, updateAvailable: false, updatable: true });
+        if (pending.server.updateAvailable) {
+          pending.workers.push({
+            agentId: worker.agentId,
+            name: worker.name,
+            installedVersion: worker.version,
+            updateAvailable: true,
+            updatable: false,
+            blockedReason: 'needs_server',
+          });
+        } else {
+          pending.workers.push({ agentId: worker.agentId, name: worker.name, installedVersion: worker.version, updateAvailable: false, updatable: true });
+        }
       } else if (worker.update?.updatable) {
         pending.workers.push({ agentId: worker.agentId, name: worker.name, installedVersion: worker.version, updateAvailable: true, updatable: true });
       } else {

@@ -116,7 +116,7 @@ export class ServerNamespace {
             body: 'New plugin updates available',
             severity: Severity.Info,
             tag: SystemNotificationTypeId.PluginUpdateAvailable,
-            deepLink: '/plugins',
+            deepLink: '/updates',
           },
         });
       }
@@ -153,7 +153,7 @@ export class ServerNamespace {
             body: this.serverUpdate.latestVersion ? `camera.ui ${this.serverUpdate.latestVersion} is available` : 'New camera.ui update available',
             severity: Severity.Info,
             tag: SystemNotificationTypeId.UpdateAvailable,
-            deepLink: '/settings/system',
+            deepLink: '/updates',
           },
         });
       }
