@@ -32,6 +32,12 @@ All notable changes to this project will be documented in this file.
 
 - **Every update in one place.** The new Updates page lists server, plugins and workers with versions and release notes; "Update all" runs them in the right order.
 
+- **The desktop app updates from anywhere.** A desktop-app server or worker shows up on the Updates page like any other install: one click downloads the app update, installs it and relaunches. Needs the desktop app update; older apps keep updating locally.
+
+- **The beta channel reaches the desktop app.** The toggle in Settings → System switches the app's update feed too, and a beta server pulls its desktop workers onto the matching beta.
+
+- **Settings → System manages, the Updates page updates.** The update buttons moved out; version display, restart, installing a specific version and the beta channel stay. Update notifications and the red dot lead to the Updates page on every client.
+
 - **The app says how it is connected.** A short notice shows whether the connection went over the local network, the internet or the cloud, and again whenever the path changes.
 
 - **The detection table can be copied.** A copy button puts both views for every camera on the clipboard as text. The benchmark dialog starts empty and got a select-all button.
