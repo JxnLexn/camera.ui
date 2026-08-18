@@ -89,7 +89,7 @@ const sections = computed(() =>
   NAV_GROUPS.map((key) => ({ key, items: toItems(navGroups.value[key].map((entry) => entry.route)) })).filter((section) => section.items.length > 0),
 );
 
-const settingsItems = computed<MenuItemDef[]>(() => toItems(routes.filter((r) => r.name === 'Settings' && hasPermission(r))));
+const settingsItems = computed<MenuItemDef[]>(() => toItems(routes.filter((r) => (r.name === 'Updates' || r.name === 'Settings') && hasPermission(r))));
 
 function toItems(routesList: RouteRecordRaw[]): MenuItemDef[] {
   return routesList

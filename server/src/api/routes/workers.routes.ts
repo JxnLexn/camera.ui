@@ -10,6 +10,7 @@ import {
   renameWorkerSchema,
   unassignCameraSchema,
   unassignPluginSchema,
+  updateWorkerSchema,
 } from '../schemas/workers.schema.js';
 
 import type { FastifyInstance, FastifyPluginAsync } from 'fastify';
@@ -166,8 +167,9 @@ export const WorkersRoute: FastifyPluginAsync = async (app: FastifyInstance): Pr
     handler: workersController.updateWorker.bind(workersController),
     schema: {
       tags: ['Workers'],
-      summary: 'Update a worker agent to the master version',
+      summary: 'Update a worker agent, to the master version or the one in the body',
       params: agentParamsSchema,
+      body: updateWorkerSchema,
     },
   });
 };

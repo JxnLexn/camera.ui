@@ -1,6 +1,7 @@
 import { fetchViableNetworkAddresses, isLoopbackAddress } from '@camera.ui/common/network';
 import { container } from 'tsyringe';
 
+import { updatesService } from '../services/updates.service.js';
 import { WorkersService } from '../services/workers.service.js';
 
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
@@ -241,10 +242,16 @@ export class WorkersController {
 
   public async updateWorker(req: FastifyRequest<AuthLoginRequest & WorkerUpdateRequest>, reply: FastifyReply): Promise<FastifyReply> {
     try {
-      await this.workerManager.updateWorker(req.params.agentId);
+      updatesService().assertManualAllowed('worker');
+      await this.workerManager.updateWorker(req.params.agentId, req.body?.version);
+
+      const worker = this.workerManager.getWorkers().find((entry) => entry.agentId === req.params.agentId);
+      updatesService().notifyWorkerUpdate(req.params.agentId, worker?.name ?? req.params.agentId, req.body?.version);
+
       return reply.code(204).send();
     } catch (error: any) {
-      return reply.code(500).send({ statusCode: 500, message: error.message });
+      const statusCode = error.statusCode ?? 500;
+      return reply.code(statusCode).send({ statusCode, message: error.message });
     }
   }
 }

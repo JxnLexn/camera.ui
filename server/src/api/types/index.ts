@@ -721,6 +721,8 @@ export interface INpmPluginState {
   betaUpdateAvailable: boolean;
   lastUpdated?: string;
   latestVersion?: string;
+  pluginName?: string;
+  installedVersion?: string;
 }
 
 export interface INpmPerson {
@@ -1019,6 +1021,7 @@ export interface WorkerRestartRequest {
 
 export interface WorkerUpdateRequest {
   Params: { agentId: string };
+  Body?: { version?: string };
 }
 
 export interface WorkerRenameRequest {

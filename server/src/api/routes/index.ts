@@ -15,11 +15,12 @@ import { NvrRoute } from './nvr.routes.js';
 import { OAuthCallbackRoute } from './oauthCallback.routes.js';
 import { PluginsRoute } from './plugins.routes.js';
 import { RemoteRoute } from './remote.routes.js';
+import { SensorsRoute } from './sensors.routes.js';
 import { ServerRoute } from './server.routes.js';
 import { SharesRoute } from './shares.routes.js';
 import { TunnelRoute } from './tunnel.routes.js';
+import { UpdatesRoute } from './updates.routes.js';
 import { UsersRoute } from './users.routes.js';
-import { SensorsRoute } from './sensors.routes.js';
 import { WorkersRoute } from './workers.routes.js';
 
 import { normalizeBase, normalizeEmbed, renderIndexHtml } from '../render-index.js';
@@ -51,6 +52,7 @@ export class FastifyRoutes {
     await this.app.register(MqttRoute, { prefix: '/api/mqtt' });
     await this.app.register(UsersRoute, { prefix: '/api/users' });
     await this.app.register(WorkersRoute, { prefix: '/api/workers' });
+    await this.app.register(UpdatesRoute, { prefix: '/api/updates' });
     await this.app.register(InstancesRoute, { prefix: '/api/instances' });
     await this.app.register(SharesRoute, { prefix: '/api/shares' });
     await this.app.register(AutomationsRoute, { prefix: '/api/automations' });

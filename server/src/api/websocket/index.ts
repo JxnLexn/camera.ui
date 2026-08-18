@@ -4,6 +4,7 @@ import { container } from 'tsyringe';
 
 import { authorize, UnauthorizedError } from '../middlewares/socketAuth.middleware.js';
 import { AuthService } from '../services/auth.service.js';
+import { updatesService } from '../services/updates.service.js';
 import { UsersService } from '../services/users.service.js';
 import { API_TOKEN_PREFIX } from '../types/index.js';
 import { CamerasNamespace } from './nsp/cameras.js';
@@ -68,6 +69,8 @@ export class SocketService {
     this.namespaces.set('/plugins', new PluginsNamespace(this.io));
     this.namespaces.set('/cameras', new CamerasNamespace(this.io));
     this.namespaces.set('/workers', new WorkersNamespace(this.io));
+
+    updatesService().init();
 
     for (const [nsp, contructor] of this.namespaces) {
       contructor.nsp

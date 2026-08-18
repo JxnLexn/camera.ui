@@ -533,7 +533,7 @@ async function handleUpdateWorker(agentId: string) {
   seenUpdateErrors.delete(agentId);
   workersUpdating.value.push(agentId);
   try {
-    await updateWorkerMutation(agentId);
+    await updateWorkerMutation({ agentId });
   } finally {
     workersUpdating.value = workersUpdating.value.filter((id) => id !== agentId);
   }

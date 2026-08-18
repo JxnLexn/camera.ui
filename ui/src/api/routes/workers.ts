@@ -32,8 +32,8 @@ export async function restartWorker(agentId: string): Promise<void> {
   await api.post(`/workers/${agentId}/restart`);
 }
 
-export async function updateWorker(agentId: string): Promise<void> {
-  await api.post(`/workers/${agentId}/update`);
+export async function updateWorker({ agentId, version }: { agentId: string; version?: string }): Promise<void> {
+  await api.post(`/workers/${agentId}/update`, version ? { version } : {});
 }
 
 export async function renameWorker({ agentId, name }: { agentId: string; name: string }): Promise<void> {

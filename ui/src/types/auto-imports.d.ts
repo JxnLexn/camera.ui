@@ -134,6 +134,7 @@ declare global {
   const resetPluginsSocket: typeof import('../composables/sockets/usePluginsSocket').resetPluginsSocket
   const resetServerSocket: typeof import('../composables/sockets/useServerSocket').resetServerSocket
   const resetStreamStatus: typeof import('../composables/sockets/useStreamStatus').resetStreamStatus
+  const resetUpdatesSocket: typeof import('../composables/sockets/useUpdatesSocket').resetUpdatesSocket
   const resetWorkersSocket: typeof import('../composables/sockets/useWorkersSocket').resetWorkersSocket
   const resolveComponent: typeof import('vue').resolveComponent
   const restarting: typeof import('../composables/useServerRestart').restarting
@@ -402,6 +403,8 @@ declare global {
   const useTransition: typeof import('@vueuse/core').useTransition
   const useUiStore: typeof import('../stores/ui').useUiStore
   const useUpdateChannel: typeof import('../composables/useUpdateChannel').useUpdateChannel
+  const useUpdatesSocket: typeof import('../composables/sockets/useUpdatesSocket').useUpdatesSocket
+  const useUpdatesStore: typeof import('../stores/updates').useUpdatesStore
   const useUrlSearchParams: typeof import('@vueuse/core').useUrlSearchParams
   const useUserMedia: typeof import('@vueuse/core').useUserMedia
   const useVModel: typeof import('@vueuse/core').useVModel
@@ -509,6 +512,9 @@ declare global {
   export type { StreamStatus, CameraStreamStatus } from '../composables/sockets/useStreamStatus'
   import('../composables/sockets/useStreamStatus')
   // @ts-ignore
+  export type { PublicUpdatesStatus } from '../composables/sockets/useUpdatesSocket'
+  import('../composables/sockets/useUpdatesSocket')
+  // @ts-ignore
   export type { WorkersSocketState } from '../composables/sockets/useWorkersSocket'
   import('../composables/sockets/useWorkersSocket')
   // @ts-ignore
@@ -520,6 +526,9 @@ declare global {
   // @ts-ignore
   export type { PersistedUser } from '../stores/auth'
   import('../stores/auth')
+  // @ts-ignore
+  export type { UpdateKind, UpdateItemStatus, UpdateBlockedReason, UpdateItem } from '../stores/updates'
+  import('../stores/updates')
 }
 
 // for vue template auto import
@@ -653,6 +662,7 @@ declare module 'vue' {
     readonly resetPluginsSocket: UnwrapRef<typeof import('../composables/sockets/usePluginsSocket')['resetPluginsSocket']>
     readonly resetServerSocket: UnwrapRef<typeof import('../composables/sockets/useServerSocket')['resetServerSocket']>
     readonly resetStreamStatus: UnwrapRef<typeof import('../composables/sockets/useStreamStatus')['resetStreamStatus']>
+    readonly resetUpdatesSocket: UnwrapRef<typeof import('../composables/sockets/useUpdatesSocket')['resetUpdatesSocket']>
     readonly resetWorkersSocket: UnwrapRef<typeof import('../composables/sockets/useWorkersSocket')['resetWorkersSocket']>
     readonly resolveComponent: UnwrapRef<typeof import('vue')['resolveComponent']>
     readonly restarting: UnwrapRef<typeof import('../composables/useServerRestart')['restarting']>
@@ -921,6 +931,8 @@ declare module 'vue' {
     readonly useTransition: UnwrapRef<typeof import('@vueuse/core')['useTransition']>
     readonly useUiStore: UnwrapRef<typeof import('../stores/ui')['useUiStore']>
     readonly useUpdateChannel: UnwrapRef<typeof import('../composables/useUpdateChannel')['useUpdateChannel']>
+    readonly useUpdatesSocket: UnwrapRef<typeof import('../composables/sockets/useUpdatesSocket')['useUpdatesSocket']>
+    readonly useUpdatesStore: UnwrapRef<typeof import('../stores/updates')['useUpdatesStore']>
     readonly useUrlSearchParams: UnwrapRef<typeof import('@vueuse/core')['useUrlSearchParams']>
     readonly useUserMedia: UnwrapRef<typeof import('@vueuse/core')['useUserMedia']>
     readonly useVModel: UnwrapRef<typeof import('@vueuse/core')['useVModel']>

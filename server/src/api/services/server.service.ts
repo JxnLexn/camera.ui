@@ -7,6 +7,7 @@ import { container } from 'tsyringe';
 
 import { ConfigService } from '../../services/config/index.js';
 import { getTerminalCols, InstallLogger } from '../utils/install-logger.js';
+import { updatesService } from './updates.service.js';
 
 import type { Server } from 'socket.io';
 import type { CameraUi } from '../../main.js';
@@ -80,7 +81,7 @@ export class ServerService {
     return info ?? this.info();
   }
 
-  public async install(version = 'latest'): Promise<void> {
+  public async install(version = 'latest', opts: { internal?: boolean } = {}): Promise<void> {
     const log = new InstallLogger(
       (message) => this.io.of('/logs').emit('stdout/server', message),
       () => getTerminalCols('server'),
@@ -101,6 +102,9 @@ export class ServerService {
       log.blank();
     }
 
+    const source = opts.internal ? ('run' as const) : ('manual' as const);
+    updatesService().notifyServerInstall('start', { version, source });
+
     try {
       log.block('Updating server');
 
@@ -111,8 +115,10 @@ export class ServerService {
       log.flush();
 
       log.success(`${APP_SERVER_NAME}@${version} updated — restart to apply`);
+      updatesService().notifyServerInstall('success', { version, source });
     } catch (error: any) {
       log.error(`Update of ${APP_SERVER_NAME}@${version} failed: ${error.message}`);
+      updatesService().notifyServerInstall('error', { version, error: error.message, source });
       throw error;
     } finally {
       this.installInProgress = false;

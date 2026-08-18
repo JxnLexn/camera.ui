@@ -232,7 +232,7 @@ export class ServerNamespace {
           this.configService.config.plugins.betaVersions ?? false,
         );
         if (state.updateAvailable || state.betaUpdateAvailable) {
-          pluginStates.push(state);
+          pluginStates.push({ ...state, pluginName: plugin.info.pluginName, installedVersion: plugin.info.installedVersion });
         }
       } catch {
         // skip this plugin

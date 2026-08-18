@@ -89,9 +89,6 @@
               <Transition name="navbar-group">
                 <div v-if="!group.collapsible || groupExpanded[group.key]" class="flex flex-col space-y-1 overflow-hidden">
                   <div v-for="item in group.items" :key="item.name" class="w-full h-[50px] relative">
-                    <Badge v-if="pluginUpdateAvailable && item.name === 'Plugins'" class="absolute min-w-[8px] w-[8px] h-[8px] left-[31px] top-[10px] z-1"></Badge>
-                    <Badge v-if="serverUpdateAvailable && item.name === 'system'" class="absolute min-w-[8px] w-[8px] h-[8px] left-[31px] top-[10px] z-1"></Badge>
-                    <Badge v-if="workerUpdateAvailable && item.name === 'Workers'" class="absolute min-w-[8px] w-[8px] h-[8px] left-[31px] top-[10px] z-1"></Badge>
                     <CuiNavItem
                       :icon="item.icon"
                       :active-icon="item.activeIcon"
@@ -158,9 +155,6 @@
               <Transition name="navbar-group">
                 <div v-if="!group.collapsible || groupExpanded[group.key]" class="flex flex-col space-y-1 overflow-hidden">
                   <div v-for="item in group.items" :key="item.name" class="w-full h-[50px] relative">
-                    <Badge v-if="pluginUpdateAvailable && item.name === 'Plugins'" class="absolute min-w-[8px] w-[8px] h-[8px] left-[31px] top-[10px] z-1"></Badge>
-                    <Badge v-if="serverUpdateAvailable && item.name === 'system'" class="absolute min-w-[8px] w-[8px] h-[8px] left-[31px] top-[10px] z-1"></Badge>
-                    <Badge v-if="workerUpdateAvailable && item.name === 'Workers'" class="absolute min-w-[8px] w-[8px] h-[8px] left-[31px] top-[10px] z-1"></Badge>
                     <CuiNavItem
                       :icon="item.icon"
                       :active-icon="item.activeIcon"
@@ -186,7 +180,7 @@
             </template>
 
             <div v-for="route in bottomPrimaryRoutes" v-show="!(settingsInNav && route.path === '/settings')" :key="route.name" class="w-full h-[50px] relative">
-              <Badge v-if="serverUpdateAvailable && route.name === 'Settings'" class="absolute min-w-[8px] w-[8px] h-[8px] left-[31px] top-[10px] z-1"></Badge>
+              <Badge v-if="anyUpdateAvailable && route.name === 'Updates'" class="absolute min-w-[8px] w-[8px] h-[8px] left-[31px] top-[10px] z-1"></Badge>
               <CuiNavItem
                 :icon="route.meta!.navbar!.icon.default"
                 :active-icon="route.meta!.navbar!.icon.active"
@@ -330,9 +324,12 @@ const state = ref<NavbarState>('closed');
 const serverUpdateAvailable = ref(false);
 const pluginUpdateAvailable = ref(false);
 const workerUpdateAvailable = ref(false);
+
 const groupExpanded = ref<Record<NavLayoutGroup, boolean>>({ main: true, manage: true, system: false, settings: false });
 const navEditMode = ref(false);
 const editLists = ref<Record<NavLayoutGroup, string[]>>({ main: [], manage: [], system: [], settings: [] });
+
+const anyUpdateAvailable = computed(() => serverUpdateAvailable.value || pluginUpdateAvailable.value || workerUpdateAvailable.value);
 
 const isElectronBuild = computed(() => apiInfo.value?.electron ?? false);
 

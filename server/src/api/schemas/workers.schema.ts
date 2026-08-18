@@ -13,6 +13,12 @@ export const agentParamsSchema = zod.object({
   agentId: zod.string().min(1, 'Agent ID is required'),
 });
 
+export const updateWorkerSchema = zod
+  .object({
+    version: zod.string().min(1).optional(),
+  })
+  .optional();
+
 export const pairWorkerSchema = zod.object({
   code: zod.string().min(1, 'Pairing code is required'),
   agentId: zod.string().min(1, 'Agent ID is required'),

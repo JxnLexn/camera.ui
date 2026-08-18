@@ -13,6 +13,7 @@ import { extractPackage, installDependencies } from '../../utils/npm/index.js';
 import { Database } from '../database/index.js';
 import { elidePath, getTerminalCols, InstallLogger } from '../utils/install-logger.js';
 import { CamerasService } from './cameras.service.js';
+import { updatesService } from './updates.service.js';
 
 import type { Server } from 'socket.io';
 import type { PluginWorker } from '../../plugins/worker.js';
@@ -202,7 +203,17 @@ export class PluginsService {
     }
   }
 
-  public async manage(pluginName: string, action: 'install' | 'update' | 'uninstall', version?: string, pluginId?: string): Promise<string> {
+  public async manage(
+    pluginName: string,
+    action: 'install' | 'update' | 'uninstall',
+    version?: string,
+    pluginId?: string,
+    opts: { internal?: boolean; restart?: boolean } = {},
+  ): Promise<string> {
+    if (!opts.internal) {
+      updatesService().assertManualAllowed('plugin');
+    }
+
     const targetDir = join(this.configService.PLUGINS_INSTALL_PATH, pluginName);
     const log = this.createLogger(pluginName);
 
@@ -219,6 +230,11 @@ export class PluginsService {
     manageQueue.push(entry);
     this.emitManageQueue();
 
+    const source = opts.internal ? 'run' : 'manual';
+    if (action !== 'uninstall') {
+      updatesService().notifyPluginManage(pluginName, 'start', { version, source });
+    }
+
     try {
       const mustWait = manageRunning >= MANAGE_CONCURRENCY;
       if (mustWait) log.step('Waiting for other plugin operations');
@@ -229,7 +245,16 @@ export class PluginsService {
       this.emitManageQueue();
 
       try {
-        return await this.runManage(log, entry, targetDir, pluginId);
+        const result = await this.runManage(log, entry, targetDir, pluginId, opts);
+        if (action !== 'uninstall') {
+          updatesService().notifyPluginManage(pluginName, 'success', { version, source });
+        }
+        return result;
+      } catch (error: any) {
+        if (action !== 'uninstall') {
+          updatesService().notifyPluginManage(pluginName, 'error', { version, error: error?.message ?? String(error), source });
+        }
+        throw error;
       } finally {
         releaseManageSlot();
       }
@@ -244,7 +269,7 @@ export class PluginsService {
     return [...manageQueue];
   }
 
-  private async runManage(log: InstallLogger, entry: PluginsProgress, targetDir: string, pluginId?: string): Promise<string> {
+  private async runManage(log: InstallLogger, entry: PluginsProgress, targetDir: string, pluginId?: string, opts: { restart?: boolean } = {}): Promise<string> {
     const { pluginName, action, version } = entry;
 
     const worker = this.getPluginProcessByName(pluginName);
@@ -278,7 +303,8 @@ export class PluginsService {
           break;
       }
     } finally {
-      if (wasRunning && action !== 'uninstall' && (await pathExists(targetDir))) {
+      // restart:false leaves the plugin stopped, a following server restart starts it
+      if (wasRunning && action !== 'uninstall' && opts.restart !== false && (await pathExists(targetDir))) {
         await this.getPluginByName(pluginName)
           ?.reparsePackageJson()
           .catch(() => {});

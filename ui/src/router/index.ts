@@ -18,6 +18,8 @@ import AutomationsIconActive from '~icons/material-symbols/automation';
 import AutomationsIcon from '~icons/material-symbols/automation-outline';
 import SettingsRemoteIconActive from '~icons/material-symbols/cloud';
 import SettingsRemoteIcon from '~icons/material-symbols/cloud-outline';
+import UpdatesIconActive from '~icons/material-symbols/deployed-code-update';
+import UpdatesIcon from '~icons/material-symbols/deployed-code-update-outline';
 import SensorsIconActive from '~icons/material-symbols/home-iot-device';
 import SensorsIcon from '~icons/material-symbols/home-iot-device-outline';
 import HomeIcon from '~icons/material-symbols/home-outline-rounded';
@@ -67,6 +69,7 @@ const Faces = () => import('@/views/Faces.vue');
 const Plugins = () => import('@/views/Plugins.vue');
 const Plugin = () => import('@/views/Plugin.vue');
 const Metrics = () => import('@/views/Metrics.vue');
+const Updates = () => import('@/views/Updates.vue');
 const Config = () => import('@/views/Config.vue');
 const Logs = () => import('@/views/Logs.vue');
 const Terminal = () => import('@/views/Terminal.vue');
@@ -514,6 +517,41 @@ export const routes: RouteRecordRaw[] = [
   {
     path: '/admin',
     redirect: '/metrics',
+  },
+  {
+    name: 'Updates',
+    path: '/updates',
+    component: Updates,
+    meta: {
+      name: 'updates',
+      auth: {
+        requiresAuth: true,
+        role: 'admin',
+      },
+      ui: {
+        containerSettings: {
+          showTitle: true,
+          padding: true,
+        },
+        showNavbar: true,
+        showTopbar: true,
+        showBottombar: true,
+        showRouterLoading: true,
+      },
+      navbar: {
+        position: 'bottom',
+        icon: {
+          default: UpdatesIcon,
+          active: UpdatesIconActive,
+        },
+      },
+      menu: {
+        icon: {
+          default: UpdatesIcon,
+          active: UpdatesIconActive,
+        },
+      },
+    },
   },
   {
     name: 'Config',

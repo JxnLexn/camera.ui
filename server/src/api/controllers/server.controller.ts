@@ -8,6 +8,7 @@ import { container } from 'tsyringe';
 import { ConfigService } from '../../services/config/index.js';
 import { getVersionsAndDistTags } from '../../utils/npm/index.js';
 import { ServerService } from '../services/server.service.js';
+import { updatesService } from '../services/updates.service.js';
 
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { Go2RtcApi } from '../../go2rtc/api/index.js';
@@ -51,6 +52,8 @@ export class ServerController {
 
   public async updateServer(req: FastifyRequest<AuthLoginRequest & ServerUpdateRequest>, reply: FastifyReply): Promise<FastifyReply> {
     try {
+      updatesService().assertManualAllowed('server');
+
       this.logger.log(`Updating server: ${APP_SERVER_NAME}@${req.body.version}`);
 
       await this.service.install(req.body.version);
@@ -62,8 +65,9 @@ export class ServerController {
 
       return reply.code(204).send();
     } catch (error: any) {
-      return reply.code(500).send({
-        statusCode: 500,
+      const statusCode = error.statusCode ?? 500;
+      return reply.code(statusCode).send({
+        statusCode,
         message: error.message,
       });
     }
