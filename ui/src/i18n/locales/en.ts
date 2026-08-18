@@ -2303,6 +2303,19 @@ export default {
     },
     recordings: {
       title: 'Recordings',
+      reindex: {
+        title: 'Reindex search',
+        button: 'Reindex search',
+        start: 'Start',
+        stop: 'Stop',
+        intro: 'Rebuilds the search index for events whose embeddings came from an older detection model. Events that are already current are skipped.',
+        up_to_date: 'The search index is up to date. Nothing had to be reindexed.',
+        running_intro: 'Events are being reindexed. Search keeps working while this runs.',
+        checking: 'Checking the search index…',
+        progress: 'Reindexing {done}/{total}',
+        skipped: '{count} skipped',
+        result: '{done} of {total} events reindexed, {skipped} skipped.',
+      },
       export: {
         title: 'Export recordings',
         cameras: 'Cameras',

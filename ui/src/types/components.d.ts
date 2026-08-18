@@ -40,6 +40,7 @@ declare module 'vue' {
     ChartWrapper: typeof import('./../components/CuiChartTable/ChartWrapper.vue')['default']
     Checkbox: typeof import('primevue/checkbox')['default']
     Chip: typeof import('primevue/chip')['default']
+    ClipReindex: typeof import('./../components/CuiDialog/templates/ClipReindex/ClipReindex.vue')['default']
     ColorPicker: typeof import('primevue/colorpicker')['default']
     Column: typeof import('primevue/column')['default']
     ConditionNode: typeof import('./../components/CuiAutomation/nodes/ConditionNode.vue')['default']

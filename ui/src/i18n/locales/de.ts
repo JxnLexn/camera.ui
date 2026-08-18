@@ -2323,6 +2323,19 @@ export default {
     },
     recordings: {
       title: 'Aufnahmen',
+      reindex: {
+        title: 'Suche neu indexieren',
+        button: 'Suche neu indexieren',
+        start: 'Starten',
+        stop: 'Anhalten',
+        intro: 'Baut den Suchindex für Ereignisse neu auf, deren Embeddings von einem älteren Erkennungsmodell stammen. Bereits aktuelle Ereignisse werden übersprungen.',
+        up_to_date: 'Der Suchindex ist aktuell. Es musste nichts neu indexiert werden.',
+        running_intro: 'Die Ereignisse werden neu indexiert. Die Suche funktioniert währenddessen weiter.',
+        checking: 'Prüfe den Suchindex…',
+        progress: '{done}/{total} indexiert',
+        skipped: '{count} übersprungen',
+        result: '{done} von {total} Ereignissen neu indexiert, {skipped} übersprungen.',
+      },
       export: {
         title: 'Aufnahmen exportieren',
         cameras: 'Kameras',

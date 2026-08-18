@@ -39,7 +39,7 @@
       <div v-if="sidebarOpen && sidebarIsOverlay" class="fixed top-0 left-0 right-0 bottom-0 w-full h-full bg-black/50 z-1" @click="closeSidebar" />
     </Teleport>
 
-    <main class="relative w-full h-full" :style="{ paddingLeft: mainPaddingLeft, transition: layoutReady ? 'padding-left 200ms' : undefined }">
+    <main ref="reindexAnchorRef" class="relative w-full h-full" :style="{ paddingLeft: mainPaddingLeft, transition: layoutReady ? 'padding-left 200ms' : undefined }">
       <div class="w-full h-full relative">
         <div v-if="!smBreakpoint" class="w-full flex flex-row h-[calc(40px+1rem)] py-2 items-center fixed z-10">
           <div class="ml-2" />
@@ -132,6 +132,37 @@
       </div>
     </main>
 
+    <div
+      v-if="isAdmin && availableCameras.length"
+      class="fixed z-10"
+      :class="(gridRef?.scrollY ?? 0) > 10 && !reindexStatus?.running ? 'scale-0 opacity-0' : 'scale-100 opacity-100'"
+      :style="{
+        left: `calc(${reindexAnchorLeft}px + ${mainPaddingLeft} + 0.75rem + env(safe-area-inset-left, 0px))`,
+        bottom: `calc(${bottombarHeight}px + 1.25rem + env(safe-area-inset-bottom, 0px))`,
+        transition: layoutReady ? 'left 200ms, transform 200ms ease-in-out, opacity 200ms ease-in-out' : undefined,
+      }"
+    >
+      <Button
+        severity="secondary"
+        rounded
+        class="shadow-lg"
+        :disabled="reindexStatus?.running"
+        :label="
+          reindexChecking
+            ? $t('views.recordings.reindex.checking')
+            : reindexStatus?.running
+              ? $t('views.recordings.reindex.progress', { done: reindexStatus.done, total: reindexStatus.total })
+              : $t('views.recordings.reindex.button')
+        "
+        @click="openReindexDialog"
+      >
+        <template #icon>
+          <SpinnerIcon v-if="reindexStatus?.running" />
+          <ReindexIcon v-else />
+        </template>
+      </Button>
+    </div>
+
     <CuiFloatingButtonGroup v-if="availableCameras.length" :force-visible="selectionMode" :scroll-y="gridRef?.scrollY ?? 0">
       <template v-if="!selectionMode">
         <CuiFloatingButton
@@ -198,10 +229,12 @@
 </template>
 
 <script setup lang="ts">
-import { EventHoverPreviewKey, useDetectionEvents, useEventHoverPreview, useEventStore, useSemanticSearch } from '@camera.ui/nvr';
+import { EventHoverPreviewKey, useClipReindex, useDetectionEvents, useEventHoverPreview, useEventStore, useSemanticSearch } from '@camera.ui/nvr';
 import SelectAllIcon from '~icons/fluent/select-all-on-20-filled';
 import CloseIcon from '~icons/mdi/close';
+import ReindexIcon from '~icons/mdi/database-refresh-outline';
 import TrashIcon from '~icons/mdi/delete-outline';
+import SpinnerIcon from '~icons/svg-spinners/ring-resize';
 import SelectIcon from '~icons/tabler/dots-filled';
 import DownloadIcon from '~icons/tabler/download';
 import SparklesIcon from '~icons/tabler/sparkles';
@@ -209,6 +242,7 @@ import SparklesIcon from '~icons/tabler/sparkles';
 import { CamerasQuery } from '@/api/routes/cameras.js';
 import { UsersQuery } from '@/api/routes/users.js';
 import CameraEventDialog from '@/components/CuiDialog/templates/CameraStreamEvent/CameraStreamEvent.vue';
+import ClipReindexDialog from '@/components/CuiDialog/templates/ClipReindex/ClipReindex.vue';
 import ExportRecordings from '@/components/CuiDialog/templates/ExportRecordings/ExportRecordings.vue';
 import { boxOverlapsRegions } from '@/components/CuiGridSearch/utils.js';
 import CuiMenu from '@/components/CuiMenu/CuiMenu.vue';
@@ -232,6 +266,9 @@ const usersQuery = new UsersQuery();
 
 const dialog = useCuiDialog();
 const authStore = useAuthStore();
+const { bottombarHeight } = useSharedCuiStates();
+const { status: reindexStatus, checking: reindexChecking } = useClipReindex();
+
 const { openEpisodePlayer } = useEpisodePlayerDialog();
 const eventStore = useEventStore('@camera.ui/camera-ui-nvr');
 const toast = useCuiToast();
@@ -291,6 +328,9 @@ let _prevFilterJSON = JSON.stringify(serverFilter.value);
 const ungrouped = ref(false);
 const ungroupedItems = shallowRef<UngroupedItem[]>([]);
 const hoveredEventId = ref<string | null>(null);
+const reindexAnchorRef = useTemplateRef<HTMLElement>('reindexAnchorRef');
+
+const { left: reindexAnchorLeft } = useElementBounding(reindexAnchorRef);
 
 let ungroupedTouched = false;
 
@@ -497,6 +537,16 @@ const viewMenuItems = computed<MenuItem[]>(() => [
     },
   },
 ]);
+
+function openReindexDialog(): void {
+  dialog.openComponentDialog(ClipReindexDialog, {
+    data: {
+      title: t('views.recordings.reindex.title'),
+      contentProps: {},
+      confirmText: t('views.recordings.reindex.start'),
+    },
+  });
+}
 
 function openExportDialog(): void {
   dialog.openComponentDialog(ExportRecordings, {
