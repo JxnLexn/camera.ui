@@ -30,9 +30,9 @@ const running = computed(() => status.value?.running === true);
 
 const message = computed(() => {
   if (finished.value) {
-    return status.value?.total
-      ? t('views.recordings.reindex.result', { done: status.value.done, total: status.value.total, skipped: status.value.skipped })
-      : t('views.recordings.reindex.up_to_date');
+    if (!status.value?.total) return t('views.recordings.reindex.up_to_date');
+    const { done, total, skipped } = status.value;
+    return skipped ? t('views.recordings.reindex.result_failed', { done, total, skipped }) : t('views.recordings.reindex.result', { done, total });
   }
   if (checking.value) return t('views.recordings.reindex.checking');
   if (running.value) return t('views.recordings.reindex.running_intro');

@@ -989,16 +989,19 @@ const codecUnsupported = computed(() => (nvrPlaybackVisible.value ? (nvr.value?.
 const codecDegraded = computed(() => {
   if (nvrPlaybackVisible.value) return nvr.value?.playbackDegraded.value ?? null;
   if (!streamDegradedFrom.value) return null;
-  return { from: streamDegradedFrom.value as string, to: activeResolution.value as string };
+  return { from: streamDegradedFrom.value as string, to: activeResolution.value as string, reason: 'codec' as const };
 });
 const codecDegradedTooltip = computed(() => {
   const degraded = codecDegraded.value;
   if (!degraded) return '';
-  const quality = degraded.to.startsWith('high')
-    ? t('components.player.source_role_high')
-    : degraded.to.startsWith('mid')
-      ? t('components.player.source_role_mid')
-      : t('components.player.source_role_low');
+  const roleLabel = (role: string) =>
+    role.startsWith('high')
+      ? t('components.player.source_role_high')
+      : role.startsWith('mid')
+        ? t('components.player.source_role_mid')
+        : t('components.player.source_role_low');
+  const quality = roleLabel(degraded.to);
+  if (degraded.reason === 'coverage') return t('components.player.quality_degraded', { from: roleLabel(degraded.from), quality });
   return t('components.player.codec_degraded', { quality });
 });
 
