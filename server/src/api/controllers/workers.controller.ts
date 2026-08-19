@@ -243,10 +243,11 @@ export class WorkersController {
   public async updateWorker(req: FastifyRequest<AuthLoginRequest & WorkerUpdateRequest>, reply: FastifyReply): Promise<FastifyReply> {
     try {
       updatesService().assertManualAllowed('worker');
-      await this.workerManager.updateWorker(req.params.agentId, req.body?.version);
+      const version = req.body?.version ?? updatesService().pending().targetServerVersion;
+      await this.workerManager.updateWorker(req.params.agentId, version);
 
       const worker = this.workerManager.getWorkers().find((entry) => entry.agentId === req.params.agentId);
-      updatesService().notifyWorkerUpdate(req.params.agentId, worker?.name ?? req.params.agentId, req.body?.version);
+      updatesService().notifyWorkerUpdate(req.params.agentId, worker?.name ?? req.params.agentId, version);
 
       return reply.code(204).send();
     } catch (error: any) {

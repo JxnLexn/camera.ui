@@ -246,7 +246,7 @@ import type { DataTablePassThroughOptions } from 'primevue';
 const { t } = useI18n();
 const { smBreakpoint } = useSharedCuiBreakpoint();
 const dialog = useCuiDialog();
-
+const updatesStore = useUpdatesStore();
 const toast = useCuiToast();
 const workersSocket = useWorkersSocket();
 const { workers, workerHistory, isConnected } = workersSocket;
@@ -302,7 +302,7 @@ const addressOptions = computed(() => (workersConfig.value?.suggestedAddresses ?
 const portChanged = computed(() => portDraft.value !== (workersConfig.value?.port ?? 7422));
 const configDirty = computed(() => addressDraft.value !== (workersConfig.value?.address ?? '') || portChanged.value);
 const workerIds = computed(() => new Set(workers.value.map((w) => w.agentId)));
-const masterVersion = computed(() => apiInfo.value?.version);
+const masterVersion = computed(() => updatesStore.targetServerVersion ?? apiInfo.value?.version);
 
 const pairingMinutesLeft = computed(() => {
   if (!pairing.value) return 0;
@@ -719,6 +719,7 @@ function handleRemoveWorker(worker: WorkerInfo) {
 
 onBeforeMount(async () => {
   workersSocket.connect();
+  updatesStore.connect();
 
   await nextTick();
 
