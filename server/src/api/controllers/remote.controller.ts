@@ -259,12 +259,12 @@ export class RemoteController {
       return { type: 'cloud', address: cloudAddress ?? this.localAddress(req) };
     }
 
-    const hasReverseProxy = !!req.headers['x-forwarded-host'] || !!req.headers['x-forwarded-for'] || !!req.headers['cf-connecting-ip'] || !!req.headers['cf-ray'];
-    if (!hasReverseProxy && isLoopbackAddress(req.ip ?? '')) {
+    const proxied = this.isProxied(req);
+    if (!proxied && isLoopbackAddress(req.ip ?? '')) {
       return { type: 'local', address: this.localAddress(req) };
     }
 
-    if (!hasReverseProxy && isLanClientAddress(req.ip, req.socket?.localAddress)) {
+    if (!proxied && isLanClientAddress(req.ip, req.socket?.localAddress)) {
       return { type: 'lan', address: this.localAddress(req) };
     }
 
@@ -278,6 +278,10 @@ export class RemoteController {
     return { type: 'external', address: useFallback ? (externalUrl ?? local) : local };
   }
 
+  private isProxied(req: FastifyRequest): boolean {
+    return !!req.headers['x-forwarded-host'] || !!req.headers['x-forwarded-for'] || !!req.headers['cf-connecting-ip'] || !!req.headers['cf-ray'];
+  }
+
   private localAddress(req: FastifyRequest): string {
     const proto = (req.headers['x-forwarded-proto'] as string | undefined) ?? req.protocol;
     return `${proto}://${this.effectiveHost(req)}`;
@@ -286,6 +290,11 @@ export class RemoteController {
   private effectiveHost(req: FastifyRequest): string {
     const xfh = req.headers['x-forwarded-host'];
     if (typeof xfh === 'string' && xfh) return xfh;
+
+    if (this.isProxied(req)) {
+      const host = req.headers.host;
+      if (host && !isLoopbackHost(host)) return host;
+    }
 
     const sock = req.socket;
     if (sock?.localAddress && sock.localPort) {

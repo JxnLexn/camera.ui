@@ -23,7 +23,7 @@ import EarthIcon from '~icons/mdi/earth';
 import LanIcon from '~icons/mdi/lan';
 
 import { PROXY_SERVICE_HOST } from '@/common/constants.js';
-import { useBootMode, useCloudSession } from '@/connection/index.js';
+import { isLanTarget, useBootMode, useCloudSession } from '@/connection/index.js';
 
 const NOTICE_MS = 3_000;
 
@@ -59,8 +59,7 @@ const connectionKind = computed<'lan' | 'wan' | 'cloud' | null>(() => {
   if (!endpoint) return null;
   const endpointHost = urlHost(endpoint.url);
   if (endpointHost && (endpointHost === urlHost(cloudSession?.state.value?.proxyUrl) || endpointHost === PROXY_SERVICE_HOST)) return 'cloud';
-  if (endpoint.mode === 'direct-lan') return 'lan';
-  return 'wan';
+  return isLanTarget(endpoint, mode) ? 'lan' : 'wan';
 });
 
 const noticeText = computed(() => {

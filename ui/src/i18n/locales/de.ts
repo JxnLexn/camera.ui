@@ -3,7 +3,7 @@ export default {
   components: {
     connection_details: {
       title: 'Verbindungsdetails',
-      current: 'In Benutzung',
+      current: 'Dieses Gerät',
       server_view: 'Was der Server sieht',
       no_target: 'Nicht verbunden',
       last_attempt: 'Letzter Versuch',

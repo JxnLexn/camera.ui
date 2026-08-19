@@ -39,8 +39,11 @@
 <script setup lang="ts">
 import { ApiQuery } from '@/api/routes/api.js';
 import { copyToClipboard } from '@/common/utils.js';
+import { useBootMode } from '@/connection/bootApp.js';
+import { isLanTarget } from '@/connection/endpointScope.js';
 import { getConnection, isConnectionBooted } from '@/connection/instance.js';
 
+import type { Endpoint } from '@camera.ui/transport';
 import type { AttemptRow, ConnectionDetailsProps } from './types.js';
 
 const props = defineProps<ConnectionDetailsProps>();
@@ -52,22 +55,27 @@ const { t } = useI18n();
 const { data: apiInfo } = apiQuery.apiInfoQuery();
 
 const connection = isConnectionBooted() ? getConnection() : undefined;
+const bootMode = useBootMode();
 const round = computed(() => connection?.attempts.rounds.value[0]);
 
 const targetUrl = computed(() => connection?.target.value?.endpoint.url ?? t('components.connection_details.no_target'));
 const targetLabel = computed(() => {
-  const mode = connection?.target.value?.endpoint.mode;
-  if (!mode) return t('components.connection_details.no_target');
-  return mode === 'direct-lan' ? t('components.connection_details.mode_lan') : t('components.connection_details.mode_wan');
+  const endpoint = connection?.target.value?.endpoint;
+  if (!endpoint) return t('components.connection_details.no_target');
+  return scopeLabel(endpoint);
 });
 
 const rows = computed<AttemptRow[]>(
   () =>
     round.value?.attempts.map((attempt) => ({
       ...attempt,
-      modeLabel: attempt.mode === 'direct-lan' ? t('components.connection_details.mode_lan') : t('components.connection_details.mode_wan'),
+      modeLabel: scopeLabel({ url: attempt.url, mode: attempt.mode }),
     })) ?? [],
 );
+
+function scopeLabel(endpoint: Endpoint): string {
+  return isLanTarget(endpoint, bootMode) ? t('components.connection_details.mode_lan') : t('components.connection_details.mode_wan');
+}
 
 function isInUse(row: AttemptRow): boolean {
   return row.outcome === 'connected' && row.url === targetUrl.value;

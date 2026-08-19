@@ -14,6 +14,7 @@ export { useHttp } from './composables/useHttp.js';
 export { useSocket } from './composables/useSocket.js';
 
 export { hasCertTrustInstaller, setCertTrustInstaller } from './certTrust.js';
+export { isLanEndpoint, isLanHostname, isLanTarget } from './endpointScope.js';
 
 export { createNetworkAdapters } from './adapters/network.js';
 export { createStorageAdapter } from './adapters/storage.js';
