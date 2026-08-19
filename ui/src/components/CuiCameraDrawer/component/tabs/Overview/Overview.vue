@@ -372,8 +372,10 @@ import {
 
 import CuiDetection from '@/components/CuiDetection/CuiDetection.vue';
 
+import { getAssignmentKey } from '@shared/types';
+
 import type { StreamStatus } from '@/composables/sockets/useStreamStatus.js';
-import type { Camera } from '@camera.ui/sdk';
+import type { Camera, SensorType } from '@camera.ui/sdk';
 import type { DBCamera } from '@shared/types';
 import type { CameraOptionsTabProps, OverviewRow } from '../../types.js';
 
@@ -421,11 +423,12 @@ const statusLabel = computed(() => {
       return t('components.camera_table.idle');
   }
 });
-const motionSensors = computed(() => allSensors.value.filter(isReactiveMotionSensor));
-const objectSensors = computed(() => allSensors.value.filter(isReactiveObjectSensor));
-const audioSensors = computed(() => allSensors.value.filter(isReactiveAudioSensor));
-const faceSensors = computed(() => allSensors.value.filter(isReactiveFaceSensor));
-const licensePlateSensors = computed(() => allSensors.value.filter(isReactiveLicensePlateSensor));
+
+const motionSensors = computed(() => assignedOnly(allSensors.value.filter(isReactiveMotionSensor)));
+const objectSensors = computed(() => assignedOnly(allSensors.value.filter(isReactiveObjectSensor)));
+const audioSensors = computed(() => assignedOnly(allSensors.value.filter(isReactiveAudioSensor)));
+const faceSensors = computed(() => assignedOnly(allSensors.value.filter(isReactiveFaceSensor)));
+const licensePlateSensors = computed(() => assignedOnly(allSensors.value.filter(isReactiveLicensePlateSensor)));
 const batterySensors = computed(() => allSensors.value.filter(isReactiveBatteryInfo));
 const lightSensors = computed(() => allSensors.value.filter(isReactiveLightControl));
 const sirenSensors = computed(() => allSensors.value.filter(isReactiveSirenControl));
@@ -513,6 +516,15 @@ const hasSensors = computed(
     contactSensors.value.length > 0 ||
     securitySystemSensors.value.length > 0,
 );
+
+function assignedOnly<T extends { type: SensorType; pluginId: string }>(sensors: T[]): T[] {
+  if (sensors.length === 0) return sensors;
+  const key = getAssignmentKey(sensors[0].type) as keyof Camera['assignments'];
+  const assignment = cameraObject.value?.assignments?.[key];
+  const assigned = Array.isArray(assignment) ? undefined : assignment?.name;
+  if (!assigned) return sensors;
+  return sensors.filter((sensor) => cameraObject.value?.plugins.find((plugin) => plugin.id === sensor.pluginId)?.name === assigned);
+}
 </script>
 
 <style scoped>

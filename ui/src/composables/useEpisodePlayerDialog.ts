@@ -16,6 +16,7 @@ export function useEpisodePlayerDialog() {
     return dialog.openComponentDialog<EpisodePlayerProps>(EpisodePlayerDialog, {
       data: {
         title: episode.description?.title ?? camera.name,
+        dedupeKey: `episode:${episode.id}`,
         stayActive: true,
         hideCancelButton: true,
         hideConfirmButton: true,

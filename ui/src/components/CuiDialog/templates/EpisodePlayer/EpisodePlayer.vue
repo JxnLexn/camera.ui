@@ -1,7 +1,28 @@
 <template>
   <div class="episode-player-container">
     <div ref="stageRef" class="relative w-full overflow-hidden bg-black" :style="{ aspectRatio: stageAspect }">
-      <div v-for="id in memberCameraIds" v-show="id === visibleCameraId" :key="id" :ref="(el) => setStageEl(id, el as HTMLElement | null)" class="absolute inset-0" />
+      <VueZoomable
+        v-model:pan="panValue"
+        v-model:zoom="zoomValue"
+        :pan-enabled="zoomValue > 1"
+        :enable-control-button="false"
+        :dbl-click-enabled="false"
+        :min-zoom="1"
+        :max-zoom="MAX_ZOOM"
+        :selector="`[data-zoomable-content='${zoomId}']`"
+        zoom-origin="pointer"
+        class="absolute inset-0"
+        :class="{ 'zoom-constraining': isConstraining, 'zoom-dragging': dragging }"
+        @panned="onZoomPan"
+        @zoom="onZoomPan"
+        @dblclick="resetZoom"
+        @pointerdown="onDragStart"
+        @touchstart="onDragStart"
+      >
+        <div :data-zoomable-content="zoomId" class="relative w-full h-full">
+          <div v-for="id in memberCameraIds" v-show="id === visibleCameraId" :key="id" :ref="(el) => setStageEl(id, el as HTMLElement | null)" class="absolute inset-0" />
+        </div>
+      </VueZoomable>
 
       <div class="absolute inset-0 z-[3] bg-black pointer-events-none transition-opacity duration-300" :class="transitioning ? 'opacity-100' : 'opacity-0'" />
 
@@ -20,6 +41,12 @@
         </div>
       </Transition>
 
+      <Transition name="fade-2">
+        <div v-if="zoomMinimapStyle" class="zoom-minimap" :class="{ 'zoom-minimap-raised': showControl }">
+          <div class="zoom-minimap-viewport" :style="zoomMinimapStyle" />
+        </div>
+      </Transition>
+
       <div class="absolute top-0 left-0 right-0 p-3 z-[3] flex items-center gap-2 pointer-events-none">
         <span class="text-sm font-semibold p-2 bg-black/60 rounded-xl text-white truncate">{{ activeCameraName }}</span>
         <span class="ml-auto text-sm font-medium p-2 bg-black/60 rounded-xl text-white tabular-nums shrink-0">{{ clockLabel }}</span>
@@ -30,18 +57,18 @@
           <div class="absolute inset-0 bg-gradient-to-t from-black/70 to-transparent pointer-events-none" />
           <div class="relative flex items-center gap-1 px-3 pb-2 pt-6">
             <div class="flex items-center gap-0.5">
-              <Button fluid text severity="contrast" @click="jumpBlock(-1)">
+              <Button fluid text severity="contrast" class="control-bar-btn" @click="jumpBlock(-1)">
                 <template #icon>
                   <i-mdi:skip-previous class="w-[18px] h-[18px]" />
                 </template>
               </Button>
-              <Button fluid text severity="contrast" @click="togglePlay">
+              <Button fluid text severity="contrast" class="control-bar-btn" @click="togglePlay">
                 <template #icon>
                   <i-basil:pause-solid v-if="isPlaying" class="w-[18px] h-[18px]" />
                   <i-basil:play-solid v-else class="w-[18px] h-[18px]" />
                 </template>
               </Button>
-              <Button fluid text severity="contrast" @click="jumpBlock(1)">
+              <Button fluid text severity="contrast" class="control-bar-btn" @click="jumpBlock(1)">
                 <template #icon>
                   <i-mdi:skip-next class="w-[18px] h-[18px]" />
                 </template>
@@ -50,7 +77,7 @@
 
             <div class="flex-1" />
 
-            <Button fluid text severity="contrast" @click="muted = !muted">
+            <Button fluid text severity="contrast" class="control-bar-btn" @click="muted = !muted">
               <template #icon>
                 <i-heroicons:speaker-wave-16-solid v-if="!muted" class="w-[18px] h-[18px]" />
                 <i-heroicons:speaker-x-mark-16-solid v-else class="w-[18px] h-[18px]" />
@@ -96,9 +123,10 @@
 
 <script setup lang="ts">
 import { playheadUs, useMultiNvrPlayback } from '@camera.ui/nvr';
+import VueZoomable from 'vue-zoomable';
 import DownloadIcon from '~icons/tabler/download';
 
-import { extractErrorMessage } from '@/common/utils.js';
+import { extractErrorMessage, randomLetter } from '@/common/utils.js';
 
 import type { DialogRefProps } from '@/composables/useCuiDialog.js';
 import type { EpisodeMember } from '@camera.ui/nvr';
@@ -152,7 +180,6 @@ for (const span of cameraSpans) {
 cameraSpans.sort((a, b) => a.firstSeen - b.firstSeen);
 
 const cameraBlocks = buildCameraBlocks();
-
 const stageRef = useTemplateRef('stageRef');
 const stripRef = useTemplateRef('stripRef');
 const playheadMs = ref(rangeStartMs);
@@ -162,11 +189,16 @@ const muted = ref(true);
 const ended = ref(false);
 const scrubbing = ref(false);
 const skipNoticeSec = ref(0);
+const panValue = ref({ x: 0, y: 0 });
+const zoomValue = ref(1);
+const lastZoom = ref(1);
+const isConstraining = ref(false);
 
 const isDownloading = ref(false);
 const initialHover = ref(true);
 const transitioning = ref(false);
 
+const stageSize = useElementSize(stageRef);
 const isHovered = useElementHover(stageRef, { delayLeave: 1000 });
 
 const stageEls = new Map<string, HTMLElement>();
@@ -180,6 +212,27 @@ let handoffStartedAt = 0;
 let transitionStartedAt = 0;
 let skipNoticeTimer: ReturnType<typeof setTimeout> | undefined;
 const preloadResynced = new Set<string>();
+const MAX_ZOOM = 5;
+const zoomId = randomLetter();
+const dragging = ref(false);
+
+const zoomMinimapStyle = computed(() => {
+  const zoom = zoomValue.value;
+  const width = stageSize.width.value;
+  const height = stageSize.height.value;
+  if (zoom <= 1 || !width || !height) return null;
+
+  const pan = panValue.value;
+  const scaledWidth = width * zoom;
+  const scaledHeight = height * zoom;
+
+  return {
+    width: `${(width / scaledWidth) * 100}%`,
+    height: `${(height / scaledHeight) * 100}%`,
+    left: `${((1 - width / scaledWidth) / 2) * 100 - (pan.x / scaledWidth) * 100}%`,
+    top: `${((1 - height / scaledHeight) / 2) * 100 - (pan.y / scaledHeight) * 100}%`,
+  };
+});
 
 const preloadCameraId = computed(() => {
   const t = playheadMs.value;
@@ -213,6 +266,76 @@ const clockLabel = computed(() => {
 });
 
 const playheadPct = computed(() => `${((playheadMs.value - rangeStartMs) / rangeMs) * 100}%`);
+
+function resetZoom(): void {
+  lastZoom.value = 1;
+  zoomValue.value = 1;
+  panValue.value = { x: 0, y: 0 };
+}
+
+function onDragStart(event: PointerEvent | TouchEvent): void {
+  if (dragging.value) return;
+  const isTouch = event.type === 'touchstart' || (event as PointerEvent).pointerType !== 'mouse';
+  if (!isTouch && zoomValue.value <= 1) return;
+
+  dragging.value = true;
+  const end = (): void => {
+    dragging.value = false;
+    window.removeEventListener('pointerup', end);
+    window.removeEventListener('pointercancel', end);
+    window.removeEventListener('touchend', end);
+    window.removeEventListener('touchcancel', end);
+  };
+  window.addEventListener('pointerup', end);
+  window.addEventListener('pointercancel', end);
+  window.addEventListener('touchend', end);
+  window.addEventListener('touchcancel', end);
+}
+
+function constrainPan(pan: { x: number; y: number }, zoom: number): { x: number; y: number } {
+  const maxX = Math.max(0, (stageSize.width.value * zoom - stageSize.width.value) / 2);
+  const maxY = Math.max(0, (stageSize.height.value * zoom - stageSize.height.value) / 2);
+  return {
+    x: Math.max(-maxX, Math.min(maxX, pan.x)),
+    y: Math.max(-maxY, Math.min(maxY, pan.y)),
+  };
+}
+
+function onZoomPan(event: { zoom: number; pan: { x: number; y: number } }): void {
+  if (isConstraining.value) return;
+
+  let zoom = Math.max(1, Math.min(event.zoom, MAX_ZOOM));
+  if (zoom < 1.02) zoom = 1;
+  const clamped = Math.abs(event.zoom - zoom) > 0.001;
+
+  if (zoom <= 1) {
+    lastZoom.value = 1;
+    if (panValue.value.x !== 0 || panValue.value.y !== 0 || zoomValue.value !== 1) {
+      isConstraining.value = true;
+      resetZoom();
+      requestAnimationFrame(() => setTimeout(() => (isConstraining.value = false), 150));
+    }
+    return;
+  }
+
+  const pan = { x: event.pan.x, y: event.pan.y };
+  if (zoom < lastZoom.value && lastZoom.value > 1) {
+    const scale = (zoom - 1) / (lastZoom.value - 1);
+    pan.x = panValue.value.x * scale;
+    pan.y = panValue.value.y * scale;
+  }
+  lastZoom.value = zoom;
+
+  const constrained = constrainPan(pan, zoom);
+  if (clamped) {
+    isConstraining.value = true;
+    zoomValue.value = zoom;
+    panValue.value = constrained;
+    requestAnimationFrame(() => setTimeout(() => (isConstraining.value = false), 100));
+  } else {
+    panValue.value = constrained;
+  }
+}
 
 function clamp(v: number, min: number, max: number): number {
   return Math.min(Math.max(v, min), max);
@@ -451,6 +574,8 @@ function resyncPreload(): void {
   ctrl.play(playheadMs.value * 1000);
 }
 
+watch(visibleCameraId, resetZoom);
+
 watchEffect(() => {
   for (const [id, ctrl] of controllers.value) {
     ctrl.muted.value = muted.value || id !== visibleCameraId.value;
@@ -555,5 +680,52 @@ defineExpose({
   max-width: 100%;
   overflow: hidden;
   contain: inline-size;
+}
+
+.control-bar-btn {
+  width: 36px !important;
+  height: 36px !important;
+  min-width: 36px !important;
+  flex-shrink: 0;
+  border-radius: 6px !important;
+  transition: background 0.15s ease !important;
+}
+
+.control-bar-btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.12) !important;
+}
+
+.zoom-constraining :deep(> *) {
+  transition: transform 0.15s ease-out !important;
+}
+
+.zoom-dragging :deep(> *) {
+  transition: none !important;
+}
+
+.zoom-minimap {
+  position: absolute;
+  bottom: 10px;
+  right: 10px;
+  width: 80px;
+  aspect-ratio: v-bind(stageAspect);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 6;
+  pointer-events: none;
+  overflow: hidden;
+  transition: bottom 0.2s ease;
+}
+
+.zoom-minimap-raised {
+  bottom: 50px;
+}
+
+.zoom-minimap-viewport {
+  position: absolute;
+  border: 1.5px solid rgba(255, 255, 255, 0.7);
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.12);
 }
 </style>

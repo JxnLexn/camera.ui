@@ -108,7 +108,7 @@
 
           <SectionLabel :label="$t('components.camera_options.chip_plugins')" :loading="detectionExtensionConfigLoading" />
 
-          <CuiChipGroup v-model="selectedDetectionPlugin" :disabled="isExtensionsLoading" class="min-h-[30px]">
+          <CuiChipGroup :key="`detection-plugins-${selectedDetectionType}`" v-model="selectedDetectionPlugin" :disabled="isExtensionsLoading" class="min-h-[30px]">
             <CuiChip
               v-for="extension in detectionPluginsForType"
               :key="extension.pluginName"
@@ -233,7 +233,7 @@
 
           <SectionLabel :label="$t('components.camera_options.chip_plugins')" :loading="coreExtensionConfigLoading" />
 
-          <CuiChipGroup v-model="selectedCorePlugin" :disabled="isExtensionsLoading" class="min-h-[30px]">
+          <CuiChipGroup :key="`core-plugins-${selectedCoreType}`" v-model="selectedCorePlugin" :disabled="isExtensionsLoading" class="min-h-[30px]">
             <CuiChip
               v-for="extension in corePluginsForType"
               :key="extension.pluginName"
@@ -363,7 +363,13 @@
 
         <SectionLabel :label="$t('components.camera_options.sensors')" :loading="sensorConfigLoading" />
 
-        <CuiChipGroup v-if="accessorySensorsForType.length" v-model="selectedAccessorySensorId" mandatory class="min-h-[30px]">
+        <CuiChipGroup
+          v-if="accessorySensorsForType.length"
+          :key="`accessory-sensors-${selectedAccessoryType}`"
+          v-model="selectedAccessorySensorId"
+          mandatory
+          class="min-h-[30px]"
+        >
           <CuiChip v-for="sensor in accessorySensorsForType" :key="sensor.id" size="small" :value="sensor.id">
             {{ sensor.displayName.value }}
             <template #append>
@@ -514,6 +520,8 @@ const selectedAccessorySensorId = ref<string>();
 const selectedDetectionSensorId = ref<string>();
 const selectedCoreSensorId = ref<string>();
 const selectedAccessoryPluginForConfig = ref<string>();
+const detectionPluginConfigFor = ref<string>();
+const detectionSensorConfigFor = ref<string>();
 
 const selectedAccessoryPluginName = computed(() => {
   if (!selectedAccessorySensorId.value) return '';
@@ -797,11 +805,17 @@ const detectionSensorConfigLoading = detectionSensorStorage.isLoading;
 
 const detectionPluginSettings = computed(() => {
   if (!selectedDetectionPlugin.value || selectedDetectionPlugin.value === camera.value.pluginInfo?.name) return undefined;
+  if (detectionPluginConfigFor.value !== selectedDetectionPlugin.value) return undefined;
   return detectionExtensionConfig.value?.schema?.length ? detectionExtensionConfig.value : undefined;
 });
 
 const detectionSensorSettings = computed(() =>
-  selectedDetectionSensorId.value && selectedDetectionSensorPluginName.value && detectionSensorConfig.value?.schema?.length ? detectionSensorConfig.value : undefined,
+  selectedDetectionSensorId.value &&
+  selectedDetectionSensorPluginName.value &&
+  detectionSensorConfigFor.value === selectedDetectionSensorId.value &&
+  detectionSensorConfig.value?.schema?.length
+    ? detectionSensorConfig.value
+    : undefined,
 );
 
 const objectAssistSensor = computed<ReactiveSensor | undefined>(() => {
@@ -945,7 +959,8 @@ async function updateSelectedPlugin(pluginName?: string): Promise<void> {
     }
   }
 
-  if (selectedPlugin.value && selectedExtension.value !== 'accessories' && isPluginEnabled(selectedPlugin.value)) {
+  const ownStorage = selectedExtension.value === 'accessories' || selectedExtension.value === 'detection' || selectedExtension.value === 'core';
+  if (selectedPlugin.value && !ownStorage && isPluginEnabled(selectedPlugin.value)) {
     await extensionStorage.getConfig();
   }
 }
@@ -1474,6 +1489,8 @@ watch(selectedDetectionPlugin, async (newValue, oldValue) => {
   if (newValue !== oldValue && selectedDetectionType.value) {
     const currentAssignment = getDetectionAssignment(selectedDetectionType.value);
 
+    detectionPluginConfigFor.value = undefined;
+
     if (!newValue && oldValue) {
       await disableExtension({ cameraname: camera.value.name, pluginname: oldValue, type: selectedDetectionType.value });
       schemaRef.value?.reset();
@@ -1482,6 +1499,7 @@ watch(selectedDetectionPlugin, async (newValue, oldValue) => {
         await enableExtension({ cameraname: camera.value.name, pluginname: newValue, type: selectedDetectionType.value });
       }
       await detectionExtensionStorage.getConfig();
+      if (selectedDetectionPlugin.value === newValue) detectionPluginConfigFor.value = newValue;
     }
 
     nextTick(() => updateSelectedPlugin(newValue));
@@ -1555,8 +1573,10 @@ watch(
 );
 
 watch([selectedDetectionSensorId, selectedDetectionSensorPluginId], async ([sensorId, pluginId]) => {
+  detectionSensorConfigFor.value = undefined;
   if (sensorId && pluginId) {
     await detectionSensorStorage.getConfig();
+    if (selectedDetectionSensorId.value === sensorId) detectionSensorConfigFor.value = sensorId;
   }
 });
 

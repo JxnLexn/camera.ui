@@ -514,7 +514,7 @@ useResizeObserver(navbarRef, () => {
 });
 
 watch(navbarState, (value) => {
-  if (navEditMode.value && value !== 'opened') navEditMode.value = false;
+  if (navEditMode.value && value !== 'opened') exitNavEdit();
 });
 
 watch(

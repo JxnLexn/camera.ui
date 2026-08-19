@@ -140,7 +140,16 @@ export function useNavLayout() {
   }
 
   function persistOrder(lists: Record<NavLayoutGroup, string[]>): void {
-    patchLayout({ order: { main: [...lists.main], manage: [...lists.manage], system: [...lists.system], settings: [...lists.settings] } });
+    const order = { main: [...lists.main], manage: [...lists.manage], system: [...lists.system], settings: [...lists.settings] };
+    const current = layout.value.order;
+    const unchanged =
+      current &&
+      ALL_NAV_GROUPS.every((group) => {
+        const previous = current[group] ?? [];
+        return previous.length === order[group].length && previous.every((name, index) => name === order[group][index]);
+      });
+    if (unchanged) return;
+    patchLayout({ order });
   }
 
   function resetOrder(): void {
