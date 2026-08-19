@@ -1992,6 +1992,10 @@ function openShareDialog() {
   });
 }
 
+function drawableDetections<T extends { box?: { x: number; y: number; width: number; height: number } }>(detections: T[]): T[] {
+  return detections.filter((d) => !d.box || d.box.x > 0 || d.box.y > 0 || d.box.width < 1 || d.box.height < 1);
+}
+
 watch(
   playerContainerRef,
   (el) => {
@@ -2105,7 +2109,7 @@ watch(
     const detectionsArray = (detections ?? []) as FaceDetection[];
     handleActivity(detectionsArray);
     handleDetectionIndicator(detectionsArray);
-    drawCanvas('motion', detectionsArray);
+    drawCanvas('motion', drawableDetections(detectionsArray));
   },
   { deep: true },
 );
@@ -2116,7 +2120,7 @@ watch(
     const detectionsArray = (detections ?? []) as TrackedDetection[];
     handleActivity(detectionsArray);
     handleDetectionIndicator(detectionsArray);
-    drawCanvas('object', detectionsArray);
+    drawCanvas('object', drawableDetections(detectionsArray));
   },
   { deep: true },
 );
