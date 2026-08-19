@@ -8,7 +8,7 @@ All notable changes to this project will be documented in this file.
 
 - **Playback picks the best available quality by itself.** The new playback source setting defaults to Auto: a hole in the high recording plays the next quality that has footage, with a badge, and switches back once high resumes. Needs the camera-ui-nvr update.
 
-- **Outage bands match the footage.** Bands start where the recording actually ended and close where it resumed; reconnect blips under 15 seconds paint no band.
+- **Outage bands match the footage.** Bands start where the recording actually ended and close where it resumed; reconnect blips under 15 seconds paint no band. An outage that rolls through phases (one stream lost, then all, then back in steps) shows each phase in its own color and names the length of the whole disruption instead of the offline part alone.
 
 - **The timeline tells outages apart.** If only the high stream stops recording, a "recording without high" band shows instead of offline; offline means the camera records nothing.
 
@@ -47,6 +47,12 @@ All notable changes to this project will be documented in this file.
 - **The console follows new entries.** New log lines scroll into view as they arrive, unless you scrolled up.
 
 ### Fixed
+
+- **Cancelling a selection puts you back where you were.** Leaving export or delete mode always jumped to live, even when you had scrubbed to a spot beforehand. It now returns to that spot, paused or playing as before; only a selection started from live goes back to live.
+
+- **Export and delete selections open sane.** Starting a selection while zoomed all the way in could place the two handles on top of each other or swapped, sorting itself out only after touching one. The selection now always opens as a proper range, and near the live edge it grows backwards instead of reaching into the future.
+
+- **The fine scrubbing hint stays out of the way.** It no longer floats below an empty spot when the date button is hidden, and it disappears while an export or delete selection is active.
 
 - **Timeline scrubbing is smooth on the phone.** Dragging on iPhone moved in visible little steps; it now follows the finger.
 
