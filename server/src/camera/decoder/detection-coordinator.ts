@@ -10,7 +10,7 @@ import { AudioDetectionLoop } from './audio-loop.js';
 import { CascadeManager } from './cascade-manager.js';
 import { detectionRecord } from './debug/detection-record.js';
 import { DetectionPipeline } from './detection-pipeline.js';
-import { clusterBoxes, DetectionWindow, mergeWindowDetections, planWindowsOnce, TRACK_PAD } from './detection-window.js';
+import { clusterBoxes, DetectionWindow, mergeWindowDetections, MOTION_PAD, planWindowsOnce, TRACK_PAD } from './detection-window.js';
 import { DwellManager } from './dwell-manager.js';
 import { DetectionEventManager, MOMENT_RANK_ATTRIBUTE, MOMENT_RANK_OBJECT } from './event-manager.js';
 import { EventThumbnailer } from './event-thumbnailer.js';
@@ -318,6 +318,7 @@ export class DetectionCoordinator {
         if (!this.dwell.hasActive() && this.worldSpans.size === 0 && !this.eventManager.hasActiveSegment()) {
           this.eventManager.forceEndActiveEvent();
         }
+        this.stopAdHocVideoLoopIfIdle();
       }
     });
   }
@@ -543,6 +544,9 @@ export class DetectionCoordinator {
 
       if (this.ptzAutotracker.suppressionActive) return;
 
+      detectionRecord.tick({
+        externalObject: { detected: filtered.detected === true, count: ((filtered.detections as Detection[] | undefined) ?? []).length },
+      });
       this.ingestDetectionResult(SensorType.Object, sensorId, filtered);
       this.eventManager.processResults(this.buildSnapshot());
 
@@ -584,10 +588,12 @@ export class DetectionCoordinator {
               // plate secondaries run on the subject instead of the whole scene
               // (processExternal only adapts the shape, external boxes get no real tracking)
               const objectDetections = this.pipeline.processExternal(objects.detections);
+              detectionRecord.tick({ assistProcessed: { count: objectDetections.length, bufferedObjects: this.currentDetectionState.object?.detections?.length ?? 0 } });
               await this.runSecondariesAndThumbnails(analysis, objectDetections, results);
               await this.captureExternalMoment(objectDetections, analysis, results.timestamp);
               this.ingestResultsForAllSecondaries(results);
               const snapshot = this.buildSnapshot();
+              detectionRecord.tick({ assistSnapshot: { objects: snapshot.objects.length } });
               if (results.thumbnails && results.thumbnails.length > 0) {
                 snapshot.thumbnails = results.thumbnails;
               }
@@ -697,7 +703,14 @@ export class DetectionCoordinator {
   }
 
   private get localizerWanted(): boolean {
-    return this.plugins.has(SensorType.Object);
+    // the registry only holds frame-based providers; a smart-camera object
+    // sensor (Reolink AI, ONVIF) feeds externally and needs the anchors just
+    // as much — for assist zoom windows and for framing its moment pictures
+    if (this.plugins.has(SensorType.Object) || this.plugins.hasEligibleObjectAssist()) return true;
+    for (const sensorType of this.feedingSensors.values()) {
+      if (sensorType === SensorType.Object) return true;
+    }
+    return false;
   }
 
   private get windowWantsMainStream(): boolean {
@@ -1199,7 +1212,9 @@ export class DetectionCoordinator {
   }
 
   private startAdHocVideoLoopIfNeeded(): void {
-    if (!this.loopRunning && this.plugins.needsAdHocLoop()) {
+    // localizerWanted covers what the registry cannot see: an object assist or
+    // an external object sensor needs the loop for the localizer's anchors
+    if (!this.loopRunning && (this.plugins.needsAdHocLoop() || this.localizerWanted)) {
       this.adHocVideoLoop = true;
       this.logger.debug('Starting ad-hoc video loop for sensor cascade trigger');
       this.startVideoLoop();
@@ -1207,11 +1222,15 @@ export class DetectionCoordinator {
   }
 
   private stopAdHocVideoLoopIfIdle(): void {
-    if (this.adHocVideoLoop && !this.plugins.shouldVideoBeActive()) {
-      this.adHocVideoLoop = false;
-      this.logger.debug('Stopping ad-hoc video loop — cascade ended');
-      this.stopVideoLoop();
-    }
+    if (!this.adHocVideoLoop || this.plugins.shouldVideoBeActive()) return;
+    // the localizer and assist still need frames while the event runs;
+    // stopping on the cascade edge alone churned the main-stream decoder
+    // open/closed mid-event, which starves the hw device (vaapi surface sync
+    // failures) right when the next report arrives
+    if (this.cascade.isActive || this.dwell.hasActive() || this.eventManager.hasActiveSegment()) return;
+    this.adHocVideoLoop = false;
+    this.logger.debug('Stopping ad-hoc video loop — idle');
+    this.stopVideoLoop();
   }
 
   private async runDetectionLoop(): Promise<void> {
@@ -2071,9 +2090,20 @@ export class DetectionCoordinator {
 
   private ingestAssistedObjects(sensorId: string, objects: { detections: Detection[]; assisted: boolean }): void {
     if (!objects.assisted) return;
+    // the assist returns raw detector output; the frame path dedupes via NMS
+    // before ingest, so this path must merge too or near-identical candidate
+    // boxes inflate the object count
+    const merged = this.pipeline.runMergeAndZoneFilter(objects.detections);
     const refiltered = this.applyExternalDetectionFilters(SensorType.Object, {
-      detected: objects.detections.length > 0,
-      detections: objects.detections,
+      detected: merged.length > 0,
+      detections: merged,
+    });
+    detectionRecord.tick({
+      assistIngest: {
+        raw: objects.detections.map((d) => ({ label: d.label, score: d.confidence, box: d.box })),
+        merged: merged.length,
+        kept: ((refiltered.detections as Detection[] | undefined) ?? []).length,
+      },
     });
     this.ingestDetectionResult(SensorType.Object, sensorId, refiltered);
   }
@@ -2105,14 +2135,23 @@ export class DetectionCoordinator {
     const inputSpec = assist.modelSpec?.input;
     const reportedBoxes = reported.map((d) => d.box).filter((box): box is BoundingBox => box !== undefined);
 
-    if (isVideoInputSpec(inputSpec) && reportedBoxes.length > 0) {
-      const windows = planWindowsOnce(reportedBoxes, TRACK_PAD, frame.width, frame.height, inputSpec.width);
+    // a coordinate-less report still has the localizer's diff anchors: zoom
+    // the assist into the moving regions instead of letterboxing the whole
+    // frame, which shrinks the subject to nothing on a main-stream frame
+    const anchors = reportedBoxes.length > 0 ? reportedBoxes : [...this.anchorBoxes, ...this.farewellBoxes];
+    const pad = reportedBoxes.length > 0 ? TRACK_PAD : MOTION_PAD;
+
+    if (isVideoInputSpec(inputSpec) && anchors.length > 0) {
+      const windows = planWindowsOnce(anchors, pad, frame.width, frame.height, inputSpec.width);
       if (windows.length > 0) {
-        detectionRecord.zoom({ kind: 'assist', anchors: reportedBoxes, windows });
+        detectionRecord.zoom({ kind: 'assist', anchors, windows });
         const perWindow = await Promise.all(windows.map((window) => this.detectInWindow(assist, frame, scaler, window, inputSpec)));
         return mergeWindowDetections(perWindow.flat());
       }
     }
+    detectionRecord.tick({
+      assistFullFrame: { anchors: anchors.length, videoSpec: isVideoInputSpec(inputSpec), loop: this.loopRunning, cascade: this.cascade.isActive },
+    });
 
     const scaled = await this.scaleFrameForPlugin(frame, assist, scaler);
     if (!scaled) return [];
