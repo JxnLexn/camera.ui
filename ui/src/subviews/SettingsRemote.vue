@@ -669,7 +669,6 @@ import { ErrorMessage, Field, Form } from 'vee-validate';
 import LocalIcon from '~icons/boxicons/computer-filled';
 import CopyIcon from '~icons/fluent/copy-16-filled';
 import OpenIcon from '~icons/fluent/open16-filled';
-import CloudIcon from '~icons/material-symbols/cloud-outline';
 import EarthIcon from '~icons/mdi/earth';
 import LanIcon from '~icons/mdi/lan';
 
@@ -851,7 +850,6 @@ const connectionTypeLabel = computed(() => {
 
 const connectionIcon = computed(() => {
   const type = connectionInfo.value?.currentConnection.type;
-  if (type === 'cloud') return CloudIcon;
   if (type === 'external') return EarthIcon;
   if (type === 'local') return LocalIcon;
   return LanIcon;
@@ -859,7 +857,6 @@ const connectionIcon = computed(() => {
 
 const connectionIconColor = computed(() => {
   const type = connectionInfo.value?.currentConnection.type;
-  if (type === 'cloud') return 'text-warning';
   if (type === 'external') return 'text-info';
   if (type === 'local') return 'text-primary';
   return 'text-success';

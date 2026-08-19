@@ -21,9 +21,8 @@ export interface TunnelStatus {
 export interface ConnectionInfo {
   internalAddresses: string[];
   externalUrl: string | null;
-  cloudAddress: string | null;
   currentConnection: {
-    type: 'local' | 'lan' | 'external' | 'cloud';
+    type: 'local' | 'lan' | 'external';
     address: string;
   };
 }

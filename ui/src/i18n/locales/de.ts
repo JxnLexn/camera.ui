@@ -633,11 +633,7 @@ export default {
       ptz_autotrack: 'Autotrack',
       plugin_settings: 'Plugin Einstellungen',
       sensor_settings: 'Sensor Einstellungen',
-      virtual_sensors_hint:
-        'Virtuelle Sensoren bilden externe Geräte und Zustände in camera.ui ab. Sie werden über den Übersicht-Tab oder durch Automatisierungen gesteuert.',
       virtual_sensor_created: 'Virtueller Sensor erstellt',
-      virtual_sensor_delete_confirm:
-        'Sind Sie sicher, dass Sie diesen virtuellen Sensor löschen möchten? Automatisierungen, die ihn verwenden, funktionieren dann nicht mehr.',
       source_delete: 'Source entfernen',
       source_delete_confirm: 'Source "{name}" entfernen? Die Änderung greift erst beim Speichern.',
       virtual_sensor_name_placeholder: 'z. B. Haustür',
@@ -1722,7 +1718,6 @@ export default {
     connecting_remote: 'Verbinde mit Ihrem Server...',
     connected_lan: 'Verbunden über lokales Netzwerk',
     connected_wan: 'Verbunden über Internet',
-    connected_cloud: 'Verbunden über Cloud',
     unreachable: 'Server nicht erreichbar',
     pick_server: 'Anderen Server wählen',
   },
@@ -2532,7 +2527,6 @@ export default {
         local: 'Lokal',
         lan: 'Lokales Netzwerk',
         external: 'Remote',
-        cloud: 'Cloud',
       },
       remove: 'Entfernen',
       registered: 'Registriert',

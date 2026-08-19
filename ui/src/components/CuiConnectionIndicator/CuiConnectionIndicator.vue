@@ -18,12 +18,10 @@
 </template>
 
 <script setup lang="ts">
-import CloudIcon from '~icons/material-symbols/cloud-outline';
 import EarthIcon from '~icons/mdi/earth';
 import LanIcon from '~icons/mdi/lan';
 
-import { PROXY_SERVICE_HOST } from '@/common/constants.js';
-import { isLanTarget, useBootMode, useCloudSession } from '@/connection/index.js';
+import { isLanTarget, useBootMode } from '@/connection/index.js';
 
 const NOTICE_MS = 3_000;
 
@@ -33,13 +31,12 @@ const connection = useConnection();
 const { bannerMode, inTrouble, isOnline, target } = connection;
 const { restarting } = useServerRestart();
 const mode = useBootMode();
-const cloudSession = useCloudSession();
 
 const authStore = useAuthStore();
 const { isLoggedIn } = storeToRefs(authStore);
 
-const notice = ref<'lan' | 'wan' | 'cloud' | null>(null);
-const announcedKind = ref<'lan' | 'wan' | 'cloud' | null>(null);
+const notice = ref<'lan' | 'wan' | null>(null);
+const announcedKind = ref<'lan' | 'wan' | null>(null);
 let noticeTimer: ReturnType<typeof setTimeout> | undefined;
 
 const bottomOffset = computed(() => `calc(${bottombarHeight.value}px + 1rem + env(safe-area-inset-bottom, 0px))`);
@@ -53,43 +50,20 @@ const statusText = computed(() => {
   return t('connection.restarting');
 });
 
-const connectionKind = computed<'lan' | 'wan' | 'cloud' | null>(() => {
+const connectionKind = computed<'lan' | 'wan' | null>(() => {
   if (!isLoggedIn.value || !isOnline.value) return null;
   const endpoint = target.value?.endpoint;
   if (!endpoint) return null;
-  const endpointHost = urlHost(endpoint.url);
-  if (endpointHost && (endpointHost === urlHost(cloudSession?.state.value?.proxyUrl) || endpointHost === PROXY_SERVICE_HOST)) return 'cloud';
   return isLanTarget(endpoint, mode) ? 'lan' : 'wan';
 });
 
-const noticeText = computed(() => {
-  if (notice.value === 'lan') return t('connection.connected_lan');
-  if (notice.value === 'wan') return t('connection.connected_wan');
-  return t('connection.connected_cloud');
-});
+const noticeText = computed(() => (notice.value === 'lan' ? t('connection.connected_lan') : t('connection.connected_wan')));
 
-const noticeIcon = computed(() => {
-  if (notice.value === 'lan') return LanIcon;
-  if (notice.value === 'wan') return EarthIcon;
-  return CloudIcon;
-});
+const noticeIcon = computed(() => (notice.value === 'lan' ? LanIcon : EarthIcon));
 
-const noticeIconColor = computed(() => {
-  if (notice.value === 'lan') return 'text-success';
-  if (notice.value === 'wan') return 'text-info';
-  return 'text-warning';
-});
+const noticeIconColor = computed(() => (notice.value === 'lan' ? 'text-success' : 'text-info'));
 
 const showEscape = computed(() => inTrouble.value && mode === 'cloud');
-
-function urlHost(url?: string): string | undefined {
-  if (!url) return undefined;
-  try {
-    return new URL(url).host;
-  } catch {
-    return undefined;
-  }
-}
 
 function clearNotice() {
   if (noticeTimer !== undefined) {

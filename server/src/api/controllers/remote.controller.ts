@@ -1,7 +1,6 @@
 import { buildHttpsUrl, fetchViableNetworkAddresses, isLanClientAddress, isLoopbackAddress, isLoopbackHost } from '@camera.ui/common/network';
 import { container } from 'tsyringe';
 
-import { PROXY_SERVICE_URL } from '../../services/config/constants.js';
 import { RemoteService } from '../services/remote.service.js';
 import { ServerService } from '../services/server.service.js';
 
@@ -165,7 +164,6 @@ export class RemoteController {
 
   public async getConnectionInfo(req: FastifyRequest<AuthLoginRequest>, reply: FastifyReply): Promise<FastifyReply> {
     try {
-      const remoteInfo = this.service.info();
       const accessStatus = this.remoteAccessManager.getStatus();
 
       const port = this.configService.config.port;
@@ -177,13 +175,10 @@ export class RemoteController {
       const localUrl = this.serverService.info().localUrl?.trim();
       if (localUrl) internalAddresses.unshift(localUrl);
 
-      const cloudAddress = remoteInfo.enabled ? PROXY_SERVICE_URL : null;
-
       const info: ConnectionInfo = {
         internalAddresses,
         externalUrl: accessStatus.externalUrl,
-        cloudAddress,
-        currentConnection: this.inferCurrentConnection(req, accessStatus.externalUrl, cloudAddress),
+        currentConnection: this.inferCurrentConnection(req, accessStatus.externalUrl),
       };
 
       return reply.code(200).send(info);
@@ -254,11 +249,7 @@ export class RemoteController {
     }
   }
 
-  private inferCurrentConnection(req: FastifyRequest, externalUrl: string | null, cloudAddress: string | null): ConnectionInfo['currentConnection'] {
-    if (req.headers['x-forwarded-cloud'] === '1') {
-      return { type: 'cloud', address: cloudAddress ?? this.localAddress(req) };
-    }
-
+  private inferCurrentConnection(req: FastifyRequest, externalUrl: string | null): ConnectionInfo['currentConnection'] {
     const proxied = this.isProxied(req);
     if (!proxied && isLoopbackAddress(req.ip ?? '')) {
       return { type: 'local', address: this.localAddress(req) };
