@@ -108,7 +108,7 @@
 
           <SectionLabel :label="$t('components.camera_options.chip_plugins')" :loading="detectionExtensionConfigLoading" />
 
-          <CuiChipGroup :key="`detection-plugins-${selectedDetectionType}`" v-model="selectedDetectionPlugin" :disabled="isExtensionsLoading" class="min-h-[30px]">
+          <CuiChipGroup v-model="selectedDetectionPlugin" :disabled="isExtensionsLoading" class="min-h-[30px]">
             <CuiChip
               v-for="extension in detectionPluginsForType"
               :key="extension.pluginName"
@@ -143,19 +143,6 @@
           <CuiChipGroup v-if="detectionSensorsForType.length" v-model="selectedDetectionSensorId" mandatory class="min-h-[30px]">
             <CuiChip v-for="sensor in detectionSensorsForType" :key="sensor.id" size="small" :value="sensor.id">
               {{ sensor.displayName.value }}
-              <template #append>
-                <Button
-                  :text="selectedAccessorySensorId !== sensor.id"
-                  rounded
-                  :severity="selectedAccessorySensorId === sensor.id ? 'primary' : 'secondary'"
-                  class="cui-icon-sm text-white"
-                  @click.stop="openRenameSensorDialog(sensor)"
-                >
-                  <template #icon>
-                    <i-mdi:pencil width="100%" height="100%" />
-                  </template>
-                </Button>
-              </template>
             </CuiChip>
           </CuiChipGroup>
 
@@ -233,7 +220,7 @@
 
           <SectionLabel :label="$t('components.camera_options.chip_plugins')" :loading="coreExtensionConfigLoading" />
 
-          <CuiChipGroup :key="`core-plugins-${selectedCoreType}`" v-model="selectedCorePlugin" :disabled="isExtensionsLoading" class="min-h-[30px]">
+          <CuiChipGroup v-model="selectedCorePlugin" :disabled="isExtensionsLoading" class="min-h-[30px]">
             <CuiChip
               v-for="extension in corePluginsForType"
               :key="extension.pluginName"
@@ -268,19 +255,6 @@
           <CuiChipGroup v-if="coreSensorsForType.length" v-model="selectedCoreSensorId" mandatory class="min-h-[30px]">
             <CuiChip v-for="sensor in coreSensorsForType" :key="sensor.id" size="small" :value="sensor.id">
               {{ sensor.displayName.value }}
-              <template #append>
-                <Button
-                  :text="selectedAccessorySensorId !== sensor.id"
-                  rounded
-                  :severity="selectedAccessorySensorId === sensor.id ? 'primary' : 'secondary'"
-                  class="cui-icon-sm text-white"
-                  @click.stop="openRenameSensorDialog(sensor)"
-                >
-                  <template #icon>
-                    <i-mdi:pencil width="100%" height="100%" />
-                  </template>
-                </Button>
-              </template>
             </CuiChip>
           </CuiChipGroup>
 
@@ -363,28 +337,9 @@
 
         <SectionLabel :label="$t('components.camera_options.sensors')" :loading="sensorConfigLoading" />
 
-        <CuiChipGroup
-          v-if="accessorySensorsForType.length"
-          :key="`accessory-sensors-${selectedAccessoryType}`"
-          v-model="selectedAccessorySensorId"
-          mandatory
-          class="min-h-[30px]"
-        >
+        <CuiChipGroup v-if="accessorySensorsForType.length" v-model="selectedAccessorySensorId" mandatory class="min-h-[30px]">
           <CuiChip v-for="sensor in accessorySensorsForType" :key="sensor.id" size="small" :value="sensor.id">
             {{ sensor.displayName.value }}
-            <template #append>
-              <Button
-                :text="selectedAccessorySensorId !== sensor.id"
-                rounded
-                :severity="selectedAccessorySensorId === sensor.id ? 'primary' : 'secondary'"
-                class="cui-icon-sm text-white"
-                @click.stop="openRenameSensorDialog(sensor)"
-              >
-                <template #icon>
-                  <i-mdi:pencil width="100%" height="100%" />
-                </template>
-              </Button>
-            </template>
           </CuiChip>
         </CuiChipGroup>
 
@@ -465,12 +420,11 @@ import { PluginsQuery } from '@/api/routes/plugins.js';
 import { SensorsQuery } from '@/api/routes/sensors.js';
 import { pluginMessageResponseTypeToToastType } from '@/common/utils.js';
 import PluginSchemaDialog from '@/components/CuiDialog/templates/PluginSchema/PluginSchema.vue';
-import RenameSensorDialog from '@/components/CuiDialog/templates/RenameSensor/RenameSensor.vue';
 import CuiSchema from '@/components/CuiSchema/CuiSchema.vue';
 
 import type { PluginSchemaProps } from '@/components/CuiDialog/templates/PluginSchema/types.js';
 import type { ReactiveSensor } from '@camera.ui/browser';
-import type { AssignedPlugin, PluginConfig } from '@camera.ui/sdk';
+import type { AssignedPlugin, PluginConfig, SchemaConfig } from '@camera.ui/sdk';
 import type { PluginExtension } from '@shared/types';
 import type { CameraOptionsTabEmits, CameraOptionsTabProps } from '../../types.js';
 
@@ -520,7 +474,7 @@ const selectedAccessorySensorId = ref<string>();
 const selectedDetectionSensorId = ref<string>();
 const selectedCoreSensorId = ref<string>();
 const selectedAccessoryPluginForConfig = ref<string>();
-const detectionPluginConfigFor = ref<string>();
+const detectionPluginConfigSnapshot = shallowRef<{ plugin: string; config: SchemaConfig } | undefined>();
 const detectionSensorConfigFor = ref<string>();
 
 const selectedAccessoryPluginName = computed(() => {
@@ -796,7 +750,6 @@ const selectedCoreSensorPluginId = computed(() => {
 
 const selectedDetectionPluginName = computed(() => selectedDetectionPlugin.value ?? '');
 const detectionExtensionStorage = useCameraStorage(cameraDevice, selectedDetectionPluginName);
-const detectionExtensionConfig = detectionExtensionStorage.config;
 const detectionExtensionConfigLoading = detectionExtensionStorage.isLoading;
 
 const detectionSensorStorage = useSensorStorage(selectedDetectionSensorId, selectedDetectionSensorPluginId);
@@ -805,8 +758,9 @@ const detectionSensorConfigLoading = detectionSensorStorage.isLoading;
 
 const detectionPluginSettings = computed(() => {
   if (!selectedDetectionPlugin.value || selectedDetectionPlugin.value === camera.value.pluginInfo?.name) return undefined;
-  if (detectionPluginConfigFor.value !== selectedDetectionPlugin.value) return undefined;
-  return detectionExtensionConfig.value?.schema?.length ? detectionExtensionConfig.value : undefined;
+  const snapshot = detectionPluginConfigSnapshot.value;
+  if (snapshot?.plugin !== selectedDetectionPlugin.value) return undefined;
+  return snapshot.config.schema?.length ? snapshot.config : undefined;
 });
 
 const detectionSensorSettings = computed(() =>
@@ -1317,8 +1271,11 @@ async function onDetectionPluginSubmit(state: { key: string; payload: any }): Pr
 }
 
 async function onDetectionPluginFormSubmit(configData: Record<string, any>): Promise<void> {
-  if (!selectedDetectionPlugin.value) return;
+  const plugin = selectedDetectionPlugin.value;
+  if (!plugin) return;
   await detectionExtensionStorage.setConfig(configData);
+  const config = await detectionExtensionStorage.getConfig();
+  if (config && selectedDetectionPlugin.value === plugin) detectionPluginConfigSnapshot.value = { plugin, config };
 }
 
 async function onCorePluginAction(state: { key: string }): Promise<void> {
@@ -1393,25 +1350,6 @@ async function onAccessoryPluginSubmit(state: { key: string; payload: any }): Pr
 async function onAccessoryPluginFormSubmit(configData: Record<string, any>): Promise<void> {
   if (!selectedAccessoryPluginForConfig.value) return;
   await accessoryExtensionStorage.setConfig(configData);
-}
-
-function openRenameSensorDialog(sensor: ReactiveSensor | undefined) {
-  if (!sensor) return;
-
-  dialog.openComponentDialog<{ currentDisplayName: string }>(RenameSensorDialog, {
-    data: {
-      title: t('components.camera_options.sensor_display_name'),
-      confirmText: t('components.form.button.save'),
-      contentProps: {
-        currentDisplayName: sensor.displayName.value,
-      },
-    },
-    onConfirm: async (newName: string | null) => {
-      if (newName && newName !== sensor.displayName.value) {
-        await sensor.setDisplayName(newName);
-      }
-    },
-  });
 }
 
 watch(
@@ -1489,7 +1427,7 @@ watch(selectedDetectionPlugin, async (newValue, oldValue) => {
   if (newValue !== oldValue && selectedDetectionType.value) {
     const currentAssignment = getDetectionAssignment(selectedDetectionType.value);
 
-    detectionPluginConfigFor.value = undefined;
+    detectionPluginConfigSnapshot.value = undefined;
 
     if (!newValue && oldValue) {
       await disableExtension({ cameraname: camera.value.name, pluginname: oldValue, type: selectedDetectionType.value });
@@ -1498,8 +1436,8 @@ watch(selectedDetectionPlugin, async (newValue, oldValue) => {
       if (currentAssignment?.name !== newValue) {
         await enableExtension({ cameraname: camera.value.name, pluginname: newValue, type: selectedDetectionType.value });
       }
-      await detectionExtensionStorage.getConfig();
-      if (selectedDetectionPlugin.value === newValue) detectionPluginConfigFor.value = newValue;
+      const config = await detectionExtensionStorage.getConfig();
+      if (config && selectedDetectionPlugin.value === newValue) detectionPluginConfigSnapshot.value = { plugin: newValue, config };
     }
 
     nextTick(() => updateSelectedPlugin(newValue));

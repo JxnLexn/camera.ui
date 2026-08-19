@@ -2,7 +2,7 @@
   <Chip
     :removable="removable"
     :disabled="isDisabled"
-    class="cui-chip inline-flex cursor-pointer transition-all rounded-full py-1 px-2 relative justify-center items-center"
+    class="cui-chip inline-flex cursor-pointer rounded-full py-1 px-2 relative justify-center items-center"
     :class="[
       {
         'cui-chip-selected': isSelected,
@@ -74,9 +74,6 @@ function handleClick() {
 <style scoped>
 .cui-chip {
   background-color: var(--chip-background);
-  transition:
-    padding 0.2s ease,
-    background-color 0.2s ease;
 }
 
 .cui-chip:hover:not(.cui-chip-disabled):not(.cui-chip-selected) {
